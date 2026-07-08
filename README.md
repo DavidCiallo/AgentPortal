@@ -42,7 +42,6 @@ Then open `http://localhost:3004` in your browser.
 - `src/` — core CLI and server runtime
 - `web/` — web UI frontend (HTML, CSS, JS)
 - `scripts/` — build and verification scripts
-- `vscode-extension/` — VS Code extension
 - `docs/` — documentation
 
 ## License
