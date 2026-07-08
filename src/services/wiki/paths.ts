@@ -1,7 +1,7 @@
 import { join } from 'path'
 import type { WikiPaths } from './types.js'
 
-export const PORTAL_DIRNAME = '.openclaude'
+export const PORTAL_DIRNAME = '.portal'
 export const WIKI_DIRNAME = 'wiki'
 
 export function getWikiPaths(cwd: string): WikiPaths {

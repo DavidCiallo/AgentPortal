@@ -11,7 +11,7 @@ import {
 } from './providerRecommendation'
 import { getOllamaChatBaseUrl } from './providerDiscovery'
 
-export const PROFILE_FILE_NAME = '.openclaude-profile.json'
+export const PROFILE_FILE_NAME = '.portal-profile.json'
 
 const PROFILE_ENV_KEYS = [
   'CLAUDE_CODE_USE_OPENAI',

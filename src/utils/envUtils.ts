@@ -1,33 +1,18 @@
 import memoize from 'lodash-es/memoize.js'
-import { existsSync } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
 
 export function resolveClaudeConfigHomeDir(options?: {
   configDirEnv?: string
   homeDir?: string
-  portalDirExists?: boolean
-  legacyClaudeExists?: boolean
 }): string {
   if (options?.configDirEnv) {
     return options.configDirEnv.normalize('NFC')
   }
 
   const homeDir = options?.homeDir ?? homedir()
-  const portalDir = join(homeDir, '.openclaude')
-  const legacyClaudeDir = join(homeDir, '.claude')
-  const portalDirExists =
-    options?.portalDirExists ?? existsSync(portalDir)
-  const legacyClaudeExists =
-    options?.legacyClaudeExists ?? existsSync(legacyClaudeDir)
 
-  // Preserve existing user config/install state until we ship an explicit
-  // migration. New installs (neither path exists) use ~/.openclaude.
-  if (!portalDirExists && legacyClaudeExists) {
-    return legacyClaudeDir.normalize('NFC')
-  }
-
-  return portalDir.normalize('NFC')
+  return join(homeDir, '.portal').normalize('NFC')
 }
 
 // Memoized: 150+ callers, many on hot paths. Keyed off CLAUDE_CONFIG_DIR so

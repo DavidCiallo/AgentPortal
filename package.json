@@ -4,7 +4,7 @@
   "description": "Portal — an open-source coding agent CLI for any LLM — OpenAI, Gemini, DeepSeek, Ollama, and 200+ models",
   "type": "module",
   "bin": {
-    "portal": "./bin/openclaude"
+    "portal": "./bin/portal"
   },
   "files": [
     "bin/",

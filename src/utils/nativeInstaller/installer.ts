@@ -1688,9 +1688,9 @@ export async function cleanupNpmInstallations(): Promise<{
     }
   }
 
-  // Preserve compatibility with pre-migration installs under ~/.claude/local.
+  // Preserve compatibility with pre-migration installs under ~/.portal/local.
   const localInstallDirs = Array.from(
-    new Set([join(getClaudeConfigHomeDir(), 'local'), join(homedir(), '.claude', 'local')]),
+    new Set([join(getClaudeConfigHomeDir(), 'local'), join(homedir(), '.portal', 'local')]),
   )
 
   for (const localInstallDir of localInstallDirs) {
