@@ -30,7 +30,7 @@ import { getInitialSettings } from 'src/utils/settings/settings.js'
 export async function update() {
   // Block updates for non-first-party providers. The update mechanism downloads
   // from the first-party distribution bucket, which would silently replace the
-  // OpenClaude build (with the OpenAI shim) with the upstream Claude Code
+  // Portal build (with the OpenAI shim) with the upstream Claude Code
   // binary (without it).
   writeToStdout(
     chalk.yellow('Auto-update is not available for non-first-party provider builds.\n') +
@@ -137,9 +137,9 @@ export async function update() {
         writeToStdout(`Update available: ${MACRO.VERSION} → ${latest}\n`)
         writeToStdout('\n')
         writeToStdout('To update, run:\n')
-        writeToStdout(chalk.bold('  brew upgrade claude-code') + '\n')
+        writeToStdout(chalk.bold('  brew upgrade portal') + '\n')
       } else {
-        writeToStdout('Claude is up to date!\n')
+        writeToStdout('Portal is up to date!\n')
       }
     } else if (packageManager === 'winget') {
       writeToStdout('Claude is managed by winget.\n')
@@ -152,18 +152,18 @@ export async function update() {
           chalk.bold('  winget upgrade Anthropic.ClaudeCode') + '\n',
         )
       } else {
-        writeToStdout('Claude is up to date!\n')
+        writeToStdout('Portal is up to date!\n')
       }
     } else if (packageManager === 'apk') {
-      writeToStdout('Claude is managed by apk.\n')
+      writeToStdout('Portal is managed by apk.\n')
       const latest = await getLatestVersion(channel)
       if (latest && !gte(MACRO.VERSION, latest)) {
         writeToStdout(`Update available: ${MACRO.VERSION} → ${latest}\n`)
         writeToStdout('\n')
         writeToStdout('To update, run:\n')
-        writeToStdout(chalk.bold('  apk upgrade claude-code') + '\n')
+        writeToStdout(chalk.bold('  apk upgrade portal') + '\n')
       } else {
-        writeToStdout('Claude is up to date!\n')
+        writeToStdout('Portal is up to date!\n')
       }
     } else {
       // pacman, deb, and rpm don't get specific commands because they each have
@@ -249,7 +249,7 @@ export async function update() {
 
       if (result.latestVersion === MACRO.VERSION) {
         writeToStdout(
-          chalk.green(`Claude Code is up to date (${MACRO.VERSION})`) + '\n',
+          chalk.green(`Portal is up to date (${MACRO.VERSION})`) + '\n',
         )
       } else {
         writeToStdout(
@@ -319,7 +319,7 @@ export async function update() {
   // Check if versions match exactly, including any build metadata (like SHA)
   if (latestVersion === MACRO.VERSION) {
     writeToStdout(
-      chalk.green(`Claude Code is up to date (${MACRO.VERSION})`) + '\n',
+      chalk.green(`Portal is up to date (${MACRO.VERSION})`) + '\n',
     )
     await gracefulShutdown(0)
   }
@@ -402,7 +402,7 @@ export async function update() {
       } else {
         process.stderr.write('Try running with sudo or fix npm permissions\n')
         process.stderr.write(
-          'Or consider using native installation with: openclaude install\n',
+          'Or consider using native installation with: portal install\n',
         )
       }
       await gracefulShutdown(1)
@@ -416,7 +416,7 @@ export async function update() {
         )
       } else {
         process.stderr.write(
-          'Or consider using native installation with: openclaude install\n',
+          'Or consider using native installation with: portal install\n',
         )
       }
       await gracefulShutdown(1)

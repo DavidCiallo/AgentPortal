@@ -24,12 +24,12 @@ const statusText = document.getElementById('statusText')
 
 // Theme management
 function getTheme() {
-  return localStorage.getItem('openclaude-theme') || 'light'
+  return localStorage.getItem('portal-theme') || 'light'
 }
 
 function setTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme)
-  localStorage.setItem('openclaude-theme', theme)
+  localStorage.setItem('portal-theme', theme)
   const btn = document.getElementById('themeToggle')
 }
 
@@ -881,7 +881,7 @@ function autoRestoreLastSession() {
         if (data.messages && data.messages.length > 0) {
           // Remove welcome message before restoring
           const welcome = chatContainer.querySelector('.message.assistant:only-child')
-          if (welcome && welcome.textContent.includes('Welcome to OpenClaude')) {
+          if (welcome && welcome.textContent.includes('Welcome to Portal')) {
             welcome.remove()
           }
           renderSessionMessages(data.messages)
@@ -1084,6 +1084,7 @@ async function createNewChat() {
 function toggleSidebar() {
   const sidebar = document.querySelector('.sidebar')
   const overlay = document.getElementById('sidebarOverlay')
+  if (!sidebar || !overlay) return
   const isOpen = sidebar.classList.toggle('open')
   overlay.classList.toggle('active', isOpen)
   document.body.classList.toggle('sidebar-open', isOpen)
@@ -1092,6 +1093,7 @@ function toggleSidebar() {
 function closeSidebar() {
   const sidebar = document.querySelector('.sidebar')
   const overlay = document.getElementById('sidebarOverlay')
+  if (!sidebar || !overlay) return
   sidebar.classList.remove('open')
   overlay.classList.remove('active')
   document.body.classList.remove('sidebar-open')

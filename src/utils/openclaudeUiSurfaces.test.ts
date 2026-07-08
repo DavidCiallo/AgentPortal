@@ -5,7 +5,7 @@ import { optionForPermissionSaveDestination } from '../components/permissions/ru
 import { isClaudeSettingsPath } from './permissions/filesystem.ts'
 import { getValidationTip } from './settings/validationTips.ts'
 
-describe('OpenClaude settings path surfaces', () => {
+describe('Portal settings path surfaces', () => {
   test('isClaudeSettingsPath recognizes project .openclaude settings files', () => {
     expect(
       isClaudeSettingsPath(
@@ -43,7 +43,7 @@ describe('OpenClaude settings path surfaces', () => {
   })
 })
 
-describe('OpenClaude validation tips', () => {
+describe('Portal validation tips', () => {
   test('permissions.defaultMode invalid value keeps suggestion but no Claude docs link', () => {
     const tip = getValidationTip({
       path: 'permissions.defaultMode',

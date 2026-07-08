@@ -24,7 +24,7 @@ afterEach(() => {
   mock.restore()
 })
 
-describe('OpenClaude paths', () => {
+describe('Portal paths', () => {
   test('defaults user config home to ~/.openclaude', async () => {
     delete process.env.CLAUDE_CONFIG_DIR
     const { resolveClaudeConfigHomeDir } = await importFreshEnvUtils()

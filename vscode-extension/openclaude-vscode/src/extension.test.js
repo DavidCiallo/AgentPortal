@@ -7,7 +7,7 @@ function createStatus(overrides = {}) {
     installed: true,
     executable: 'openclaude',
     launchCommand: 'openclaude --project-aware',
-    terminalName: 'OpenClaude',
+    terminalName: 'Portal',
     shimEnabled: false,
     workspaceFolder: '/workspace/openclaude/very/long/path/example-project',
     workspaceSourceLabel: 'active editor workspace',
@@ -58,11 +58,11 @@ function loadExtension() {
   return require('./extension');
 }
 
-test('renderControlCenterHtml uses the OpenClaude wordmark, status rail, and warm action hierarchy', () => {
+test('renderControlCenterHtml uses the Portal wordmark, status rail, and warm action hierarchy', () => {
   const { renderControlCenterHtml } = loadExtension();
   const html = renderControlCenterHtml(createStatus(), { nonce: 'test-nonce', platform: 'win32' });
 
-  assert.match(html, /Open<span class="wordmark-accent">Claude<\/span>/);
+  assert.match(html, /Portal<\/span>/);
   assert.match(html, /class="status-rail"/);
   assert.match(html, /\.sunset-gradient\s*\{/);
   assert.match(html, /class="action-button primary" id="launch"/);
@@ -98,9 +98,9 @@ test('renderControlCenterHtml shows explicit disabled and empty states when work
   assert.doesNotMatch(html, /id="openProfile"/);
 });
 
-test('OpenClaudeControlCenterProvider.getHtml supplies a nonce to the redesigned renderer', () => {
-  const { OpenClaudeControlCenterProvider } = loadExtension();
-  const provider = new OpenClaudeControlCenterProvider();
+test('PortalControlCenterProvider.getHtml supplies a nonce to the redesigned renderer', () => {
+  const { PortalControlCenterProvider } = loadExtension();
+  const provider = new PortalControlCenterProvider();
 
   assert.doesNotThrow(() => provider.getHtml(createStatus()));
 
@@ -221,7 +221,7 @@ test('renderControlCenterHtml makes shared workspace-root launches explicit for 
   );
 
   assert.match(html, /Project-aware launch is anchored to the workspace root by the relative command · \/workspace\/openclaude/);
-  assert.match(html, /Same workspace-root target as Launch OpenClaude because the relative command resolves from the workspace root · \/workspace\/openclaude/);
+  assert.match(html, /Same workspace-root target as Launch Portal because the relative command resolves from the workspace root · \/workspace\/openclaude/);
 });
 
 test('renderControlCenterHtml escapes hostile text and title values', () => {

@@ -1,7 +1,7 @@
 {
   "name": "@gitlawb/openclaude",
   "version": "0.2.3",
-  "description": "Claude Code opened to any LLM — OpenAI, Gemini, DeepSeek, Ollama, and 200+ models",
+  "description": "Portal — an open-source coding agent CLI for any LLM — OpenAI, Gemini, DeepSeek, Ollama, and 200+ models",
   "type": "module",
   "bin": {
     "openclaude": "./bin/openclaude"
@@ -140,7 +140,7 @@
     "url": "https://github.com/Gitlawb/openclaude.git"
   },
   "keywords": [
-    "claude-code",
+    "portal",
     "openai",
     "llm",
     "cli",

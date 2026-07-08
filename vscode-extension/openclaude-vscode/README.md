@@ -1,6 +1,6 @@
-# OpenClaude VS Code Extension
+# Portal VS Code Extension
 
-A practical VS Code companion for OpenClaude with a project-aware **Control Center**, predictable terminal launch behavior, and quick access to useful OpenClaude workflows.
+A practical VS Code companion for Portal with a project-aware **Control Center**, predictable terminal launch behavior, and quick access to useful Portal workflows.
 
 ## Features
 
@@ -13,17 +13,17 @@ A practical VS Code companion for OpenClaude with a project-aware **Control Cent
   - whether `.openclaude-profile.json` exists in the current workspace root
   - a conservative provider summary derived from the workspace profile or known environment flags
 - **Project-aware launch behavior**:
-  - `Launch OpenClaude` launches from the active editor's workspace when possible
+  - `Launch Portal` launches from the active editor's workspace when possible
   - falls back to the first workspace folder when needed
   - avoids launching from an arbitrary default cwd when a project is open
 - **Practical sidebar actions**:
-  - Launch OpenClaude
+  - Launch Portal
   - Launch in Workspace Root
   - Open Workspace Profile
   - Open Repository
   - Open Setup Guide
   - Open Command Palette
-- **Built-in dark theme**: `OpenClaude Terminal Black`
+- **Built-in dark theme**: `Portal Terminal Black`
 
 ## Requirements
 
@@ -32,17 +32,17 @@ A practical VS Code companion for OpenClaude with a project-aware **Control Cent
 
 ## Commands
 
-- `OpenClaude: Open Control Center`
-- `OpenClaude: Launch in Terminal`
-- `OpenClaude: Launch in Workspace Root`
-- `OpenClaude: Open Repository`
-- `OpenClaude: Open Setup Guide`
-- `OpenClaude: Open Workspace Profile`
+- `Portal: Open Control Center`
+- `Portal: Launch in Terminal`
+- `Portal: Launch in Workspace Root`
+- `Portal: Open Repository`
+- `Portal: Open Setup Guide`
+- `Portal: Open Workspace Profile`
 
 ## Settings
 
 - `openclaude.launchCommand` (default: `openclaude`)
-- `openclaude.terminalName` (default: `OpenClaude`)
+- `openclaude.terminalName` (default: `Portal`)
 - `openclaude.useOpenAIShim` (default: `false`)
 
 `openclaude.useOpenAIShim` only injects `CLAUDE_CODE_USE_OPENAI=1` into terminals launched by the extension. It does not guess or configure a provider by itself.

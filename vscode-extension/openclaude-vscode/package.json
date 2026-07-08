@@ -1,7 +1,7 @@
 {
   "name": "openclaude-vscode",
-  "displayName": "OpenClaude",
-  "description": "Practical VS Code companion for OpenClaude with project-aware launch behavior and a real Control Center.",
+  "displayName": "Portal",
+  "description": "Practical VS Code companion for Portal with project-aware launch behavior and a real Control Center.",
   "version": "0.1.1",
   "publisher": "devnull-bootloader",
   "engines": {
@@ -34,40 +34,40 @@
     "commands": [
       {
         "command": "openclaude.start",
-        "title": "OpenClaude: Launch in Terminal",
-        "category": "OpenClaude"
+        "title": "Portal: Launch in Terminal",
+        "category": "Portal"
       },
       {
         "command": "openclaude.startInWorkspaceRoot",
-        "title": "OpenClaude: Launch in Workspace Root",
-        "category": "OpenClaude"
+        "title": "Portal: Launch in Workspace Root",
+        "category": "Portal"
       },
       {
         "command": "openclaude.openDocs",
-        "title": "OpenClaude: Open Repository",
-        "category": "OpenClaude"
+        "title": "Portal: Open Repository",
+        "category": "Portal"
       },
       {
         "command": "openclaude.openSetupDocs",
-        "title": "OpenClaude: Open Setup Guide",
-        "category": "OpenClaude"
+        "title": "Portal: Open Setup Guide",
+        "category": "Portal"
       },
       {
         "command": "openclaude.openWorkspaceProfile",
-        "title": "OpenClaude: Open Workspace Profile",
-        "category": "OpenClaude"
+        "title": "Portal: Open Workspace Profile",
+        "category": "Portal"
       },
       {
         "command": "openclaude.openControlCenter",
-        "title": "OpenClaude: Open Control Center",
-        "category": "OpenClaude"
+        "title": "Portal: Open Control Center",
+        "category": "Portal"
       }
     ],
     "viewsContainers": {
       "activitybar": [
         {
           "id": "openclaude",
-          "title": "OpenClaude",
+          "title": "Portal",
           "icon": "media/openclaude.svg"
         }
       ]
@@ -82,28 +82,28 @@
       ]
     },
     "configuration": {
-      "title": "OpenClaude",
+      "title": "Portal",
       "properties": {
         "openclaude.launchCommand": {
           "type": "string",
           "default": "openclaude",
-          "description": "Command run in the integrated terminal when launching OpenClaude."
+          "description": "Command run in the integrated terminal when launching Portal."
         },
         "openclaude.terminalName": {
           "type": "string",
-          "default": "OpenClaude",
-          "description": "Integrated terminal tab name for OpenClaude sessions."
+          "default": "Portal",
+          "description": "Integrated terminal tab name for Portal sessions."
         },
         "openclaude.useOpenAIShim": {
           "type": "boolean",
           "default": false,
-          "description": "Optionally set CLAUDE_CODE_USE_OPENAI=1 in launched OpenClaude terminals."
+          "description": "Optionally set CLAUDE_CODE_USE_OPENAI=1 in launched Portal terminals."
         }
       }
     },
     "themes": [
       {
-        "label": "OpenClaude Terminal Black",
+        "label": "Portal Terminal Black",
         "uiTheme": "vs-dark",
         "path": "./themes/OpenClaude-Terminal-Black.json"
       }
@@ -115,7 +115,7 @@
     "package": "npx @vscode/vsce package --no-dependencies"
   },
   "keywords": [
-    "openclaude",
+    "portal",
     "terminal",
     "theme",
     "cli",

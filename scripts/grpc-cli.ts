@@ -14,7 +14,7 @@ const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
 })
 
 const protoDescriptor = grpc.loadPackageDefinition(packageDefinition) as any
-const openclaudeProto = protoDescriptor.openclaude.v1
+const openclaudeProto = protoDescriptor.portal.v1
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -113,7 +113,7 @@ async function main() {
     })
   }
 
-  console.log('\x1b[32mOpenClaude gRPC CLI\x1b[0m')
+  console.log('\x1b[32mPortal gRPC CLI\x1b[0m')
   console.log('\x1b[90mType /exit to quit.\x1b[0m')
   promptUser()
 }

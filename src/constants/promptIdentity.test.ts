@@ -14,57 +14,57 @@ afterEach(() => {
   process.env.CLAUDE_CODE_SIMPLE = originalSimpleEnv
 })
 
-test('CLI identity prefixes describe OpenClaude instead of Claude Code', () => {
-  expect(getCLISyspromptPrefix()).toContain('OpenClaude')
+test('CLI identity prefixes describe Portal instead of Claude Code', () => {
+  expect(getCLISyspromptPrefix()).toContain('Portal')
   expect(getCLISyspromptPrefix()).not.toContain('Claude Code')
   expect(getCLISyspromptPrefix()).not.toContain("Anthropic's official CLI for Claude")
 
   for (const prefix of CLI_SYSPROMPT_PREFIXES) {
-    expect(prefix).toContain('OpenClaude')
+    expect(prefix).toContain('Portal')
     expect(prefix).not.toContain('Claude Code')
     expect(prefix).not.toContain("Anthropic's official CLI for Claude")
   }
 })
 
-test('simple mode identity describes OpenClaude instead of Claude Code', async () => {
+test('simple mode identity describes Portal instead of Claude Code', async () => {
   process.env.CLAUDE_CODE_SIMPLE = '1'
 
   const prompt = await getSystemPrompt([], 'gpt-4o')
 
-  expect(prompt[0]).toContain('OpenClaude')
+  expect(prompt[0]).toContain('Portal')
   expect(prompt[0]).not.toContain('Claude Code')
   expect(prompt[0]).not.toContain("Anthropic's official CLI for Claude")
 })
 
-test('built-in agent prompts describe OpenClaude instead of Claude Code', () => {
-  expect(DEFAULT_AGENT_PROMPT).toContain('OpenClaude')
+test('built-in agent prompts describe Portal instead of Claude Code', () => {
+  expect(DEFAULT_AGENT_PROMPT).toContain('Portal')
   expect(DEFAULT_AGENT_PROMPT).not.toContain('Claude Code')
   expect(DEFAULT_AGENT_PROMPT).not.toContain("Anthropic's official CLI for Claude")
 
   const generalPrompt = GENERAL_PURPOSE_AGENT.getSystemPrompt({
     toolUseContext: { options: {} as never },
   })
-  expect(generalPrompt).toContain('OpenClaude')
+  expect(generalPrompt).toContain('Portal')
   expect(generalPrompt).not.toContain('Claude Code')
   expect(generalPrompt).not.toContain("Anthropic's official CLI for Claude")
 
   const explorePrompt = EXPLORE_AGENT.getSystemPrompt({
     toolUseContext: { options: {} as never },
   })
-  expect(explorePrompt).toContain('OpenClaude')
+  expect(explorePrompt).toContain('Portal')
   expect(explorePrompt).not.toContain('Claude Code')
   expect(explorePrompt).not.toContain("Anthropic's official CLI for Claude")
 
   const planPrompt = PLAN_AGENT.getSystemPrompt({
     toolUseContext: { options: {} as never },
   })
-  expect(planPrompt).toContain('OpenClaude')
+  expect(planPrompt).toContain('Portal')
   expect(planPrompt).not.toContain('Claude Code')
 
   const statuslinePrompt = STATUSLINE_SETUP_AGENT.getSystemPrompt({
     toolUseContext: { options: {} as never },
   })
-  expect(statuslinePrompt).toContain('OpenClaude')
+  expect(statuslinePrompt).toContain('Portal')
   expect(statuslinePrompt).not.toContain('Claude Code')
 
   const guidePrompt = CLAUDE_CODE_GUIDE_AGENT.getSystemPrompt({
@@ -76,9 +76,9 @@ test('built-in agent prompts describe OpenClaude instead of Claude Code', () => 
       } as never,
     },
   })
-  expect(guidePrompt).toContain('OpenClaude')
-  expect(guidePrompt).toContain('You are the OpenClaude guide agent.')
-  expect(guidePrompt).toContain('**OpenClaude** (the CLI tool)')
+  expect(guidePrompt).toContain('Portal')
+  expect(guidePrompt).toContain('You are the Portal guide agent.')
+  expect(guidePrompt).toContain('**Portal** (the CLI tool)')
   expect(guidePrompt).not.toContain('You are the Claude guide agent.')
   expect(guidePrompt).not.toContain('**Claude Code** (the CLI tool)')
 })

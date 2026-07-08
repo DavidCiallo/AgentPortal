@@ -1098,7 +1098,7 @@ export class WebServer {
 
   start() {
     this.httpServer.listen(this.port, this.host, () => {
-      console.log(`OpenClaude Web UI running at http://${this.host}:${this.port}`)
+      console.log(`Portal Web UI running at http://${this.host}:${this.port}`)
     })
   }
 }
