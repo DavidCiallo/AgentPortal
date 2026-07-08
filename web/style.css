@@ -81,23 +81,6 @@ body {
   -webkit-text-fill-color: transparent;
 }
 
-.status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--text-muted);
-}
-
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--success);
-}
-
-.status-dot.disconnected { background: var(--error); }
-
 .auto-approve-toggle {
   display: flex;
   align-items: center;
@@ -113,6 +96,10 @@ body {
   height: 16px;
   accent-color: var(--accent);
   cursor: pointer;
+}
+
+.show-tools-toggle {
+  margin-left: 16px;
 }
 
 /* Tool calls toggle icon */
@@ -384,21 +371,6 @@ body {
   display: block;
 }
 
-/* Thinking indicator - shows token count during thinking phase */
-.thinking-indicator {
-  align-self: flex-start;
-  font-size: 12px;
-  color: var(--text-muted);
-  font-style: italic;
-  padding: 2px 4px;
-  animation: thinking-pulse 2s ease-in-out infinite;
-}
-
-@keyframes thinking-pulse {
-  0%, 100% { opacity: 0.6; }
-  50% { opacity: 1; }
-}
-
 /* Tool calls container */
 .tool-calls-container {
   align-self: flex-start;
@@ -581,6 +553,39 @@ body {
   align-items: center;
 }
 
+/* Connection & agent working status indicator */
+.agent-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.agent-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+.agent-status.connected .agent-status-dot {
+  background: var(--success);
+  animation: none;
+}
+.agent-status.disconnected .agent-status-dot {
+  background: var(--error);
+  animation: none;
+}
+.agent-status.visible .agent-status-dot {
+  background: var(--warning);
+  animation: agent-pulse 1.2s ease-in-out infinite;
+}
+@keyframes agent-pulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
 /* Input area */
 .input-area {
   background: var(--surface);
@@ -628,16 +633,6 @@ body {
 
 .send-btn:hover { opacity: 0.8; }
 .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-/* Thinking indicator (Cooking… (xx m xx s)) */
-.thinking-indicator {
-  align-self: flex-start;
-  font-size: 13px;
-  color: var(--text-muted);
-  padding: 8px 0;
-  font-style: italic;
-  letter-spacing: 0.5px;
-}
 
 /* Settings button */
 .settings-btn {
@@ -1126,10 +1121,6 @@ body {
   .theme-btn {
     width: 32px;
     height: 32px;
-  }
-
-  .status {
-    font-size: 12px;
   }
 
   /* Chat area */

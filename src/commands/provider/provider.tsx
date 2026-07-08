@@ -234,7 +234,7 @@ export function buildProfileSaveMessage(
   }
 
   lines.push(`Profile: ${filePath}`)
-  lines.push('Restart OpenClaude to use it.')
+  lines.push('Restart Portal to use it.')
 
   return lines.join('\n')
 }
@@ -251,7 +251,7 @@ function buildUsageText(): string {
     `Current endpoint: ${summary.endpointLabel}`,
     `Saved profile: ${summary.savedProfileLabel}`,
     '',
-    'Choose Auto, Ollama, or OpenAI-compatible, then save a profile for the next OpenClaude restart.',
+    'Choose Auto, Ollama, or OpenAI-compatible, then save a profile for the next Portal restart.',
   ].join('\n')
 }
 
@@ -373,7 +373,7 @@ function ProviderChooser({
     options.push({
       label: 'Clear saved profile',
       value: 'clear',
-      description: 'Remove .openclaude-profile.json and return to normal startup',
+      description: 'Remove .portal-profile.json and return to normal startup',
     })
   }
 
@@ -385,7 +385,7 @@ function ProviderChooser({
     >
       <Box flexDirection="column" gap={1}>
         <Text>
-          Save a provider profile for the next OpenClaude restart without
+          Save a provider profile for the next Portal restart without
           editing environment variables first.
         </Text>
         <Box flexDirection="column">
@@ -757,7 +757,7 @@ export function ProviderWizard({
               })
             } else if (value === 'clear') {
               const filePath = deleteProfileFile()
-              onDone(`Removed saved provider profile at ${filePath}. Restart OpenClaude to go back to normal startup.`, {
+              onDone(`Removed saved provider profile at ${filePath}. Restart Portal to go back to normal startup.`, {
                 display: 'system',
               })
             }

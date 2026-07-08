@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>OpenClaude</title>
+  <title>Portal</title>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -17,21 +17,18 @@
       <!-- Projects will be loaded here -->
     </div>
   </div>
+  <div id="sidebarOverlay" class="sidebar-overlay" onclick="closeSidebar()"></div>
 
   <!-- Main content -->
   <div class="main-content">
     <div class="header">
       <div style="display:flex;align-items:center;gap:8px">
         <button class="sidebar-toggle" id="sidebarToggle" onclick="toggleSidebar()" title="Toggle sidebar">☰</button>
-        <h1>OpenClaude</h1>
+        <h1>Portal</h1>
       </div>
       <div style="display: flex; align-items: center; gap: 8px;">
         <button class="theme-btn" id="themeToggle" onclick="toggleTheme()" title="Toggle theme"></button>
         <button class="settings-btn" onclick="openSettings()">Settings</button>
-        <div class="status">
-          <span class="status-dot" id="statusDot"></span>
-          <span id="statusText">Connecting...</span>
-        </div>
       </div>
     </div>
 
@@ -132,7 +129,7 @@
     </div>
 
     <div class="chat-container" id="chatContainer">
-      <div class="message assistant">Welcome to OpenClaude! I can help you with coding tasks, file operations, and more. What would you like to work on?</div>
+      <div class="message assistant">Welcome to Portal! I can help you with coding tasks, file operations, and more. What would you like to work on?</div>
     </div>
 
     <!-- Bottom bar: controls above the input -->
@@ -141,6 +138,14 @@
         <input type="checkbox" id="autoApproveToggle" onchange="toggleAutoApprove(this.checked)">
         <span>Auto Approve</span>
       </label>
+      <label class="auto-approve-toggle show-tools-toggle" title="Show tool calls by default">
+        <input type="checkbox" id="showToolsToggle" onchange="toggleShowTools(this.checked)">
+        <span>Show Tools</span>
+      </label>
+      <div class="agent-status" id="agentStatus">
+        <span class="agent-status-dot"></span>
+        <span class="agent-status-text" id="agentStatusText">Connecting...</span>
+      </div>
     </div>
 
     <div class="input-area">

@@ -6,12 +6,12 @@ Object.assign(globalThis, {
   MACRO: {
     VERSION: '0.2.3',
     DISPLAY_VERSION: '0.2.3',
-    PACKAGE_URL: '@gitlawb/openclaude',
+    PACKAGE_URL: '@gitlawb/portal',
   }
 })
 
 async function main() {
-  console.log('Starting OpenClaude Web UI...')
+  console.log('Starting Portal Web UI...')
   await init()
 
   // Mirror CLI bootstrap: hydrate secure tokens and resolve provider profile

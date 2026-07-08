@@ -5,8 +5,8 @@
  * that the rest of the codebase uses for provider detection.
  *
  * Usage:
- *   openclaude --provider openai --model gpt-4o
- *   openclaude --provider ollama --model llama3.2
+ *   portal --provider openai --model gpt-4o
+ *   portal --provider ollama --model llama3.2
  */
 
 export const VALID_PROVIDERS = [

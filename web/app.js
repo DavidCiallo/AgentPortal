@@ -3,12 +3,17 @@ let ws = null
 let sessionId = ''
 let isGenerating = false
 let currentAssistantEl = null
-let thinkingIndicatorEl = null
 let pendingToolCalls = []  // Buffered tool_use_display events, rendered when tool_result arrives
 let pendingPrompts = new Map()
 let currentModel = ''  // Model name from settings
 let currentToolContainer = null  // .tool-calls-container for live tool calls
 let currentToolList = null       // .tool-calls-list inside the container
+
+// History pagination (infinite scroll up)
+let messageOffset = 0
+let totalMessages = 0
+let hasMoreMessages = false
+let isLoadingHistory = false
 
 // API error retry
 const MAX_RETRIES = 3
@@ -19,17 +24,18 @@ let retryCount = 0
 const chatContainer = document.getElementById('chatContainer')
 const messageInput = document.getElementById('messageInput')
 const sendBtn = document.getElementById('sendBtn')
-const statusDot = document.getElementById('statusDot')
-const statusText = document.getElementById('statusText')
+const agentStatusEl = document.getElementById('agentStatus')
+const agentStatusDot = agentStatusEl?.querySelector('.agent-status-dot')
+const agentStatusText = document.getElementById('agentStatusText')
 
 // Theme management
 function getTheme() {
-  return localStorage.getItem('openclaude-theme') || 'light'
+  return localStorage.getItem('portal-theme') || 'light'
 }
 
 function setTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme)
-  localStorage.setItem('openclaude-theme', theme)
+  localStorage.setItem('portal-theme', theme)
   const btn = document.getElementById('themeToggle')
 }
 
@@ -57,6 +63,11 @@ function toggleToolCalls(button) {
     container.classList.toggle('expanded')
     button.classList.toggle('expanded')
   }
+}
+
+// Show Tools preference — controls default expand/collapse of new tool calls
+function toggleShowTools(enabled) {
+  localStorage.setItem('showTools', enabled ? '1' : '0')
 }
 
 // Format tool call display with colored diff lines
@@ -172,10 +183,11 @@ function getOrCreateToolList() {
 
   // Create container
   currentToolContainer = document.createElement('div')
-  currentToolContainer.className = 'tool-calls-container expanded'
+  const showExpanded = localStorage.getItem('showTools') !== '0'
+  currentToolContainer.className = 'tool-calls-container' + (showExpanded ? ' expanded' : '')
 
   const toggleBtn = document.createElement('div')
-  toggleBtn.className = 'tool-calls-toggle expanded'
+  toggleBtn.className = 'tool-calls-toggle' + (showExpanded ? ' expanded' : '')
   toggleBtn.onclick = () => toggleToolCalls(toggleBtn)
   toggleBtn.innerHTML = `
     <span class="icon">&#128295;</span>
@@ -234,6 +246,10 @@ function renderToolCallsList(toolCalls) {
 const savedAutoApprove = localStorage.getItem('autoApprove') === '1'
 document.getElementById('autoApproveToggle').checked = savedAutoApprove
 
+// Restore show-tools state (default: expanded)
+const savedShowTools = localStorage.getItem('showTools') !== '0'
+document.getElementById('showToolsToggle').checked = savedShowTools
+
 // Initialize theme
 setTheme(getTheme())
 
@@ -242,8 +258,7 @@ function connect() {
   ws = new WebSocket(WS_URL)
 
   ws.onopen = () => {
-    statusDot.classList.remove('disconnected')
-    statusText.textContent = 'Connected'
+    setConnectionStatus(true)
     sendBtn.disabled = false
     // Sync auto-approve state to server
     if (localStorage.getItem('autoApprove') === '1') {
@@ -256,8 +271,7 @@ function connect() {
   }
 
   ws.onclose = () => {
-    statusDot.classList.add('disconnected')
-    statusText.textContent = 'Disconnected'
+    setConnectionStatus(false)
     sendBtn.disabled = true
     setTimeout(connect, 3000)
   }
@@ -277,36 +291,8 @@ function handleMessage(msg) {
   console.log('[handleMessage] Processing:', msg.type)
   try {
   switch (msg.type) {
-    case 'thinking_start':
-      // Reset tool call container for this new assistant response
-      currentToolContainer = null
-      currentToolList = null
-      // Finalize current text bubble — next text_chunk starts a new message
-      currentAssistantEl = null
-      // Create thinking indicator
-      if (thinkingIndicatorEl) thinkingIndicatorEl.remove()
-      thinkingIndicatorEl = document.createElement('div')
-      thinkingIndicatorEl.className = 'thinking-indicator'
-      thinkingIndicatorEl.textContent = 'Thinking\u2026'
-      chatContainer.appendChild(thinkingIndicatorEl)
-      scrollToBottom()
-      break
-
-    case 'thinking_chunk':
-      if (thinkingIndicatorEl && msg.estimatedTokens) {
-        const k = (msg.estimatedTokens / 1000).toFixed(2)
-        thinkingIndicatorEl.textContent = `Thinking\u2026 (${k}k)`
-      }
-      break
-
-    case 'thinking_end':
-      if (thinkingIndicatorEl) {
-        thinkingIndicatorEl.remove()
-        thinkingIndicatorEl = null
-      }
-      break
-
     case 'text_chunk':
+      showAgentStatus('Generating', false)
       if (!currentAssistantEl) {
         currentAssistantEl = addMessage('', 'assistant')
       }
@@ -317,7 +303,7 @@ function handleMessage(msg) {
       break
 
     case 'tool_start':
-      // Tool start is handled by tool_use_display - skip
+      showAgentStatus('Running tools', false)
       break
 
     case 'tool_use_display':
@@ -381,11 +367,8 @@ function handleMessage(msg) {
       currentAssistantEl = null
       sendBtn.disabled = false
       messageInput.focus()
-      removeTypingIndicator()
-      if (thinkingIndicatorEl) {
-        thinkingIndicatorEl.remove()
-        thinkingIndicatorEl = null
-      }
+
+      hideAgentStatus()
       break
 
     case 'cancelled':
@@ -399,17 +382,14 @@ function handleMessage(msg) {
       if (currentAssistantEl && !currentAssistantEl.textContent.trim()) {
         currentAssistantEl.remove()
       }
-      if (thinkingIndicatorEl) {
-        thinkingIndicatorEl.remove()
-        thinkingIndicatorEl = null
-      }
       isGenerating = false
       currentAssistantEl = null
       pendingToolCalls = []
       currentToolContainer = null
       currentToolList = null
       sendBtn.disabled = false
-      removeTypingIndicator()
+
+      hideAgentStatus()
       addMessage('Generation cancelled.', 'assistant')
       break
 
@@ -431,7 +411,8 @@ function handleMessage(msg) {
       addMessage(`Error: ${msg.message}`, 'error')
       isGenerating = false
       sendBtn.disabled = false
-      removeTypingIndicator()
+
+      hideAgentStatus()
       break
 
     case 'config':
@@ -475,7 +456,7 @@ function showPermissionDialog(prompt) {
     </div>
   `
   chatContainer.appendChild(dialog)
-  scrollToBottom()
+  scrollToBottom(true)
 }
 
 function respondPermission(promptId, reply) {
@@ -525,35 +506,53 @@ function addMessage(text, className) {
   return el
 }
 
-let typingTimerInterval = null
+// Agent working status — persistent indicator at bottom-bar
+let agentStatusStart = 0
+let agentStatusInterval = null
+let _connected = false
 
-function addTypingIndicator() {
-  const el = document.createElement('div')
-  el.className = 'thinking-indicator'
-  el.id = 'typingIndicator'
-  el.textContent = 'Cooking\u2026'
-  chatContainer.appendChild(el)
-  scrollToBottom()
+function setConnectionStatus(connected) {
+  _connected = connected
+  if (!agentStatusEl || !agentStatusDot || !agentStatusText) return
+  agentStatusEl.classList.remove('visible', 'connected', 'disconnected')
+  agentStatusEl.classList.toggle('connected', connected)
+  agentStatusEl.classList.toggle('disconnected', !connected)
+  agentStatusText.textContent = connected ? 'Connected' : 'Disconnected'
+}
 
-  const startTime = Date.now()
-  typingTimerInterval = setInterval(() => {
-    const elapsed = Math.floor((Date.now() - startTime) / 1000)
+function showAgentStatus(text, resetTimer = true) {
+  if (!agentStatusEl || !agentStatusDot || !agentStatusText) return
+  agentStatusEl.classList.remove('connected', 'disconnected')
+  agentStatusEl.classList.add('visible')
+  if (resetTimer) agentStatusStart = Date.now()
+  agentStatusText.textContent = text || 'Working'
+  if (agentStatusInterval) clearInterval(agentStatusInterval)
+  agentStatusInterval = setInterval(() => {
+    const elapsed = Math.floor((Date.now() - agentStatusStart) / 1000)
     const m = Math.floor(elapsed / 60)
     const s = elapsed % 60
-    el.textContent = `Cooking\u2026 (${m}m ${s}s)`
+    agentStatusText.textContent = `${text || 'Working'} (${m}m ${s}s)`
   }, 1000)
 }
 
-function removeTypingIndicator() {
-  if (typingTimerInterval) {
-    clearInterval(typingTimerInterval)
-    typingTimerInterval = null
+function hideAgentStatus() {
+  if (!agentStatusEl || !agentStatusDot || !agentStatusText) return
+  agentStatusEl.classList.remove('visible')
+  if (agentStatusInterval) {
+    clearInterval(agentStatusInterval)
+    agentStatusInterval = null
   }
-  const el = document.getElementById('typingIndicator')
-  if (el) el.remove()
+  // Revert to connection status
+  setConnectionStatus(_connected)
 }
 
-function scrollToBottom() {
+function isNearBottom() {
+  // Consider user "near bottom" if within 1 viewport height from the bottom
+  return chatContainer.scrollTop + chatContainer.clientHeight >= chatContainer.scrollHeight - chatContainer.clientHeight
+}
+
+function scrollToBottom(force = false) {
+  if (!force && !isNearBottom()) return
   chatContainer.scrollTop = chatContainer.scrollHeight
 }
 
@@ -637,12 +636,18 @@ async function sendMessage() {
     const projectDir = currentProject
       ? currentProject.replace(/[/\\:]/g, '-')
       : 'unknown'
+    messageOffset = 0
+    totalMessages = 0
+    hasMoreMessages = false
     try {
-      const resp = await fetch(`/api/session-messages?project=${encodeURIComponent(projectDir)}&session=${encodeURIComponent(sessionId)}`)
+      const resp = await fetch(`/api/session-messages?project=${encodeURIComponent(projectDir)}&session=${encodeURIComponent(sessionId)}&offset=0&limit=40`)
       const data = await resp.json()
       if (data.messages && data.messages.length > 0) {
         chatContainer.innerHTML = ''
         renderSessionMessages(data.messages)
+        messageOffset = data.messages.length
+        totalMessages = data.total
+        hasMoreMessages = data.hasMore
       }
     } catch {
       // Failed to load history — proceed with empty chat
@@ -655,7 +660,7 @@ async function sendMessage() {
 
   isGenerating = true
   sendBtn.disabled = true
-  addTypingIndicator()
+  showAgentStatus('Working')
 
   const chatMsg = {
     type: 'chat',
@@ -672,6 +677,17 @@ async function sendMessage() {
 
 // Event listeners
 sendBtn.addEventListener('click', sendMessage)
+
+// Infinite scroll — load older messages when within ~1 viewport height from top
+let scrollLoadTimer = null
+chatContainer.addEventListener('scroll', () => {
+  if (scrollLoadTimer) clearTimeout(scrollLoadTimer)
+  scrollLoadTimer = setTimeout(() => {
+    if (chatContainer.scrollTop < chatContainer.clientHeight && hasMoreMessages && !isLoadingHistory) {
+      loadMoreMessages()
+    }
+  }, 200)
+})
 
 messageInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
@@ -763,6 +779,57 @@ async function loadSessions(projectId) {
   }
 }
 
+// Render a single message's DOM elements into the given container
+function renderMessage(msg, container) {
+  if (msg.role === 'user') {
+    const el = document.createElement('div')
+    el.className = 'message user'
+    el.dataset.rawText = msg.content
+    el.textContent = msg.content
+    container.appendChild(el)
+  } else if (msg.role === 'assistant') {
+    let el = null
+    if (msg.content && msg.content.trim()) {
+      el = document.createElement('div')
+      el.className = 'message assistant'
+      el.dataset.rawText = msg.content
+      el.innerHTML = renderMarkdown(msg.content)
+      container.appendChild(el)
+    }
+    if (msg.toolCalls && msg.toolCalls.length > 0) {
+      // Filter out Read tool calls from history display
+      const filteredCalls = msg.toolCalls.filter(tc => tc.toolName !== 'Read')
+      if (filteredCalls.length === 0) return
+
+      const toolCallsContainer = document.createElement('div')
+      toolCallsContainer.className = 'tool-calls-container'
+
+      const mergedGroups = mergeToolCalls(filteredCalls)
+      const toggleBtn = document.createElement('div')
+      toggleBtn.className = 'tool-calls-toggle'
+      toggleBtn.onclick = () => toggleToolCalls(toggleBtn)
+      const label = mergedGroups.length < filteredCalls.length
+        ? `${mergedGroups.length} tool calls (merged from ${filteredCalls.length})`
+        : `${filteredCalls.length} tool calls`
+      toggleBtn.innerHTML = `
+        <span class="icon">&#128295;</span>
+        <span>${label}</span>
+        <span class="count">${mergedGroups.length}</span>
+      `
+      toolCallsContainer.appendChild(toggleBtn)
+
+      const toolCallsList = renderToolCallsList(filteredCalls)
+      toolCallsContainer.appendChild(toolCallsList)
+
+      if (el) {
+        el.after(toolCallsContainer)
+      } else {
+        container.appendChild(toolCallsContainer)
+      }
+    }
+  }
+}
+
 function renderSessionMessages(messages) {
   if (!messages || messages.length === 0) {
     addMessage('No messages in this session. Start typing to continue...', 'assistant')
@@ -785,47 +852,48 @@ function renderSessionMessages(messages) {
     }
   }
 
-  mergedMessages.forEach(msg => {
-    if (msg.role === 'user') {
-      addMessage(msg.content, 'user')
-    } else if (msg.role === 'assistant') {
-      let el = null
-      if (msg.content && msg.content.trim()) {
-        el = addMessage(msg.content, 'assistant')
-      }
-      if (msg.toolCalls && msg.toolCalls.length > 0) {
-        // Filter out Read tool calls from history display
-        const filteredCalls = msg.toolCalls.filter(tc => tc.toolName !== 'Read')
-        if (filteredCalls.length === 0) return
+  mergedMessages.forEach(msg => renderMessage(msg, chatContainer))
+}
 
-        const toolCallsContainer = document.createElement('div')
-        toolCallsContainer.className = 'tool-calls-container'
+// Load older messages when scrolling to top
+async function loadMoreMessages() {
+  if (isLoadingHistory || !hasMoreMessages || !sessionId) return
+  isLoadingHistory = true
 
-        const mergedGroups = mergeToolCalls(filteredCalls)
-        const toggleBtn = document.createElement('div')
-        toggleBtn.className = 'tool-calls-toggle'
-        toggleBtn.onclick = () => toggleToolCalls(toggleBtn)
-        const label = mergedGroups.length < filteredCalls.length
-          ? `${mergedGroups.length} tool calls (merged from ${filteredCalls.length})`
-          : `${filteredCalls.length} tool calls`
-        toggleBtn.innerHTML = `
-          <span class="icon">&#128295;</span>
-          <span>${label}</span>
-          <span class="count">${mergedGroups.length}</span>
-        `
-        toolCallsContainer.appendChild(toggleBtn)
+  const projectDir = currentProject
+    ? currentProject.replace(/[/\\:]/g, '-')
+    : 'unknown'
 
-        const toolCallsList = renderToolCallsList(filteredCalls)
-        toolCallsContainer.appendChild(toolCallsList)
+  try {
+    const resp = await fetch(`/api/session-messages?project=${encodeURIComponent(projectDir)}&session=${encodeURIComponent(sessionId)}&offset=${messageOffset}&limit=40`)
+    const data = await resp.json()
 
-        if (el) {
-          el.after(toolCallsContainer)
-        } else {
-          chatContainer.appendChild(toolCallsContainer)
-        }
-      }
+    if (!data.messages || data.messages.length === 0) {
+      hasMoreMessages = false
+      return
     }
-  })
+
+    // Force layout read to capture current scroll height before DOM changes
+    const prevScrollHeight = chatContainer.scrollHeight
+
+    // Render messages into a fragment, then prepend in correct order
+    const fragment = document.createDocumentFragment()
+    data.messages.forEach(msg => renderMessage(msg, fragment))
+    chatContainer.insertBefore(fragment, chatContainer.firstChild)
+
+    // Wait for browser to lay out the new content, then lock scroll position
+    requestAnimationFrame(() => {
+      chatContainer.scrollTop = chatContainer.scrollHeight - prevScrollHeight
+    })
+
+    messageOffset += data.messages.length
+    totalMessages = data.total
+    hasMoreMessages = data.hasMore
+  } catch (err) {
+    console.error('Failed to load more messages:', err)
+  } finally {
+    isLoadingHistory = false
+  }
 }
 
 async function switchSession(projectId, newSessionId, cwd) {
@@ -843,16 +911,22 @@ async function switchSession(projectId, newSessionId, cwd) {
   document.querySelector(`.session-item[data-session-id="${newSessionId}"]`)?.classList.add('active')
 
   // Load session history
+  messageOffset = 0
+  totalMessages = 0
+  hasMoreMessages = false
   try {
-    const response = await fetch(`/api/session-messages?project=${encodeURIComponent(projectId)}&session=${encodeURIComponent(newSessionId)}`)
+    const response = await fetch(`/api/session-messages?project=${encodeURIComponent(projectId)}&session=${encodeURIComponent(newSessionId)}&offset=0&limit=40`)
     const data = await response.json()
     renderSessionMessages(data.messages)
+    messageOffset = data.messages.length
+    totalMessages = data.total
+    hasMoreMessages = data.hasMore
   } catch (err) {
     console.error('Failed to load session messages:', err)
     addMessage('Failed to load session history. Start typing to continue...', 'assistant')
   }
 
-  scrollToBottom()
+  scrollToBottom(true)
 }
 
 // Auto-restore last session on page load
@@ -875,16 +949,20 @@ function autoRestoreLastSession() {
     currentProject = cwd || projectId
 
     // Fetch and display session messages via HTTP
-    fetch(`/api/session-messages?project=${encodeURIComponent(projectId)}&session=${encodeURIComponent(savedSessionId)}`)
+    fetch(`/api/session-messages?project=${encodeURIComponent(projectId)}&session=${encodeURIComponent(savedSessionId)}&offset=0&limit=40`)
       .then(res => res.json())
       .then(data => {
         if (data.messages && data.messages.length > 0) {
           // Remove welcome message before restoring
           const welcome = chatContainer.querySelector('.message.assistant:only-child')
-          if (welcome && welcome.textContent.includes('Welcome to OpenClaude')) {
+          if (welcome && welcome.textContent.includes('Welcome to Portal')) {
             welcome.remove()
           }
           renderSessionMessages(data.messages)
+          messageOffset = data.messages.length
+          totalMessages = data.total
+          hasMoreMessages = data.hasMore
+          scrollToBottom(true)
         }
       })
       .catch(err => console.error('[autoRestore] Failed to load session:', err))
@@ -1084,6 +1162,7 @@ async function createNewChat() {
 function toggleSidebar() {
   const sidebar = document.querySelector('.sidebar')
   const overlay = document.getElementById('sidebarOverlay')
+  if (!sidebar || !overlay) return
   const isOpen = sidebar.classList.toggle('open')
   overlay.classList.toggle('active', isOpen)
   document.body.classList.toggle('sidebar-open', isOpen)
@@ -1092,6 +1171,7 @@ function toggleSidebar() {
 function closeSidebar() {
   const sidebar = document.querySelector('.sidebar')
   const overlay = document.getElementById('sidebarOverlay')
+  if (!sidebar || !overlay) return
   sidebar.classList.remove('open')
   overlay.classList.remove('active')
   document.body.classList.remove('sidebar-open')

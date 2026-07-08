@@ -3,7 +3,6 @@
  */
 
 import { access, chmod, writeFile } from 'fs/promises'
-import { homedir } from 'os'
 import { join } from 'path'
 import { type ReleaseChannel, saveGlobalConfig } from './config.js'
 import { getClaudeConfigHomeDir } from './envUtils.js'
@@ -21,37 +20,25 @@ function getLocalInstallDir(): string {
   return join(getClaudeConfigHomeDir(), 'local')
 }
 
-function getLegacyLocalInstallDir(homeDir = homedir()): string {
-  return join(homeDir, '.claude', 'local')
-}
-
 export function getCandidateLocalInstallDirs(options?: {
   configHomeDir?: string
-  homeDir?: string
 }): string[] {
-  const homeDir = options?.homeDir ?? homedir()
   const configHomeDir = options?.configHomeDir ?? getClaudeConfigHomeDir()
-  return Array.from(
-    new Set([join(configHomeDir, 'local'), getLegacyLocalInstallDir(homeDir)]),
-  )
+  return [join(configHomeDir, 'local')]
 }
 
 function getCandidateLocalBinaryPaths(localInstallDir: string): string[] {
   return [
-    join(localInstallDir, 'node_modules', '.bin', 'openclaude'),
-    join(localInstallDir, 'node_modules', '.bin', 'claude'),
+    join(localInstallDir, 'node_modules', '.bin', 'portal'),
   ]
 }
 
 export function isManagedLocalInstallationPath(execPath: string): boolean {
-  return (
-    execPath.includes('/.openclaude/local/node_modules/') ||
-    execPath.includes('/.claude/local/node_modules/')
-  )
+  return execPath.includes('/.portal/local/node_modules/')
 }
 
 export function getLocalClaudePath(): string {
-  return join(getLocalInstallDir(), 'openclaude')
+  return join(getLocalInstallDir(), 'portal')
 }
 
 /**
@@ -94,7 +81,7 @@ export async function ensureLocalPackageEnvironment(): Promise<boolean> {
     await writeIfMissing(
       join(localInstallDir, 'package.json'),
       jsonStringify(
-        { name: 'openclaude-local', version: '0.0.1', private: true },
+        { name: 'portal-local', version: '0.0.1', private: true },
         null,
         2,
       ),
@@ -104,7 +91,7 @@ export async function ensureLocalPackageEnvironment(): Promise<boolean> {
     const wrapperPath = getLocalClaudePath()
     const created = await writeIfMissing(
       wrapperPath,
-      `#!/bin/sh\nexec "${localInstallDir}/node_modules/.bin/openclaude" "$@"`,
+      `#!/bin/sh\nexec "${localInstallDir}/node_modules/.bin/portal" "$@"`,
       0o755,
     )
     if (created) {

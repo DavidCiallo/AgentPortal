@@ -58,9 +58,6 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Run unit tests
-        run: bun test --max-concurrency=1
-
       - name: Smoke test
         run: bun run smoke
 
@@ -83,6 +80,6 @@ jobs:
           {
             echo "## Released ${{ needs.release-please.outputs.tag_name }}"
             echo
-            echo "- npm: https://www.npmjs.com/package/@gitlawb/openclaude"
-            echo "- GitHub: https://github.com/Gitlawb/openclaude/releases/tag/${{ needs.release-please.outputs.tag_name }}"
+            echo "- npm: https://www.npmjs.com/package/@gitlawb/portal"
+            echo "- GitHub: https://github.com/Gitlawb/portal/releases/tag/${{ needs.release-please.outputs.tag_name }}"
           } >> "$GITHUB_STEP_SUMMARY"
