@@ -175,7 +175,7 @@ export async function assertMinVersion() {}
 export async function getMaxVersion() { return undefined; }
 export async function getMaxVersionMessage() { return undefined; }
 export function shouldSkipVersion() { return true; }
-export function getLockFilePath() { return '/tmp/openclaude-update.lock'; }
+export function getLockFilePath() { return '/tmp/portal-update.lock'; }
 export async function checkGlobalInstallPermissions() { return { hasPermissions: false, npmPrefix: null }; }
 export async function getLatestVersion() { return null; }
 export async function getNpmDistTags() { return { latest: null, stable: null }; }

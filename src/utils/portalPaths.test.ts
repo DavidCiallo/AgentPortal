@@ -32,7 +32,7 @@ describe('Portal paths', () => {
     expect(
       resolveClaudeConfigHomeDir({
         homeDir: homedir(),
-        openClaudeExists: true,
+        portalDirExists: true,
         legacyClaudeExists: false,
       }),
     ).toBe(join(homedir(), '.openclaude'))
@@ -45,23 +45,23 @@ describe('Portal paths', () => {
     expect(
       resolveClaudeConfigHomeDir({
         homeDir: homedir(),
-        openClaudeExists: false,
+        portalDirExists: false,
         legacyClaudeExists: true,
       }),
     ).toBe(join(homedir(), '.claude'))
   })
 
   test('uses CLAUDE_CONFIG_DIR override when provided', async () => {
-    process.env.CLAUDE_CONFIG_DIR = '/tmp/custom-openclaude'
+    process.env.CLAUDE_CONFIG_DIR = '/tmp/custom-portal'
     const { getClaudeConfigHomeDir, resolveClaudeConfigHomeDir } =
       await importFreshEnvUtils()
 
-    expect(getClaudeConfigHomeDir()).toBe('/tmp/custom-openclaude')
+    expect(getClaudeConfigHomeDir()).toBe('/tmp/custom-portal')
     expect(
       resolveClaudeConfigHomeDir({
-        configDirEnv: '/tmp/custom-openclaude',
+        configDirEnv: '/tmp/custom-portal',
       }),
-    ).toBe('/tmp/custom-openclaude')
+    ).toBe('/tmp/custom-portal')
   })
 
   test('project and local settings paths use .openclaude', async () => {
@@ -75,12 +75,12 @@ describe('Portal paths', () => {
     )
   })
 
-  test('local installer uses openclaude wrapper path', async () => {
+  test('local installer uses portal wrapper path', async () => {
     delete process.env.CLAUDE_CONFIG_DIR
     const { getLocalClaudePath } = await importFreshLocalInstaller()
 
     expect(getLocalClaudePath()).toBe(
-      join(homedir(), '.openclaude', 'local', 'openclaude'),
+      join(homedir(), '.openclaude', 'local', 'portal'),
     )
   })
 
@@ -90,7 +90,7 @@ describe('Portal paths', () => {
 
     expect(
       isManagedLocalInstallationPath(
-        `${join(homedir(), '.openclaude', 'local')}/node_modules/.bin/openclaude`,
+        `${join(homedir(), '.openclaude', 'local')}/node_modules/.bin/portal`,
       ),
     ).toBe(true)
   })
@@ -101,12 +101,12 @@ describe('Portal paths', () => {
 
     expect(
       isManagedLocalInstallationPath(
-        `${join(homedir(), '.claude', 'local')}/node_modules/.bin/openclaude`,
+        `${join(homedir(), '.claude', 'local')}/node_modules/.bin/portal`,
       ),
     ).toBe(true)
   })
 
-  test('candidate local install dirs include both openclaude and legacy claude paths', async () => {
+  test('candidate local install dirs include both portal and legacy claude paths', async () => {
     const { getCandidateLocalInstallDirs } = await importFreshLocalInstaller()
 
     expect(

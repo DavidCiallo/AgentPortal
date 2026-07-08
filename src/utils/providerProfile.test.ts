@@ -146,7 +146,7 @@ test('ollama profiles never persist openai api keys', () => {
 })
 
 test('saveProfileFile writes a profile that loadProfileFile can read back', () => {
-  const cwd = mkdtempSync(join(tmpdir(), 'openclaude-profile-file-'))
+  const cwd = mkdtempSync(join(tmpdir(), 'portal-profile-file-'))
 
   try {
     const persisted = createProfileFile('openai', {

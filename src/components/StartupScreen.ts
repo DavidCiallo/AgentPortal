@@ -2,7 +2,7 @@
  * Portal startup screen — filled-block text logo with sunset gradient.
  * Called once at CLI startup before the Ink UI renders.
  *
- * Addresses: https://github.com/Gitlawb/openclaude/issues/55
+ * Addresses: https://github.com/Gitlawb/portal/issues/55
  */
 
 import { isLocalProviderUrl } from '../services/api/providerConfig.js'

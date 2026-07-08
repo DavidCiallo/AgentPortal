@@ -5,7 +5,7 @@ A practical VS Code companion for Portal with a project-aware **Control Center**
 ## Features
 
 - **Real Control Center status** in the Activity Bar:
-  - whether the configured `openclaude` command is installed
+  - whether the configured `portal` command is installed
   - the launch command being used
   - whether the launch shim injects `CLAUDE_CODE_USE_OPENAI=1`
   - the current workspace folder
@@ -28,7 +28,7 @@ A practical VS Code companion for Portal with a project-aware **Control Center**
 ## Requirements
 
 - VS Code `1.95+`
-- `openclaude` available in your terminal PATH (`npm install -g @gitlawb/openclaude`)
+- `portal` available in your terminal PATH (`npm install -g @gitlawb/portal`)
 
 ## Commands
 
@@ -41,11 +41,11 @@ A practical VS Code companion for Portal with a project-aware **Control Center**
 
 ## Settings
 
-- `openclaude.launchCommand` (default: `openclaude`)
-- `openclaude.terminalName` (default: `Portal`)
-- `openclaude.useOpenAIShim` (default: `false`)
+- `portal.launchCommand` (default: `portal`)
+- `portal.terminalName` (default: `Portal`)
+- `portal.useOpenAIShim` (default: `false`)
 
-`openclaude.useOpenAIShim` only injects `CLAUDE_CODE_USE_OPENAI=1` into terminals launched by the extension. It does not guess or configure a provider by itself.
+`portal.useOpenAIShim` only injects `CLAUDE_CODE_USE_OPENAI=1` into terminals launched by the extension. It does not guess or configure a provider by itself.
 
 ## Notes on Status Detection
 

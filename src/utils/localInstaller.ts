@@ -38,7 +38,7 @@ export function getCandidateLocalInstallDirs(options?: {
 
 function getCandidateLocalBinaryPaths(localInstallDir: string): string[] {
   return [
-    join(localInstallDir, 'node_modules', '.bin', 'openclaude'),
+    join(localInstallDir, 'node_modules', '.bin', 'portal'),
     join(localInstallDir, 'node_modules', '.bin', 'claude'),
   ]
 }
@@ -51,7 +51,7 @@ export function isManagedLocalInstallationPath(execPath: string): boolean {
 }
 
 export function getLocalClaudePath(): string {
-  return join(getLocalInstallDir(), 'openclaude')
+  return join(getLocalInstallDir(), 'portal')
 }
 
 /**
@@ -94,7 +94,7 @@ export async function ensureLocalPackageEnvironment(): Promise<boolean> {
     await writeIfMissing(
       join(localInstallDir, 'package.json'),
       jsonStringify(
-        { name: 'openclaude-local', version: '0.0.1', private: true },
+        { name: 'portal-local', version: '0.0.1', private: true },
         null,
         2,
       ),
@@ -104,7 +104,7 @@ export async function ensureLocalPackageEnvironment(): Promise<boolean> {
     const wrapperPath = getLocalClaudePath()
     const created = await writeIfMissing(
       wrapperPath,
-      `#!/bin/sh\nexec "${localInstallDir}/node_modules/.bin/openclaude" "$@"`,
+      `#!/bin/sh\nexec "${localInstallDir}/node_modules/.bin/portal" "$@"`,
       0o755,
     )
     if (created) {

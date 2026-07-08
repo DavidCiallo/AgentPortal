@@ -191,7 +191,7 @@ test('buildProfileSaveMessage maps provider fields without echoing secrets', () 
       OPENAI_MODEL: 'gpt-4o',
       OPENAI_BASE_URL: 'https://api.openai.com/v1',
     },
-    'D:/codings/Opensource/openclaude/.openclaude-profile.json',
+    'D:/codings/Opensource/portal/.openclaude-profile.json',
   )
 
   expect(message).toContain('Saved OpenAI-compatible profile.')
@@ -208,7 +208,7 @@ test('buildProfileSaveMessage labels local openai-compatible profiles consistent
       OPENAI_MODEL: 'gpt-5.4',
       OPENAI_BASE_URL: 'http://127.0.0.1:8080/v1',
     },
-    'D:/codings/Opensource/openclaude/.openclaude-profile.json',
+    'D:/codings/Opensource/portal/.openclaude-profile.json',
   )
 
   expect(message).toContain('Saved Local OpenAI-compatible profile.')

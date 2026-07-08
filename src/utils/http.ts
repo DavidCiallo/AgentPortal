@@ -54,7 +54,7 @@ export function getMCPUserAgent(): string {
 // operators match in robots.txt); the claude-code suffix lets them distinguish
 // local CLI traffic from claude.ai server-side fetches.
 export function getWebFetchUserAgent(): string {
-  return `Claude-User (${getClaudeCodeUserAgent()}; +https://github.com/Gitlawb/openclaude)`
+  return `Claude-User (${getClaudeCodeUserAgent()}; +https://github.com/Gitlawb/portal)`
 }
 
 export type AuthHeaders = {

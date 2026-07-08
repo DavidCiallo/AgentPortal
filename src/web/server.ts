@@ -383,7 +383,7 @@ export class WebServer {
     const parts = sanitized.split('-').filter(p => p.length > 0)
     // Check if first part is a Windows drive letter (e.g., "C")
     if (parts.length >= 2 && parts[0].length === 1 && /^[A-Z]$/.test(parts[0])) {
-      // Windows path: C--items-openclaude -> C:/items/openclaude
+      // Windows path: C--items-portal -> C:/items/portal
       return parts[0] + ':/' + parts.slice(1).join('/')
     }
     // Unix path: Users-foo-my-project -> /Users/foo/my-project
