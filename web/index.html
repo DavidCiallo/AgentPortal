@@ -29,10 +29,6 @@
       <div style="display: flex; align-items: center; gap: 8px;">
         <button class="theme-btn" id="themeToggle" onclick="toggleTheme()" title="Toggle theme"></button>
         <button class="settings-btn" onclick="openSettings()">Settings</button>
-        <div class="status">
-          <span class="status-dot" id="statusDot"></span>
-          <span id="statusText">Connecting...</span>
-        </div>
       </div>
     </div>
 
@@ -142,6 +138,14 @@
         <input type="checkbox" id="autoApproveToggle" onchange="toggleAutoApprove(this.checked)">
         <span>Auto Approve</span>
       </label>
+      <label class="auto-approve-toggle show-tools-toggle" title="Show tool calls by default">
+        <input type="checkbox" id="showToolsToggle" onchange="toggleShowTools(this.checked)">
+        <span>Show Tools</span>
+      </label>
+      <div class="agent-status" id="agentStatus">
+        <span class="agent-status-dot"></span>
+        <span class="agent-status-text" id="agentStatusText">Connecting...</span>
+      </div>
     </div>
 
     <div class="input-area">

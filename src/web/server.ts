@@ -191,7 +191,9 @@ export class WebServer {
     if (url.pathname === '/api/session-messages') {
       const project = url.searchParams.get('project') || ''
       const session = url.searchParams.get('session') || ''
-      return this.handleGetSessionMessages(res, project, session)
+      const offset = parseInt(url.searchParams.get('offset') || '0', 10)
+      const limit = parseInt(url.searchParams.get('limit') || '40', 10)
+      return this.handleGetSessionMessages(res, project, session, offset, limit)
     }
     if (url.pathname === '/api/browse-directory') {
       const dirPath = url.searchParams.get('path') || ''
@@ -388,7 +390,7 @@ export class WebServer {
     return '/' + parts.join('/')
   }
 
-  private async handleGetSessionMessages(res: any, project: string, session: string) {
+  private async handleGetSessionMessages(res: any, project: string, session: string, offset: number = 0, limit: number = 40) {
     try {
       if (!project || !session) {
         res.writeHead(400, { 'Content-Type': 'application/json' })
@@ -479,11 +481,15 @@ export class WebServer {
         }
       }
 
-      // Limit display messages to last 40 for consistency with API context
-      const DISPLAY_LIMIT = 40
-      const limited = messages.slice(-DISPLAY_LIMIT)
+      // Pagination: offset is how many messages from the end to skip
+      const total = messages.length
+      const start = Math.max(0, total - offset - limit)
+      const end = total - offset
+      const sliced = messages.slice(start, end)
+      const hasMore = start > 0
+
       res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ messages: limited }))
+      res.end(JSON.stringify({ messages: sliced, total, hasMore }))
     } catch (err: any) {
       res.writeHead(500, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ error: err.message }))
