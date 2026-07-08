@@ -1,9 +1,9 @@
 // biome-ignore-all assist/source/organizeImports: internal-only import markers must not be reordered
-import { CONTEXT_1M_BETA_HEADER } from '../constants/betas.js'
 import { getGlobalConfig } from './config.js'
 import { isEnvTruthy } from './envUtils.js'
 import { getCanonicalName } from './model/model.js'
 import { getModelCapability } from './model/modelCapabilities.js'
+import { resolveAntModel } from './model/antModels.js'
 import { getOpenAIContextWindow, getOpenAIMaxOutputTokens } from './model/openaiContextWindows.js'
 
 // Model context window size (200k tokens for all models right now)
@@ -81,47 +81,15 @@ export function getContextWindowForModel(
   // Unknown models get a conservative 128k default. This was previously 8k,
   // but that caused auto-compact to fire on every turn because the effective
   // context (8k minus output reservation) became negative (issue #635).
-  const isOpenAIProvider =
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_OPENAI) ||
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_GEMINI) ||
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_GITHUB) ||
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_MISTRAL)
-  if (isOpenAIProvider) {
-    const openaiWindow = getOpenAIContextWindow(model)
-    if (openaiWindow !== undefined) {
-      return openaiWindow
-    }
-    console.error(
-      `[context] Warning: model "${model}" not in context window table — using conservative 128k default. ` +
-      'Add it to src/utils/model/openaiContextWindows.ts for accurate compaction.',
-    )
-    return OPENAI_FALLBACK_CONTEXT_WINDOW
+  const openaiWindow = getOpenAIContextWindow()
+  if (openaiWindow !== undefined) {
+    return openaiWindow
   }
-
-  const cap = getModelCapability(model)
-  if (cap?.max_input_tokens && cap.max_input_tokens >= 100_000) {
-    if (
-      cap.max_input_tokens > MODEL_CONTEXT_WINDOW_DEFAULT &&
-      is1mContextDisabled()
-    ) {
-      return MODEL_CONTEXT_WINDOW_DEFAULT
-    }
-    return cap.max_input_tokens
-  }
-
-  if (betas?.includes(CONTEXT_1M_BETA_HEADER) && modelSupports1M(model)) {
-    return 1_000_000
-  }
-  if (getSonnet1mExpTreatmentEnabled(model)) {
-    return 1_000_000
-  }
-  if (process.env.USER_TYPE === 'ant') {
-    const antModel = resolveAntModel(model)
-    if (antModel?.contextWindow) {
-      return antModel.contextWindow
-    }
-  }
-  return MODEL_CONTEXT_WINDOW_DEFAULT
+  console.error(
+    `[context] Warning: model "${model}" not in context window table — using conservative 128k default. ` +
+    'Add it to src/utils/model/openaiContextWindows.ts for accurate compaction.',
+  )
+  return OPENAI_FALLBACK_CONTEXT_WINDOW
 }
 
 export function getSonnet1mExpTreatmentEnabled(model: string): boolean {
@@ -189,17 +157,12 @@ export function getModelMaxOutputTokens(model: string): {
     }
   }
 
-  // OpenAI-compatible provider — use known output limits to avoid 400 errors
-  if (
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_OPENAI) ||
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_GEMINI) ||
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_GITHUB) ||
-    isEnvTruthy(process.env.CLAUDE_CODE_USE_MISTRAL)
-  ) {
-    const openaiMax = getOpenAIMaxOutputTokens(model)
-    if (openaiMax !== undefined) {
-      return { default: openaiMax, upperLimit: openaiMax }
-    }
+  // OpenAI-compatible provider — use known output limits to avoid 400 errors.
+  // upperLimit is set higher than default so that CLAUDE_CODE_MAX_OUTPUT_TOKENS
+  // can increase the limit when the model supports it (e.g. gpt-5.4: 128k).
+  const openaiMax = getOpenAIMaxOutputTokens()
+  if (openaiMax !== undefined) {
+    return { default: openaiMax, upperLimit: Math.max(openaiMax, 128_000) }
   }
 
   const m = getCanonicalName(model)
@@ -236,8 +199,11 @@ export function getModelMaxOutputTokens(model: string): {
     defaultTokens = 32_000
     upperLimit = 64_000
   } else {
-    defaultTokens = MAX_OUTPUT_TOKENS_DEFAULT
-    upperLimit = MAX_OUTPUT_TOKENS_UPPER_LIMIT
+    // Not a known Claude model — use generous defaults for unknown 3P models.
+    // 32k default was causing spurious max_tokens errors on models that support
+    // much larger outputs (deepseek, local models, etc.).
+    defaultTokens = 64_000
+    upperLimit = 128_000
   }
 
   const cap = getModelCapability(model)
