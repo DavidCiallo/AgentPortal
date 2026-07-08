@@ -5,18 +5,18 @@ const { mock } = require('bun:test');
 function createStatus(overrides = {}) {
   return {
     installed: true,
-    executable: 'openclaude',
-    launchCommand: 'openclaude --project-aware',
+    executable: 'portal',
+    launchCommand: 'portal --project-aware',
     terminalName: 'Portal',
     shimEnabled: false,
-    workspaceFolder: '/workspace/openclaude/very/long/path/example-project',
+    workspaceFolder: '/workspace/portal/very/long/path/example-project',
     workspaceSourceLabel: 'active editor workspace',
-    launchCwd: '/workspace/openclaude/very/long/path/example-project',
-    launchCwdLabel: '/workspace/openclaude/very/long/path/example-project',
+    launchCwd: '/workspace/portal/very/long/path/example-project',
+    launchCwdLabel: '/workspace/portal/very/long/path/example-project',
     canLaunchInWorkspaceRoot: true,
     profileStatusLabel: 'Found',
-    profileStatusHint: '/workspace/openclaude/very/long/path/example-project/.openclaude-profile.json',
-    workspaceProfilePath: '/workspace/openclaude/very/long/path/example-project/.openclaude-profile.json',
+    profileStatusHint: '/workspace/portal/very/long/path/example-project/.openclaude-profile.json',
+    workspaceProfilePath: '/workspace/portal/very/long/path/example-project/.openclaude-profile.json',
     providerState: {
       label: 'Codex',
       detail: 'gpt-5.4',
@@ -116,13 +116,13 @@ test('resolveLaunchTargets distinguishes project-aware launch from workspace-roo
 
   assert.deepEqual(
     resolveLaunchTargets({
-      activeFilePath: '/workspace/openclaude/src/panels/control-center.js',
+      activeFilePath: '/workspace/portal/src/panels/control-center.js',
       workspacePath: '/workspace/openclaude',
       workspaceSourceLabel: 'active editor workspace',
     }),
     {
-      projectAwareCwd: '/workspace/openclaude/src/panels',
-      projectAwareCwdLabel: '/workspace/openclaude/src/panels',
+      projectAwareCwd: '/workspace/portal/src/panels',
+      projectAwareCwdLabel: '/workspace/portal/src/panels',
       projectAwareSourceLabel: 'active file directory',
       workspaceRootCwd: '/workspace/openclaude',
       workspaceRootCwdLabel: '/workspace/openclaude',
@@ -138,7 +138,7 @@ test('resolveLaunchTargets anchors relative launch commands to the workspace roo
   assert.deepEqual(
     resolveLaunchTargets({
       executable: './node_modules/.bin/openclaude',
-      activeFilePath: '/workspace/openclaude/src/panels/control-center.js',
+      activeFilePath: '/workspace/portal/src/panels/control-center.js',
       workspacePath: '/workspace/openclaude',
       workspaceSourceLabel: 'active editor workspace',
     }),
@@ -159,7 +159,7 @@ test('resolveLaunchTargets ignores active files outside the selected workspace',
 
   assert.deepEqual(
     resolveLaunchTargets({
-      executable: 'openclaude',
+      executable: 'portal',
       activeFilePath: '/tmp/notes/scratch.js',
       workspacePath: '/workspace/openclaude',
       workspaceSourceLabel: 'first workspace folder',
@@ -192,8 +192,8 @@ test('renderControlCenterHtml explains distinct launch targets when an active fi
   const { renderControlCenterHtml } = loadExtension();
   const html = renderControlCenterHtml(
     createStatus({
-      launchCwd: '/workspace/openclaude/src/panels',
-      launchCwdLabel: '/workspace/openclaude/src/panels',
+      launchCwd: '/workspace/portal/src/panels',
+      launchCwdLabel: '/workspace/portal/src/panels',
       launchCwdSourceLabel: 'active file directory',
       workspaceRootCwd: '/workspace/openclaude',
       workspaceRootCwdLabel: '/workspace/openclaude',
@@ -202,7 +202,7 @@ test('renderControlCenterHtml explains distinct launch targets when an active fi
   );
 
   assert.match(html, /Starts beside the active file · \/workspace\/openclaude\/src\/panels/);
-  assert.match(html, /Always starts at the workspace root · \/workspace\/openclaude/);
+  assert.match(html, /Always starts at the workspace root · \/workspace\/portal/);
 });
 
 test('renderControlCenterHtml makes shared workspace-root launches explicit for relative commands', () => {
@@ -220,8 +220,8 @@ test('renderControlCenterHtml makes shared workspace-root launches explicit for 
     { nonce: 'test-nonce', platform: 'linux' },
   );
 
-  assert.match(html, /Project-aware launch is anchored to the workspace root by the relative command · \/workspace\/openclaude/);
-  assert.match(html, /Same workspace-root target as Launch Portal because the relative command resolves from the workspace root · \/workspace\/openclaude/);
+  assert.match(html, /Project-aware launch is anchored to the workspace root by the relative command · \/workspace\/portal/);
+  assert.match(html, /Same workspace-root target as Launch Portal because the relative command resolves from the workspace root · \/workspace\/portal/);
 });
 
 test('renderControlCenterHtml escapes hostile text and title values', () => {

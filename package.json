@@ -1,10 +1,10 @@
 {
-  "name": "@gitlawb/openclaude",
+  "name": "@gitlawb/portal",
   "version": "0.2.3",
   "description": "Portal — an open-source coding agent CLI for any LLM — OpenAI, Gemini, DeepSeek, Ollama, and 200+ models",
   "type": "module",
   "bin": {
-    "openclaude": "./bin/openclaude"
+    "portal": "./bin/openclaude"
   },
   "files": [
     "bin/",
@@ -137,7 +137,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/Gitlawb/openclaude.git"
+    "url": "https://github.com/DavidCiallo/portal.git"
   },
   "keywords": [
     "portal",

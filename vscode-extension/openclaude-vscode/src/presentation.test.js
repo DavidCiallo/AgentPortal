@@ -9,7 +9,7 @@ test('truncateMiddle keeps the profile filename visible', () => {
   const { truncateMiddle } = loadPresentation();
 
   assert.equal(
-    truncateMiddle('/Users/example/projects/openclaude/workspace/.openclaude-profile.json', 30),
+    truncateMiddle('/Users/example/projects/portal/workspace/.openclaude-profile.json', 30),
     '.../.openclaude-profile.json',
   );
 });
@@ -78,18 +78,18 @@ test('buildActionModel includes workspace-profile action when a profile exists',
 function createStatus(overrides = {}) {
   return {
     installed: true,
-    executable: 'openclaude',
-    launchCommand: 'openclaude --project-aware',
+    executable: 'portal',
+    launchCommand: 'portal --project-aware',
     terminalName: 'Portal',
     shimEnabled: false,
-    workspaceFolder: '/workspace/openclaude',
+    workspaceFolder: '/workspace/portal',
     workspaceSourceLabel: 'active editor workspace',
-    launchCwd: '/workspace/openclaude',
-    launchCwdLabel: '/workspace/openclaude',
+    launchCwd: '/workspace/portal',
+    launchCwdLabel: '/workspace/portal',
     canLaunchInWorkspaceRoot: true,
     profileStatusLabel: 'Found',
-    profileStatusHint: '/workspace/openclaude/.openclaude-profile.json',
-    workspaceProfilePath: '/workspace/openclaude/.openclaude-profile.json',
+    profileStatusHint: '/workspace/portal/.openclaude-profile.json',
+    workspaceProfilePath: '/workspace/portal/.openclaude-profile.json',
     providerState: {
       label: 'Codex',
       detail: 'gpt-5.4',
@@ -166,14 +166,14 @@ test('buildControlCenterViewModel uses a concise project summary before full pat
         {
           key: 'workspace',
           label: 'Workspace folder',
-          summary: 'openclaude',
+          summary: 'portal',
           detail: '/workspace/openclaude · active editor workspace',
         },
         {
           key: 'profileStatus',
           label: 'Workspace profile',
           summary: 'Found',
-          detail: '/workspace/openclaude/.openclaude-profile.json',
+          detail: '/workspace/portal/.openclaude-profile.json',
           tone: 'neutral',
         },
       ],
@@ -185,7 +185,7 @@ test('buildControlCenterViewModel uses a concise project summary before full pat
           key: 'runtime',
           label: 'Portal executable',
           summary: 'Installed',
-          detail: 'openclaude',
+          detail: 'portal',
           tone: 'positive',
         },
         {
@@ -208,7 +208,7 @@ test('buildControlCenterViewModel keeps launch command only in summary cards', (
   assert.deepEqual(viewModel.summaryCards.find(card => card.key === 'launchCommand'), {
     key: 'launchCommand',
     label: 'Launch command',
-    value: 'openclaude --project-aware',
+    value: 'portal --project-aware',
     detail: 'Integrated terminal: Portal',
   });
 

@@ -13,8 +13,8 @@ const {
 } = require('./state');
 const { buildControlCenterViewModel } = require('./presentation');
 
-const OPENCLAUDE_REPO_URL = 'https://github.com/Gitlawb/openclaude';
-const OPENCLAUDE_SETUP_URL = 'https://github.com/Gitlawb/openclaude/blob/main/README.md#quick-start';
+const PORTAL_REPO_URL = 'https://github.com/DavidCiallo/portal';
+const PORTAL_SETUP_URL = 'https://github.com/DavidCiallo/portal/blob/main/README.md#quick-start';
 const PROFILE_FILE_NAME = '.openclaude-profile.json';
 
 function escapeHtml(value) {
@@ -201,8 +201,8 @@ function readWorkspaceProfile(profilePath) {
 }
 
 async function collectControlCenterState() {
-  const configured = vscode.workspace.getConfiguration('openclaude');
-  const launchCommand = configured.get('launchCommand', 'openclaude');
+  const configured = vscode.workspace.getConfiguration('portal');
+  const launchCommand = configured.get('launchCommand', 'portal');
   const terminalName = configured.get('terminalName', 'Portal');
   const shimEnabled = configured.get('useOpenAIShim', false);
   const executable = getExecutableFromCommand(launchCommand);
@@ -261,8 +261,8 @@ async function collectControlCenterState() {
 
 async function launchPortal(options = {}) {
   const { requireWorkspace = false } = options;
-  const configured = vscode.workspace.getConfiguration('openclaude');
-  const launchCommand = configured.get('launchCommand', 'openclaude');
+  const configured = vscode.workspace.getConfiguration('portal');
+  const launchCommand = configured.get('launchCommand', 'portal');
   const terminalName = configured.get('terminalName', 'Portal');
   const shimEnabled = configured.get('useOpenAIShim', false);
   const executable = getExecutableFromCommand(launchCommand);
@@ -288,15 +288,15 @@ async function launchPortal(options = {}) {
 
   if (!installed) {
     const action = await vscode.window.showErrorMessage(
-      `Portal command not found: ${executable}. Install it with: npm install -g @gitlawb/openclaude`,
+      `Portal command not found: ${executable}. Install it with: npm install -g @gitlawb/portal`,
       'Open Setup Guide',
       'Open Repository',
     );
 
     if (action === 'Open Setup Guide') {
-      await vscode.env.openExternal(vscode.Uri.parse(OPENCLAUDE_SETUP_URL));
+      await vscode.env.openExternal(vscode.Uri.parse(PORTAL_SETUP_URL));
     } else if (action === 'Open Repository') {
-      await vscode.env.openExternal(vscode.Uri.parse(OPENCLAUDE_REPO_URL));
+      await vscode.env.openExternal(vscode.Uri.parse(PORTAL_REPO_URL));
     }
 
     return;
@@ -939,10 +939,10 @@ class PortalControlCenterProvider {
           await openWorkspaceProfile();
           break;
         case 'repo':
-          await vscode.env.openExternal(vscode.Uri.parse(OPENCLAUDE_REPO_URL));
+          await vscode.env.openExternal(vscode.Uri.parse(PORTAL_REPO_URL));
           break;
         case 'setup':
-          await vscode.env.openExternal(vscode.Uri.parse(OPENCLAUDE_SETUP_URL));
+          await vscode.env.openExternal(vscode.Uri.parse(PORTAL_SETUP_URL));
           break;
         case 'commands':
           await vscode.commands.executeCommand('workbench.action.showCommands');
@@ -1046,41 +1046,41 @@ function activate(context) {
     void provider.refresh();
   };
 
-  const startCommand = vscode.commands.registerCommand('openclaude.start', async () => {
+  const startCommand = vscode.commands.registerCommand('portal.start', async () => {
     await launchPortal();
   });
 
   const startInWorkspaceRootCommand = vscode.commands.registerCommand(
-    'openclaude.startInWorkspaceRoot',
+    'portal.startInWorkspaceRoot',
     async () => {
       await launchPortal({ requireWorkspace: true });
     },
   );
 
-  const openDocsCommand = vscode.commands.registerCommand('openclaude.openDocs', async () => {
-    await vscode.env.openExternal(vscode.Uri.parse(OPENCLAUDE_REPO_URL));
+  const openDocsCommand = vscode.commands.registerCommand('portal.openDocs', async () => {
+    await vscode.env.openExternal(vscode.Uri.parse(PORTAL_REPO_URL));
   });
 
   const openSetupDocsCommand = vscode.commands.registerCommand(
-    'openclaude.openSetupDocs',
+    'portal.openSetupDocs',
     async () => {
-      await vscode.env.openExternal(vscode.Uri.parse(OPENCLAUDE_SETUP_URL));
+      await vscode.env.openExternal(vscode.Uri.parse(PORTAL_SETUP_URL));
     },
   );
 
   const openWorkspaceProfileCommand = vscode.commands.registerCommand(
-    'openclaude.openWorkspaceProfile',
+    'portal.openWorkspaceProfile',
     async () => {
       await openWorkspaceProfile();
     },
   );
 
-  const openUiCommand = vscode.commands.registerCommand('openclaude.openControlCenter', async () => {
-    await vscode.commands.executeCommand('workbench.view.extension.openclaude');
+  const openUiCommand = vscode.commands.registerCommand('portal.openControlCenter', async () => {
+    await vscode.commands.executeCommand('workbench.view.extension.portal');
   });
 
   const providerDisposable = vscode.window.registerWebviewViewProvider(
-    'openclaude.controlCenter',
+    'portal.controlCenter',
     provider,
   );
 
@@ -1096,7 +1096,7 @@ function activate(context) {
     providerDisposable,
     profileWatcher,
     vscode.workspace.onDidChangeConfiguration(event => {
-      if (event.affectsConfiguration('openclaude')) {
+      if (event.affectsConfiguration('portal')) {
         refreshProvider();
       }
     }),

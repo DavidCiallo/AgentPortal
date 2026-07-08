@@ -1,5 +1,5 @@
 {
-  "name": "openclaude-vscode",
+  "name": "portal-vscode",
   "displayName": "Portal",
   "description": "Practical VS Code companion for Portal with project-aware launch behavior and a real Control Center.",
   "version": "0.1.1",
@@ -13,13 +13,13 @@
   ],
   "activationEvents": [
     "onStartupFinished",
-    "onCommand:openclaude.start",
-    "onCommand:openclaude.startInWorkspaceRoot",
-    "onCommand:openclaude.openDocs",
-    "onCommand:openclaude.openSetupDocs",
-    "onCommand:openclaude.openWorkspaceProfile",
-    "onCommand:openclaude.openControlCenter",
-    "onView:openclaude.controlCenter"
+    "onCommand:portal.start",
+    "onCommand:portal.startInWorkspaceRoot",
+    "onCommand:portal.openDocs",
+    "onCommand:portal.openSetupDocs",
+    "onCommand:portal.openWorkspaceProfile",
+    "onCommand:portal.openControlCenter",
+    "onView:portal.controlCenter"
   ],
   "main": "./src/extension.js",
   "files": [
@@ -33,32 +33,32 @@
   "contributes": {
     "commands": [
       {
-        "command": "openclaude.start",
+        "command": "portal.start",
         "title": "Portal: Launch in Terminal",
         "category": "Portal"
       },
       {
-        "command": "openclaude.startInWorkspaceRoot",
+        "command": "portal.startInWorkspaceRoot",
         "title": "Portal: Launch in Workspace Root",
         "category": "Portal"
       },
       {
-        "command": "openclaude.openDocs",
+        "command": "portal.openDocs",
         "title": "Portal: Open Repository",
         "category": "Portal"
       },
       {
-        "command": "openclaude.openSetupDocs",
+        "command": "portal.openSetupDocs",
         "title": "Portal: Open Setup Guide",
         "category": "Portal"
       },
       {
-        "command": "openclaude.openWorkspaceProfile",
+        "command": "portal.openWorkspaceProfile",
         "title": "Portal: Open Workspace Profile",
         "category": "Portal"
       },
       {
-        "command": "openclaude.openControlCenter",
+        "command": "portal.openControlCenter",
         "title": "Portal: Open Control Center",
         "category": "Portal"
       }
@@ -66,16 +66,16 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "openclaude",
+          "id": "portal",
           "title": "Portal",
-          "icon": "media/openclaude.svg"
+          "icon": "media/portal.svg"
         }
       ]
     },
     "views": {
-      "openclaude": [
+      "portal": [
         {
-          "id": "openclaude.controlCenter",
+          "id": "portal.controlCenter",
           "name": "Control Center",
           "type": "webview"
         }
@@ -84,17 +84,17 @@
     "configuration": {
       "title": "Portal",
       "properties": {
-        "openclaude.launchCommand": {
+        "portal.launchCommand": {
           "type": "string",
-          "default": "openclaude",
+          "default": "portal",
           "description": "Command run in the integrated terminal when launching Portal."
         },
-        "openclaude.terminalName": {
+        "portal.terminalName": {
           "type": "string",
           "default": "Portal",
           "description": "Integrated terminal tab name for Portal sessions."
         },
-        "openclaude.useOpenAIShim": {
+        "portal.useOpenAIShim": {
           "type": "boolean",
           "default": false,
           "description": "Optionally set CLAUDE_CODE_USE_OPENAI=1 in launched Portal terminals."
@@ -105,7 +105,7 @@
       {
         "label": "Portal Terminal Black",
         "uiTheme": "vs-dark",
-        "path": "./themes/OpenClaude-Terminal-Black.json"
+        "path": "./themes/Portal-Terminal-Black.json"
       }
     ]
   },
@@ -123,7 +123,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/Gitlawb/openclaude"
+    "url": "https://github.com/DavidCiallo/portal"
   },
   "license": "MIT"
 }
