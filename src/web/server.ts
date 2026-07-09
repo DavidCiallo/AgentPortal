@@ -33,6 +33,7 @@ import {
   extractLastJsonStringField,
   extractJsonStringField,
 } from '../utils/sessionStoragePortable.js'
+import { listOpenAICompatibleModels } from '../utils/providerDiscovery.js'
 
 /**
  * Format tool use input into human-readable display text (matching CLI output style)
@@ -207,6 +208,10 @@ export class WebServer {
         return this.handleCreateDirectory(res, dirPath)
       })
       return
+    }
+    if (url.pathname === '/api/models') {
+      const baseUrl = url.searchParams.get('baseUrl') || undefined
+      return this.handleListModels(res, baseUrl)
     }
 
     // Static files
@@ -621,6 +626,22 @@ export class WebServer {
       }
       res.writeHead(500, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ error: err.message }))
+    }
+  }
+
+  private async handleListModels(res: any, baseUrlOverride?: string) {
+    try {
+      const profile = loadProfileFile({ cwd: process.cwd() })
+      const baseUrl = baseUrlOverride || profile?.env?.OPENAI_BASE_URL || process.env.OPENAI_BASE_URL
+      const apiKey = profile?.env?.OPENAI_API_KEY || process.env.OPENAI_API_KEY
+
+      const models = await listOpenAICompatibleModels({ baseUrl, apiKey })
+
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ models: models ?? [] }))
+    } catch (err: any) {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: err.message, models: [] }))
     }
   }
 

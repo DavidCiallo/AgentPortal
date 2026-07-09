@@ -578,22 +578,85 @@ function closeSettings() {
 function loadConfig(config) {
   document.getElementById('providerSelect').value = 'openai'
   document.getElementById('baseUrlInput').value = config.baseUrl || ''
-  const modelSelect = document.getElementById('modelSelect')
-  if (config.model && [...modelSelect.options].some(o => o.value === config.model)) {
-    modelSelect.value = config.model
-  } else if (config.model) {
-    // Add a custom option if the saved model isn't in the list
-    const opt = document.createElement('option')
-    opt.value = config.model
-    opt.textContent = config.model
-    modelSelect.appendChild(opt)
-    modelSelect.value = config.model
-  } else {
-    modelSelect.value = 'gpt-4o'
-  }
   document.getElementById('apiKeyInput').value = config.hasApiKey ? '••••••••' : ''
   document.getElementById('apiKeyInput').placeholder = config.hasApiKey ? '••••••••' : 'sk-...'
   currentModel = config.model || ''
+
+  // Fetch available models from the API and populate the dropdown
+  fetchModelsAndPopulateSelect(config.model)
+}
+
+async function refreshModels() {
+  const baseUrl = document.getElementById('baseUrlInput').value
+  if (baseUrl) {
+    // Override env config to use the URL the user typed
+    await fetchModelsAndPopulateSelect(document.getElementById('modelSelect').value, baseUrl)
+  } else {
+    await fetchModelsAndPopulateSelect(document.getElementById('modelSelect').value)
+  }
+}
+
+async function fetchModelsAndPopulateSelect(currentModelValue, baseUrlOverride) {
+  const modelSelect = document.getElementById('modelSelect')
+  // Show loading state
+  modelSelect.innerHTML = '<option value="">Loading models...</option>'
+  modelSelect.disabled = true
+
+  try {
+    let url = '/api/models'
+    if (baseUrlOverride) {
+      url += '?' + new URLSearchParams({ baseUrl: baseUrlOverride })
+    }
+    const response = await fetch(url)
+    const data = await response.json()
+
+    modelSelect.innerHTML = ''
+
+    if (data.models && data.models.length > 0) {
+      // Sort models alphabetically
+      const sorted = [...data.models].sort()
+      for (const modelId of sorted) {
+        const opt = document.createElement('option')
+        opt.value = modelId
+        opt.textContent = modelId
+        modelSelect.appendChild(opt)
+      }
+    } else {
+      // Fallback: no models returned
+      const opt = document.createElement('option')
+      opt.value = ''
+      opt.textContent = 'No models available'
+      modelSelect.appendChild(opt)
+    }
+
+    // Select current model if it exists in the list
+    if (currentModelValue && [...modelSelect.options].some(o => o.value === currentModelValue)) {
+      modelSelect.value = currentModelValue
+    } else if (currentModelValue) {
+      // Add as custom option if not in list
+      const opt = document.createElement('option')
+      opt.value = currentModelValue
+      opt.textContent = currentModelValue
+      modelSelect.appendChild(opt)
+      modelSelect.value = currentModelValue
+    }
+  } catch (err) {
+    console.error('Failed to fetch models:', err)
+    // Fallback to common models on error
+    modelSelect.innerHTML = ''
+    const fallbacks = ['gpt-4o', 'gpt-4o-mini', 'deepseek-chat', 'deepseek-reasoner']
+    for (const id of fallbacks) {
+      const opt = document.createElement('option')
+      opt.value = id
+      opt.textContent = id
+      modelSelect.appendChild(opt)
+    }
+    if (currentModelValue) {
+      modelSelect.value = currentModelValue
+    }
+  } finally {
+    modelSelect.disabled = false
+  }
 }
 
 function saveSettings() {

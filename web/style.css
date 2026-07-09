@@ -1009,6 +1009,23 @@ body {
   opacity: 0.85;
 }
 
+/* Refresh button for model select */
+.btn-refresh {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 16px;
+  transition: all 0.2s;
+  line-height: 1;
+}
+.btn-refresh:hover {
+  background: var(--border);
+  color: var(--text);
+}
+
 /* New Folder inline input row */
 .dir-browser-new-folder {
   display: none;

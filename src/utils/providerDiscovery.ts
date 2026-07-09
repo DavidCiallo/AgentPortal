@@ -170,44 +170,60 @@ export async function listOllamaModels(
   }
 }
 
+function getModelListUrls(baseUrl: string): string[] {
+  const trimmed = getOpenAICompatibleModelsBaseUrl(baseUrl)
+  const primary = trimmed.endsWith('/v1')
+    ? `${trimmed}/models`
+    : `${trimmed}/v1/models`
+  const secondary = `${trimmed}/models`
+
+  if (primary === secondary) {
+    return [primary]
+  }
+
+  return [primary, secondary]
+}
+
 export async function listOpenAICompatibleModels(options?: {
   baseUrl?: string
   apiKey?: string
 }): Promise<string[] | null> {
-  const { signal, clear } = withTimeoutSignal(5000)
-  try {
-    const response = await fetch(
-      `${getOpenAICompatibleModelsBaseUrl(options?.baseUrl)}/models`,
-      {
+  const urls = getModelListUrls(options?.baseUrl)
+  const headers = options?.apiKey
+    ? { Authorization: `Bearer ${options.apiKey}` }
+    : undefined
+
+  for (const url of urls) {
+    const { signal, clear } = withTimeoutSignal(5000)
+    try {
+      const response = await fetch(url, {
         method: 'GET',
-        headers: options?.apiKey
-          ? {
-              Authorization: `Bearer ${options.apiKey}`,
-            }
-          : undefined,
+        headers,
         signal,
-      },
-    )
-    if (!response.ok) {
-      return null
-    }
+      })
+      if (!response.ok) {
+        continue
+      }
 
-    const data = (await response.json()) as {
-      data?: Array<{ id?: string }>
-    }
+      const data = (await response.json()) as {
+        data?: Array<{ id?: string }>
+      }
 
-    return Array.from(
-      new Set(
-        (data.data ?? [])
-          .filter(model => Boolean(model.id))
-          .map(model => model.id!),
-      ),
-    )
-  } catch {
-    return null
-  } finally {
-    clear()
+      return Array.from(
+        new Set(
+          (data.data ?? [])
+            .filter(model => Boolean(model.id))
+            .map(model => model.id!),
+        ),
+      )
+    } catch {
+      continue
+    } finally {
+      clear()
+    }
   }
+
+  return null
 }
 
 export async function hasLocalAtomicChat(baseUrl?: string): Promise<boolean> {
