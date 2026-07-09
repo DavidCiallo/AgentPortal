@@ -15,9 +15,7 @@ const PR_ACTIVITY_TOOL_SUFFIXES = [
 
 export function isPrActivitySubscriptionTool(name: string): boolean {
   return PR_ACTIVITY_TOOL_SUFFIXES.some(suffix => name.endsWith(suffix))
-}
-
-// Dead code elimination: conditional imports for feature-gated modules
+}
 /* eslint-disable @typescript-eslint/no-require-imports */
 const coordinatorModeModule = feature('COORDINATOR_MODE')
   ? (require('../coordinator/coordinatorMode.js') as typeof import('../coordinator/coordinatorMode.js'))

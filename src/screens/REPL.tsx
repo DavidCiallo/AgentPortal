@@ -92,8 +92,7 @@ import { useSwarmInitialization } from '../hooks/useSwarmInitialization.js';
 import { useTeammateViewAutoExit } from '../hooks/useTeammateViewAutoExit.js';
 import { errorMessage } from '../utils/errors.js';
 import { isHumanTurn } from '../utils/messagePredicates.js';
-import { logError } from '../utils/log.js';
-// Dead code elimination: conditional imports
+import { logError } from '../utils/log.js';
 /* eslint-disable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
 const useVoiceIntegration: typeof import('../hooks/useVoiceIntegration.js').useVoiceIntegration = feature('VOICE_MODE') ? require('../hooks/useVoiceIntegration.js').useVoiceIntegration : () => ({
   stripTrailing: () => 0,
@@ -110,8 +109,7 @@ const useFrustrationDetection: typeof import('../components/FeedbackSurvey/useFr
 });
 // Ant-only org warning. Conditional require so the org UUID list is
 // eliminated from external builds (one UUID is on excluded-strings).
-const useAntOrgWarningNotification: typeof import('../hooks/notifs/useAntOrgWarningNotification.js').useAntOrgWarningNotification = "external" === 'ant' ? require('../hooks/notifs/useAntOrgWarningNotification.js').useAntOrgWarningNotification : () => { };
-// Dead code elimination: conditional import for coordinator mode
+const useAntOrgWarningNotification: typeof import('../hooks/notifs/useAntOrgWarningNotification.js').useAntOrgWarningNotification = "external" === 'ant' ? require('../hooks/notifs/useAntOrgWarningNotification.js').useAntOrgWarningNotification : () => { };
 const getCoordinatorUserContext: (mcpClients: ReadonlyArray<{
   name: string;
 }>, scratchpadDir?: string) => {
@@ -187,8 +185,7 @@ import { computeStandaloneAgentContext, restoreAgentFromSession, restoreSessionS
 import { isBgSession, updateSessionName, updateSessionActivity } from '../utils/concurrentSessions.js';
 import { isInProcessTeammateTask, type InProcessTeammateTaskState } from '../tasks/InProcessTeammateTask/types.js';
 import { restoreRemoteAgentTasks } from '../tasks/RemoteAgentTask/RemoteAgentTask.js';
-import { useInboxPoller } from '../hooks/useInboxPoller.js';
-// Dead code elimination: conditional import for loop mode
+import { useInboxPoller } from '../hooks/useInboxPoller.js';
 /* eslint-disable @typescript-eslint/no-require-imports */
 const proactiveModule = feature('PROACTIVE') || feature('KAIROS') ? require('../proactive/index.js') : null;
 const PROACTIVE_NO_OP_SUBSCRIBE = (_cb: () => void) => () => { };
@@ -721,8 +718,7 @@ export function REPL({
   const [ideSelection, setIDESelection] = useState<IDESelection | undefined>(undefined);
   const [ideToInstallExtension, setIDEToInstallExtension] = useState<IdeType | null>(null);
   const [ideInstallationStatus, setIDEInstallationStatus] = useState<IDEExtensionInstallationStatus | null>(null);
-  const [showIdeOnboarding, setShowIdeOnboarding] = useState(false);
-  // Dead code elimination: model switch callout state (internal-only)
+  const [showIdeOnboarding, setShowIdeOnboarding] = useState(false);
   const [showModelSwitchCallout, setShowModelSwitchCallout] = useState(() => {
     if ("external" === 'ant') {
       return shouldShowAntModelSwitch();

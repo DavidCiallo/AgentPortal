@@ -57,55 +57,21 @@ type RemoteHostInfo = {
 }
 
 /* eslint-disable custom-rules/no-process-env-top-level */
-const getRunningRemoteHosts: () => Promise<string[]> =
-  process.env.USER_TYPE === 'ant'
-    ? async () => {
-        const { stdout, code } = await execFileNoThrow(
-          'coder',
-          ['list', '-o', 'json'],
-          { timeout: 30000 },
-        )
-        if (code !== 0) return []
-        try {
-          const workspaces = jsonParse(stdout) as Array<{
-            name: string
-            latest_build?: { status?: string }
-          }>
-          return workspaces
-            .filter(w => w.latest_build?.status === 'running')
-            .map(w => w.name)
-        } catch {
-          return []
-        }
-      }
-    : async () => []
+const getRunningRemoteHosts: () => Promise<string[]> = async () => []
 
-const getRemoteHostSessionCount: (hs: string) => Promise<number> =
-  process.env.USER_TYPE === 'ant'
-    ? async (homespace: string) => {
-        const { stdout, code } = await execFileNoThrow(
-          'ssh',
-          [
-            `${homespace}.coder`,
-            'find /root/.portal/projects -name "*.jsonl" 2>/dev/null | wc -l',
-          ],
-          { timeout: 30000 },
-        )
-        if (code !== 0) return 0
-        return parseInt(stdout.trim(), 10) || 0
-      }
-    : async () => 0
+const getRemoteHostSessionCount: (hs: string) => Promise<number> = async () => 0
 
 const collectFromRemoteHost: (
   hs: string,
   destDir: string,
-) => Promise<{ copied: number; skipped: number }> =
-  process.env.USER_TYPE === 'ant'
-    ? async (homespace: string, destDir: string) => {
-        const result = { copied: 0, skipped: 0 }
+) => Promise<{ copied: number; skipped: number }> = async (
+  homespace: string,
+  destDir: string,
+) => {
+  const result = { copied: 0, skipped: 0 }
 
-        // Create temp directory
-        const tempDir = await mkdtemp(join(tmpdir(), 'claude-hs-'))
+  // Create temp directory
+  const tempDir = await mkdtemp(join(tmpdir(), 'claude-hs-'))
 
         try {
           // SCP the projects folder
@@ -180,45 +146,13 @@ const collectFromRemoteHost: (
         }
 
         return result
-      }
-    : async () => ({ copied: 0, skipped: 0 })
+}
 
 const collectAllRemoteHostData: (destDir: string) => Promise<{
   hosts: RemoteHostInfo[]
   totalCopied: number
   totalSkipped: number
-}> =
-  process.env.USER_TYPE === 'ant'
-    ? async (destDir: string) => {
-        const rHosts = await getRunningRemoteHosts()
-        const result: RemoteHostInfo[] = []
-        let totalCopied = 0
-        let totalSkipped = 0
-
-        // Collect from all hosts in parallel (SCP per host can take seconds)
-        const hostResults = await Promise.all(
-          rHosts.map(async hs => {
-            const sessionCount = await getRemoteHostSessionCount(hs)
-            if (sessionCount > 0) {
-              const { copied, skipped } = await collectFromRemoteHost(
-                hs,
-                destDir,
-              )
-              return { name: hs, sessionCount, copied, skipped }
-            }
-            return { name: hs, sessionCount, copied: 0, skipped: 0 }
-          }),
-        )
-
-        for (const hr of hostResults) {
-          result.push({ name: hr.name, sessionCount: hr.sessionCount })
-          totalCopied += hr.copied
-          totalSkipped += hr.skipped
-        }
-
-        return { hosts: result, totalCopied, totalSkipped }
-      }
-    : async () => ({ hosts: [], totalCopied: 0, totalSkipped: 0 })
+}> = async () => ({ hosts: [], totalCopied: 0, totalSkipped: 0 })
 /* eslint-enable custom-rules/no-process-env-top-level */
 
 // ============================================================================
@@ -1447,38 +1381,6 @@ RESPOND WITH ONLY A VALID JSON OBJECT:
 Include 3 opportunities. Think BIG - autonomous workflows, parallel agents, iterating against tests.`,
     maxTokens: 8192,
   },
-  ...(process.env.USER_TYPE === 'ant'
-    ? [
-        {
-          name: 'cc_team_improvements',
-          prompt: `Analyze this Portal usage data and suggest product improvements for the CC team.
-
-RESPOND WITH ONLY A VALID JSON OBJECT:
-{
-  "improvements": [
-    {"title": "Product/tooling improvement", "detail": "3-4 sentences describing the improvement", "evidence": "3-4 sentences with specific session examples"}
-  ]
-}
-
-Include 2-3 improvements based on friction patterns observed.`,
-          maxTokens: 8192,
-        },
-        {
-          name: 'model_behavior_improvements',
-          prompt: `Analyze this Portal usage data and suggest model behavior improvements.
-
-RESPOND WITH ONLY A VALID JSON OBJECT:
-{
-  "improvements": [
-    {"title": "Model behavior change", "detail": "3-4 sentences describing what the model should do differently", "evidence": "3-4 sentences with specific examples"}
-  ]
-}
-
-Include 2-3 improvements based on friction patterns observed.`,
-          maxTokens: 8192,
-        },
-      ]
-    : []),
   {
     name: 'fun_ending',
     prompt: `Analyze this Portal usage data and find a memorable moment.
@@ -2188,14 +2090,10 @@ function generateHtmlReport(
       : ''
 
   // Build Team Feedback section (collapsible, internal-only)
-  const ccImprovements =
-    process.env.USER_TYPE === 'ant'
-      ? insights.cc_team_improvements?.improvements || []
-      : []
-  const modelImprovements =
-    process.env.USER_TYPE === 'ant'
-      ? insights.model_behavior_improvements?.improvements || []
-      : []
+  const ccImprovements: string[] = []
+
+  const modelImprovements: string[] = []
+
   const teamFeedbackHtml =
     ccImprovements.length > 0 || modelImprovements.length > 0
       ? `
@@ -2805,11 +2703,6 @@ export async function generateUsageReport(options?: {
   let remoteStats: { hosts: RemoteHostInfo[]; totalCopied: number } | undefined
 
   // Optionally collect data from remote hosts first (internal-only)
-  if (process.env.USER_TYPE === 'ant' && options?.collectRemote) {
-    const destDir = join(getClaudeConfigHomeDir(), 'projects')
-    const { hosts, totalCopied } = await collectAllRemoteHostData(destDir)
-    remoteStats = { hosts, totalCopied }
-  }
 
   // Phase 1: Lite scan — filesystem metadata only (no JSONL parsing)
   const allScannedSessions = await scanAllSessions()
@@ -3048,22 +2941,6 @@ const usageReport: Command = {
     let remoteHosts: string[] = []
     let hasRemoteHosts = false
 
-    if (process.env.USER_TYPE === 'ant') {
-      // Parse --homespaces flag
-      collectRemote = args?.includes('--homespaces') ?? false
-
-      // Check for available remote hosts
-      remoteHosts = await getRunningRemoteHosts()
-      hasRemoteHosts = remoteHosts.length > 0
-
-      // Show collection message if collecting
-      if (collectRemote && hasRemoteHosts) {
-        // biome-ignore lint/suspicious/noConsole: intentional
-        console.error(
-          `Collecting sessions from ${remoteHosts.length} homespace(s): ${remoteHosts.join(', ')}...`,
-        )
-      }
-    }
 
     const { insights, htmlPath, data, remoteStats } = await generateUsageReport(
       { collectRemote },
@@ -3087,18 +2964,6 @@ const usageReport: Command = {
 
     // Build remote host info (internal-only)
     let remoteInfo = ''
-    if (process.env.USER_TYPE === 'ant') {
-      if (remoteStats && remoteStats.totalCopied > 0) {
-        const hsNames = remoteStats.hosts
-          .filter(h => h.sessionCount > 0)
-          .map(h => h.name)
-          .join(', ')
-        remoteInfo = `\n_Collected ${remoteStats.totalCopied} new sessions from: ${hsNames}_\n`
-      } else if (!collectRemote && hasRemoteHosts) {
-        // Suggest using --homespaces if they have remote hosts but didn't use the flag
-        remoteInfo = `\n_Tip: Run \`/insights --homespaces\` to include sessions from your ${remoteHosts.length} running homespace(s)_\n`
-      }
-    }
 
     // Build markdown summary from insights
     const atAGlance = insights.at_a_glance

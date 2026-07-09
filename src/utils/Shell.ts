@@ -319,11 +319,6 @@ export async function exec(
         GIT_EDITOR: 'true',
         CLAUDECODE: '1',
         ...envOverrides,
-        ...(process.env.USER_TYPE === 'ant'
-          ? {
-              CLAUDE_CODE_SESSION_ID: getSessionId(),
-            }
-          : {}),
       },
       cwd,
       stdio: usePipeMode

@@ -401,9 +401,6 @@ export async function getURLMarkdownContent(
       }
     }
 
-    if (process.env.USER_TYPE === 'ant') {
-
-    }
   } catch (e) {
     if (
       e instanceof DomainBlockedError ||

@@ -2676,12 +2676,6 @@ export function normalizeContentFromAPI(
             // parse. We fall back to {} which means downstream validation
             // sees empty input. The raw prefix goes to debug log only — no
             // PII-tagged proto column exists for it yet.
-            if (process.env.USER_TYPE === 'ant') {
-              logForDebugging(
-                `tool input JSON parse fail: ${contentBlock.input.slice(0, 200)}`,
-                { level: 'warn' },
-              )
-            }
           }
           normalizedInput = parsed ?? {}
         } else {
@@ -4218,8 +4212,7 @@ You have exited auto mode. The user may now want to interact more directly. You 
         createUserMessage({ content: parts.join('\n\n'), isMeta: true }),
       ])
     }
-    case 'verify_plan_reminder': {
-      // Dead code elimination: CLAUDE_CODE_VERIFY_PLAN='false' in external builds, so === 'true' check allows Bun to eliminate the string
+    case 'verify_plan_reminder': {
       /* eslint-disable-next-line custom-rules/no-process-env-top-level */
       const toolName =
         process.env.CLAUDE_CODE_VERIFY_PLAN === 'true'

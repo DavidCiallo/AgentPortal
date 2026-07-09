@@ -22,9 +22,6 @@ function isAgentTeamsFlagSet(): boolean {
  */
 export function isAgentSwarmsEnabled(): boolean {
   // Ant: always on
-  if (process.env.USER_TYPE === 'ant') {
-    return true
-  }
 
   // External: require opt-in via env var or --agent-teams flag
   if (

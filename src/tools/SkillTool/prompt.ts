@@ -118,9 +118,6 @@ export function formatCommandsWithinBudget(
 
   if (maxDescLen < MIN_DESC_LENGTH) {
     // Extreme case: non-bundled go names-only, bundled keep descriptions
-    if (process.env.USER_TYPE === 'ant') {
-
-    }
     return commands
       .map((cmd, i) =>
         bundledIndices.has(i) ? fullEntries[i]!.full : `- ${cmd.name}`,

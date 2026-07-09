@@ -303,9 +303,7 @@ export async function update() {
     process.stderr.write('  • Run with --debug flag for more details\n')
     const packageName =
       MACRO.PACKAGE_URL ||
-      (process.env.USER_TYPE === 'ant'
-        ? '@anthropic-ai/claude-cli'
-        : '@anthropic-ai/claude-code')
+      '@anthropic-ai/claude-code'
     process.stderr.write(
       `  • Manually check: npm view ${packageName} version\n`,
     )

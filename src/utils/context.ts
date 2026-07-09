@@ -3,8 +3,6 @@ import { getGlobalConfig } from './config.js'
 import { isEnvTruthy } from './envUtils.js'
 import { getCanonicalName } from './model/model.js'
 import { getModelCapability } from './model/modelCapabilities.js'
-import { resolveAntModel } from './model/antModels.js'
-import { getOpenAIContextWindow, getOpenAIMaxOutputTokens } from './model/openaiContextWindows.js'
 
 // Model context window size (200k tokens for all models right now)
 export const MODEL_CONTEXT_WINDOW_DEFAULT = 200_000
@@ -62,15 +60,6 @@ export function getContextWindowForModel(
   // This takes precedence over all other context window resolution, including 1M detection,
   // so users can cap the effective context window for local decisions (auto-compact, etc.)
   // while still using a 1M-capable endpoint.
-  if (
-    process.env.USER_TYPE === 'ant' &&
-    process.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS
-  ) {
-    const override = parseInt(process.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS, 10)
-    if (!isNaN(override) && override > 0) {
-      return override
-    }
-  }
 
   // [1m] suffix — explicit client-side opt-in, respected over all detection
   if (has1mContext(model)) {
@@ -81,7 +70,7 @@ export function getContextWindowForModel(
   // Unknown models get a conservative 128k default. This was previously 8k,
   // but that caused auto-compact to fire on every turn because the effective
   // context (8k minus output reservation) became negative (issue #635).
-  const openaiWindow = getOpenAIContextWindow()
+  const openaiWindow = 256_000;
   if (openaiWindow !== undefined) {
     return openaiWindow
   }
@@ -148,71 +137,8 @@ export function getModelMaxOutputTokens(model: string): {
   let defaultTokens: number
   let upperLimit: number
 
-  if (process.env.USER_TYPE === 'ant') {
-    const antModel = resolveAntModel(model.toLowerCase())
-    if (antModel) {
-      defaultTokens = antModel.defaultMaxTokens ?? MAX_OUTPUT_TOKENS_DEFAULT
-      upperLimit = antModel.upperMaxTokensLimit ?? MAX_OUTPUT_TOKENS_UPPER_LIMIT
-      return { default: defaultTokens, upperLimit }
-    }
-  }
 
-  // OpenAI-compatible provider — use known output limits to avoid 400 errors.
-  // upperLimit is set higher than default so that CLAUDE_CODE_MAX_OUTPUT_TOKENS
-  // can increase the limit when the model supports it (e.g. gpt-5.4: 128k).
-  const openaiMax = getOpenAIMaxOutputTokens()
-  if (openaiMax !== undefined) {
-    return { default: openaiMax, upperLimit: Math.max(openaiMax, 128_000) }
-  }
-
-  const m = getCanonicalName(model)
-
-  if (m.includes('opus-4-6')) {
-    defaultTokens = 64_000
-    upperLimit = 128_000
-  } else if (m.includes('sonnet-4-6')) {
-    defaultTokens = 32_000
-    upperLimit = 128_000
-  } else if (
-    m.includes('opus-4-5') ||
-    m.includes('sonnet-4') ||
-    m.includes('haiku-4')
-  ) {
-    defaultTokens = 32_000
-    upperLimit = 64_000
-  } else if (m.includes('opus-4-1') || m.includes('opus-4')) {
-    defaultTokens = 32_000
-    upperLimit = 32_000
-  } else if (m.includes('claude-3-opus')) {
-    defaultTokens = 4_096
-    upperLimit = 4_096
-  } else if (m.includes('claude-3-sonnet')) {
-    defaultTokens = 8_192
-    upperLimit = 8_192
-  } else if (m.includes('claude-3-haiku')) {
-    defaultTokens = 4_096
-    upperLimit = 4_096
-  } else if (m.includes('3-5-sonnet') || m.includes('3-5-haiku')) {
-    defaultTokens = 8_192
-    upperLimit = 8_192
-  } else if (m.includes('3-7-sonnet')) {
-    defaultTokens = 32_000
-    upperLimit = 64_000
-  } else {
-    // Not a known Claude model — use generous defaults for unknown 3P models.
-    // 32k default was causing spurious max_tokens errors on models that support
-    // much larger outputs (deepseek, local models, etc.).
-    defaultTokens = 64_000
-    upperLimit = 128_000
-  }
-
-  const cap = getModelCapability(model)
-  if (cap?.max_tokens && cap.max_tokens >= 4_096) {
-    upperLimit = cap.max_tokens
-    defaultTokens = Math.min(defaultTokens, upperLimit)
-  }
-
-  return { default: defaultTokens, upperLimit }
+    return { default: 128_000, upperLimit:128_000 }
 }
 
 /**

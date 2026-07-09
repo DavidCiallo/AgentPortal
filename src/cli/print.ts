@@ -304,8 +304,6 @@ import { initializeGrowthBook } from '../services/analytics/growthbook.js'
 import { errorMessage, toError } from '../utils/errors.js'
 import { sleep } from '../utils/sleep.js'
 import { isExtractModeActive } from '../memdir/paths.js'
-
-// Dead code elimination: conditional imports
 /* eslint-disable @typescript-eslint/no-require-imports */
 const coordinatorModeModule = feature('COORDINATOR_MODE')
   ? (require('../coordinator/coordinatorMode.js') as typeof import('../coordinator/coordinatorMode.js'))
@@ -443,17 +441,6 @@ export async function runHeadless(
     setSDKStatus?: (status: SDKStatus) => void
   },
 ): Promise<void> {
-  if (
-    process.env.USER_TYPE === 'ant' &&
-    isEnvTruthy(process.env.CLAUDE_CODE_EXIT_AFTER_FIRST_RENDER)
-  ) {
-    process.stderr.write(
-      `\nStartup time: ${Math.round(process.uptime() * 1000)}ms\n`,
-    )
-    // eslint-disable-next-line custom-rules/no-process-exit
-    process.exit(0)
-  }
-
   // Fire user settings download now so it overlaps with the MCP/tool setup
   // below. Managed settings already started in main.tsx preAction; this gives
   // user settings a similar head start. The cached promise is joined in

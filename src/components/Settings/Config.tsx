@@ -599,7 +599,7 @@ export function Config({
   }] : []), {
     id: 'flickerFreeMode',
     label: 'Flicker-free mode',
-    value: globalConfig.flickerFreeMode ?? (process.env.USER_TYPE === 'ant'),
+    value: globalConfig.flickerFreeMode ?? false,
     type: 'boolean' as const,
     onChange(flickerFreeMode: boolean) {
       saveGlobalConfig(current => ({

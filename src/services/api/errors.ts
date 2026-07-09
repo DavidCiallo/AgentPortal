@@ -639,25 +639,6 @@ export function getAssistantMessageFromError(
       }
     }
 
-    if (process.env.USER_TYPE === 'ant') {
-      const baseMessage = `API Error: 400 ${error.message}\n\nRun /share and post the JSON file to ${MACRO.FEEDBACK_CHANNEL}.`
-      const rewindInstruction = getIsNonInteractiveSession()
-        ? ''
-        : ' Then, use /rewind to recover the conversation.'
-      return createAssistantAPIErrorMessage({
-        content: baseMessage + rewindInstruction,
-        error: 'invalid_request',
-      })
-    } else {
-      const baseMessage = 'API Error: 400 due to tool use concurrency issues.'
-      const rewindInstruction = getIsNonInteractiveSession()
-        ? ''
-        : ' Run /rewind to recover the conversation.'
-      return createAssistantAPIErrorMessage({
-        content: baseMessage + rewindInstruction,
-        error: 'invalid_request',
-      })
-    }
   }
 
   if (

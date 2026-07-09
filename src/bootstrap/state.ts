@@ -388,11 +388,6 @@ function getInitialState(): State {
     mainThreadAgentType: undefined,
     // Remote mode
     isRemoteMode: false,
-    ...(process.env.USER_TYPE === 'ant'
-      ? {
-          replBridgeActive: false,
-        }
-      : {}),
     // Direct connect server URL
     directConnectServerUrl: undefined,
     // System prompt section cache state
@@ -1567,7 +1562,7 @@ const MAX_SLOW_OPERATIONS = 10
 const SLOW_OPERATION_TTL_MS = 10000
 
 export function addSlowOperation(operation: string, durationMs: number): void {
-  if (process.env.USER_TYPE !== 'ant') return
+  return
   // Skip tracking for editor sessions (user editing a prompt file in $EDITOR)
   // These are intentionally slow since the user is drafting text
   if (operation.includes('exec') && operation.includes('claude-prompt-')) {

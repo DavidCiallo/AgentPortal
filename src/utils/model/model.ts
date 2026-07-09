@@ -343,20 +343,6 @@ export function renderModelName(model: ModelName): string {
   if (model === 'github:copilot') {
     return 'GPT-4o'
   }
-  if (process.env.USER_TYPE === 'ant') {
-    const resolved = parseUserSpecifiedModel(model)
-    const antModel = resolveAntModel(model)
-    if (antModel) {
-      const baseName = antModel.model.replace(/\[1m\]$/i, '')
-      const masked = maskModelCodename(baseName)
-      const suffix = has1mContext(resolved) ? '[1m]' : ''
-      return masked + suffix
-    }
-    if (resolved !== model) {
-      return `${model} (${resolved})`
-    }
-    return resolved
-  }
   return model
 }
 
@@ -423,20 +409,6 @@ export function parseUserSpecifiedModel(
     return 'gpt-5.3-codex-spark'
   }
 
-  if (process.env.USER_TYPE === 'ant') {
-    const has1mAntTag = has1mContext(normalizedModel)
-    const baseAntModel = normalizedModel.replace(/\[1m]$/i, '').trim()
-
-    const antModel = resolveAntModel(baseAntModel)
-    if (antModel) {
-      const suffix = has1mAntTag ? '[1m]' : ''
-      return antModel.model + suffix
-    }
-
-    // Fall through to the alias string if we cannot load the config. The API calls
-    // will fail with this string, but we should hear about it through feedback and
-    // can tell the user to restart/wait for flag cache refresh to get the latest values.
-  }
 
   // Preserve original case for custom model names (e.g., Azure Foundry deployment IDs)
   // Only strip [1m] suffix if present, maintaining case of the base model
@@ -496,11 +468,6 @@ export function isLegacyModelRemapEnabled(): boolean {
 
 export function modelDisplayString(model: ModelSetting): string {
   if (model === null) {
-    if (process.env.USER_TYPE === 'ant') {
-      return `Default for Ants (${renderDefaultModelSetting(getDefaultMainLoopModelSetting())})`
-    } else if (isClaudeAISubscriber()) {
-      return `Default (${getClaudeAiUserDefaultModelDescription()})`
-    }
     return `Default (${getDefaultMainLoopModel()})`
   }
   const resolvedModel = parseUserSpecifiedModel(model)

@@ -3324,9 +3324,6 @@ async function getTaskReminderAttachments(
   }
 
   // Skip for ant users
-  if (process.env.USER_TYPE === 'ant') {
-    return []
-  }
 
   // When SendUserMessage is in the toolkit, it's the primary communication
   // channel and the model is always told to use it (#20467). TaskUpdate
@@ -3478,9 +3475,7 @@ async function getTeammateMailboxAttachments(
   if (!isAgentSwarmsEnabled()) {
     return []
   }
-  if (process.env.USER_TYPE !== 'ant') {
     return []
-  }
 
   // Get AppState early to check for team lead status
   const appState = toolUseContext.getAppState()
@@ -3838,12 +3833,7 @@ async function getVerifyPlanReminderAttachment(
   messages: Message[] | undefined,
   toolUseContext: ToolUseContext,
 ): Promise<Attachment[]> {
-  if (
-    process.env.USER_TYPE !== 'ant' ||
-    !isEnvTruthy(process.env.CLAUDE_CODE_VERIFY_PLAN)
-  ) {
-    return []
-  }
+  return []
 
   const appState = toolUseContext.getAppState()
   const pending = appState.pendingPlanVerification

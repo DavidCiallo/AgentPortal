@@ -80,9 +80,6 @@ export async function assertMinVersion(): Promise<void> {
  */
 export async function getMaxVersion(): Promise<string | undefined> {
   const config = await getMaxVersionConfig()
-  if (process.env.USER_TYPE === 'ant') {
-    return config.ant || undefined
-  }
   return config.external || undefined
 }
 
@@ -92,9 +89,6 @@ export async function getMaxVersion(): Promise<string | undefined> {
  */
 export async function getMaxVersionMessage(): Promise<string | undefined> {
   const config = await getMaxVersionConfig()
-  if (process.env.USER_TYPE === 'ant') {
-    return config.ant_message || undefined
-  }
   return config.external_message || undefined
 }
 
@@ -392,9 +386,7 @@ export async function getGcsDistTags(): Promise<NpmDistTags> {
  * 3. This prevents rollback from listing versions that don't have native binaries
  */
 export async function getVersionHistory(limit: number): Promise<string[]> {
-  if (process.env.USER_TYPE !== 'ant') {
     return []
-  }
 
   // Use native package URL when available to ensure we only show versions
   // that have native binaries (not all JS package versions have native builds)

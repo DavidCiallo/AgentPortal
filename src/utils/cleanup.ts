@@ -587,7 +587,4 @@ export async function cleanupOldMessageFilesInBackground(): Promise<void> {
   if (removedWorktrees > 0) {
 
   }
-  if (process.env.USER_TYPE === 'ant') {
-    await cleanupNpmCacheForAnthropicPackages()
-  }
 }

@@ -34,7 +34,7 @@ function permissionResultToLog(permissionResult: PermissionResult): string {
         rules.length > 0
           ? rules.map(r => permissionRuleValueToString(r)).join(', ')
           : 'none'
-      return `ask: ${permissionResult.message}, 
+      return `ask: ${permissionResult.message},
 suggestions: ${suggestions}
 reason: ${decisionReasonToString(permissionResult.decisionReason)}`
     }
@@ -126,36 +126,9 @@ export function usePermissionRequestLogging(
 
     // Log analytics event
 
-    if (process.env.USER_TYPE === 'ant') {
-      const permissionResult = toolUseConfirm.permissionResult
-      if (
-        toolUseConfirm.tool.name === BashTool.name &&
-        permissionResult.behavior === 'ask' &&
-        !hasRules(permissionResult.suggestions)
-      ) {
-        // Log if no rule suggestions ("always allow") are provided
-        // This DOES contain code/filepaths and should not be logged in the public build!
-      }
-    }
 
     // [internal-only] Log bash tool calls, so we can categorize
     // & burn down calls that should have been allowed
-    if (process.env.USER_TYPE === 'ant') {
-      const parsedInput = BashTool.inputSchema.safeParse(toolUseConfirm.input)
-      if (
-        toolUseConfirm.tool.name === BashTool.name &&
-        toolUseConfirm.permissionResult.behavior === 'ask' &&
-        parsedInput.success
-      ) {
-        // Note: All metadata fields in this event contain code/filepaths
-        let split = [parsedInput.data.command]
-        try {
-          split = splitCommand_DEPRECATED(parsedInput.data.command)
-        } catch {
-          // Ignore parse errors here - just log the full command
-        }
-      }
-    }
 
     void logUnaryEvent({
       completion_type: unaryEvent.completion_type,

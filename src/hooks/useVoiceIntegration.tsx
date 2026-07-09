@@ -11,9 +11,7 @@ import { useOptionalKeybindingContext } from '../keybindings/KeybindingContext.j
 import { keystrokesEqual } from '../keybindings/resolver.js';
 import type { ParsedKeystroke } from '../keybindings/types.js';
 import { normalizeFullWidthSpace } from '../utils/stringUtils.js';
-import { useVoiceEnabled } from './useVoiceEnabled.js';
-
-// Dead code elimination: conditional import for voice input hook.
+import { useVoiceEnabled } from './useVoiceEnabled.js';
 /* eslint-disable @typescript-eslint/no-require-imports */
 // Capture the module namespace, not the function: spyOn() mutates the module
 // object, so `voiceNs.useVoice(...)` resolves to the spy even if this module

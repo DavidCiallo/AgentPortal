@@ -4,9 +4,7 @@
  * Loads keybindings from ~/.portal/keybindings.json and watches
  * for changes to reload them automatically.
  *
- * NOTE: User keybinding customization is currently only available for
- * internal users (USER_TYPE === 'ant'). External users always
- * use the default bindings.
+ * NOTE: User keybinding customization is currently gated by a feature flag.
  */
 
 import chokidar, { type FSWatcher } from 'chokidar'
@@ -124,8 +122,7 @@ function getDefaultParsedBindings(): ParsedBinding[] {
  * Load and parse keybindings from user config file.
  * Returns merged default + user bindings along with validation warnings.
  *
- * For external users, always returns default bindings only.
- * User customization is currently gated to internal users.
+ * Returns default bindings when customization is not enabled.
  */
 export async function loadKeybindings(): Promise<KeybindingsLoadResult> {
   const defaultBindings = getDefaultParsedBindings()
@@ -250,8 +247,7 @@ export function loadKeybindingsSync(): ParsedBinding[] {
  * Load keybindings synchronously with validation warnings.
  * Uses cached values if available.
  *
- * For external users, always returns default bindings only.
- * User customization is currently gated to internal users.
+ * Returns default bindings when customization is not enabled.
  */
 export function loadKeybindingsSyncWithWarnings(): KeybindingsLoadResult {
   if (cachedBindings) {

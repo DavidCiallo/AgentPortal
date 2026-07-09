@@ -8,9 +8,7 @@ import { logForDebugging } from '../utils/debug.js';
 import { createDisabledBypassPermissionsContext, isBypassPermissionsModeDisabled } from '../utils/permissions/permissionSetup.js';
 import { applySettingsChange } from '../utils/settings/applySettingsChange.js';
 import type { SettingSource } from '../utils/settings/constants.js';
-import { createStore } from './store.js';
-
-// DCE: voice context is internal-only. External builds get a passthrough.
+import { createStore } from './store.js';
 /* eslint-disable @typescript-eslint/no-require-imports */
 const VoiceProvider: (props: {
   children: React.ReactNode;

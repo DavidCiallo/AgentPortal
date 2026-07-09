@@ -373,8 +373,7 @@ function should1hCacheTTL(querySource?: QuerySource): boolean {
   let userEligible = getPromptCache1hEligible()
   if (userEligible === null) {
     userEligible =
-      process.env.USER_TYPE === 'ant' ||
-      (isClaudeAISubscriber() && !currentLimits.isUsingOverage)
+      isClaudeAISubscriber() && !currentLimits.isUsingOverage
     setPromptCache1hEligible(userEligible)
   }
   if (!userEligible) return false
@@ -421,7 +420,6 @@ function configureEffortParams(
     // Send string effort level as is
     outputConfig.effort = effortValue
     betas.push(EFFORT_BETA_HEADER)
-  } else if (process.env.USER_TYPE === 'ant') {
     // Numeric effort override - internal-only (uses anthropic_internal)
     const existingInternal =
       (extraBodyParams.anthropic_internal as Record<string, unknown>) || {}
@@ -1916,15 +1914,8 @@ async function* queryModel(
             partialMessage = part.message
             ttftMs = Date.now() - start
             usage = updateUsage(usage, part.message?.usage)
-            // Capture research from message_start if available (internal only).
+            // Capture research from message_start if available.
             // Always overwrite with the latest value.
-            if (
-              process.env.USER_TYPE === 'ant' &&
-              'research' in (part.message as unknown as Record<string, unknown>)
-            ) {
-              research = (part.message as unknown as Record<string, unknown>)
-                .research
-            }
             break
           }
           case 'content_block_start':
@@ -2098,9 +2089,6 @@ async function* queryModel(
             }
             // Capture research from content_block_delta if available (internal only).
             // Always overwrite with the latest value.
-            if (process.env.USER_TYPE === 'ant' && 'research' in part) {
-              research = (part as { research: unknown }).research
-            }
             break
           }
           case 'content_block_stop': {
@@ -2137,8 +2125,6 @@ async function* queryModel(
               type: 'assistant',
               uuid: randomUUID(),
               timestamp: new Date().toISOString(),
-              ...(process.env.USER_TYPE === 'ant' &&
-                research !== undefined && { research }),
               ...(advisorModel && { advisorModel }),
             }
             newMessages.push(m)
@@ -2147,19 +2133,9 @@ async function* queryModel(
           }
           case 'message_delta': {
             usage = updateUsage(usage, part.usage)
-            // Capture research from message_delta if available (internal only).
-            // Always overwrite with the latest value. Also write back to
-            // already-yielded messages since message_delta arrives after
-            // content_block_stop.
-            if (
-              process.env.USER_TYPE === 'ant' &&
-              'research' in (part as unknown as Record<string, unknown>)
-            ) {
-              research = (part as unknown as Record<string, unknown>).research
-              for (const msg of newMessages) {
-                msg.research = research
-              }
-            }
+            // Capture research from message_delta if available.
+            // Already-yielded messages get the value written back since
+            // message_delta arrives after content_block_stop.
 
             // Write final usage and stop_reason back to the last yielded
             // message. Messages are created at content_block_stop from
@@ -2516,10 +2492,6 @@ async function* queryModel(
         type: 'assistant',
         uuid: randomUUID(),
         timestamp: new Date().toISOString(),
-        ...(process.env.USER_TYPE === 'ant' &&
-          research !== undefined && {
-            research,
-          }),
         ...(advisorModel && {
           advisorModel,
         }),
@@ -2613,8 +2585,6 @@ async function* queryModel(
           type: 'assistant',
           uuid: randomUUID(),
           timestamp: new Date().toISOString(),
-          ...(process.env.USER_TYPE === 'ant' &&
-            research !== undefined && { research }),
           ...(advisorModel && { advisorModel }),
         }
         newMessages.push(m)

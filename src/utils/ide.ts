@@ -842,10 +842,7 @@ export function hasAccessToIDEExtensionDiffFeature(
   )
 }
 
-const EXTENSION_ID =
-  process.env.USER_TYPE === 'ant'
-    ? 'anthropic.claude-code-internal'
-    : 'anthropic.claude-code'
+const EXTENSION_ID = 'anthropic.claude-code'
 
 export async function isIDEExtensionInstalled(
   ideType: IdeType,
@@ -879,9 +876,6 @@ async function installIDEExtension(ideType: IdeType): Promise<string | null> {
     const command = await getVSCodeIDECommand(ideType)
 
     if (command) {
-      if (process.env.USER_TYPE === 'ant') {
-        return await installFromArtifactory(command)
-      }
       let version = await getInstalledVSCodeExtensionVersion(command)
       // If it's not installed or the version is older than the one we have bundled,
       if (!version || lt(version, getClaudeCodeVersion())) {

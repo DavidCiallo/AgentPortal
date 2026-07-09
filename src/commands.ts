@@ -34,10 +34,8 @@ import skills from './commands/skills/index.js'
 import status from './commands/status/index.js'
 import tasks from './commands/tasks/index.js'
 /* eslint-disable @typescript-eslint/no-require-imports */
-const agentsPlatform =
-  process.env.USER_TYPE === 'ant'
-    ? require('./commands/agents-platform/index.js').default
-    : null
+const agentsPlatform = null
+
 /* eslint-enable @typescript-eslint/no-require-imports */
 import securityReview from './commands/security-review.js'
 import terminalSetup from './commands/terminalSetup/index.js'
@@ -45,7 +43,6 @@ import usage from './commands/usage/index.js'
 import theme from './commands/theme/index.js'
 import vim from './commands/vim/index.js'
 import { feature } from 'bun:bundle'
-// Dead code elimination: conditional imports
 /* eslint-disable @typescript-eslint/no-require-imports */
 const proactive =
   feature('PROACTIVE') || feature('KAIROS')
@@ -287,9 +284,6 @@ const COMMANDS = memoize((): Command[] => [
   tasks,
   ...(workflowsCmd ? [workflowsCmd] : []),
   ...(torch ? [torch] : []),
-  ...(process.env.USER_TYPE === 'ant' && !process.env.IS_DEMO
-    ? INTERNAL_ONLY_COMMANDS
-    : []),
 ])
 
 export const builtInCommandNames = memoize(

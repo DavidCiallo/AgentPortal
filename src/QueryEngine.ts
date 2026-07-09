@@ -105,9 +105,7 @@ import {
   handleOrphanedPermission,
   isResultSuccessful,
   normalizeMessage,
-} from './utils/queryHelpers.js'
-
-// Dead code elimination: conditional import for coordinator mode
+} from './utils/queryHelpers.js'
 /* eslint-disable @typescript-eslint/no-require-imports */
 const getCoordinatorUserContext: (
   mcpClients: ReadonlyArray<{ name: string }>,
@@ -115,9 +113,7 @@ const getCoordinatorUserContext: (
 ) => { [k: string]: string } = feature('COORDINATOR_MODE')
   ? require('./coordinator/coordinatorMode.js').getCoordinatorUserContext
   : () => ({})
-/* eslint-enable @typescript-eslint/no-require-imports */
-
-// Dead code elimination: conditional import for snip compaction
+/* eslint-enable @typescript-eslint/no-require-imports */
 /* eslint-disable @typescript-eslint/no-require-imports */
 const snipModule = feature('HISTORY_SNIP')
   ? (require('./services/compact/snipCompact.js') as typeof import('./services/compact/snipCompact.js'))

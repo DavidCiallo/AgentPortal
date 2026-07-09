@@ -62,17 +62,6 @@ function getScopedAdditionalModelOptions(): ModelOption[] {
 }
 
 export function getDefaultOptionForUser(fastMode = false): ModelOption {
-  if (process.env.USER_TYPE === 'ant') {
-    const currentModel = renderDefaultModelSetting(
-      getDefaultMainLoopModelSetting(),
-    )
-    return {
-      value: null,
-      label: 'Default (recommended)',
-      description: `Use the default model for Ants (currently ${currentModel})`,
-      descriptionForModel: `Default model (currently ${currentModel})`,
-    }
-  }
 
   // Subscribers
   if (isClaudeAISubscriber()) {
@@ -355,23 +344,6 @@ function getModelOptionsBase(fastMode = false): ModelOption[] {
     return [defaultOption]
   }
 
-  if (process.env.USER_TYPE === 'ant') {
-    // Build options from antModels config
-    const antModelOptions: ModelOption[] = getAntModels().map(m => ({
-      value: m.alias,
-      label: m.label,
-      description: m.description ?? `[internal] ${m.label} (${m.model})`,
-    }))
-
-    return [
-      getDefaultOptionForUser(),
-      ...antModelOptions,
-      getMergedOpus1MOption(fastMode),
-      getSonnet46Option(),
-      getSonnet46_1MOption(),
-      getHaiku45Option(),
-    ]
-  }
 
   if (isClaudeAISubscriber()) {
     if (isMaxSubscriber() || isTeamPremiumSubscriber()) {

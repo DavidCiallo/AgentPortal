@@ -915,7 +915,6 @@ export function useManageMCPConnections(
         else if (serverConfig.scope === 'claudeai') counts.claudeai++
 
         if (
-          process.env.USER_TYPE === 'ant' &&
           !isMcpServerDisabled(name) &&
           (serverConfig.type === undefined || serverConfig.type === 'stdio') &&
           'command' in serverConfig

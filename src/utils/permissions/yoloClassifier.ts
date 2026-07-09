@@ -40,8 +40,6 @@ import {
   parseClassifierResponse,
 } from './classifierShared.js'
 import { getClaudeTempDir } from './filesystem.js'
-
-// Dead code elimination: conditional imports for auto mode classifier prompts.
 // At build time, the bundler inlines .txt files as string literals. At test
 // time, require() returns {default: string} — txtRequire normalizes both.
 /* eslint-disable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
@@ -60,17 +58,14 @@ const EXTERNAL_PERMISSIONS_TEMPLATE: string = feature('TRANSCRIPT_CLASSIFIER')
   ? txtRequire(require('./yolo-classifier-prompts/permissions_external.txt'))
   : ''
 
-const ANTHROPIC_PERMISSIONS_TEMPLATE: string =
-  feature('TRANSCRIPT_CLASSIFIER') && process.env.USER_TYPE === 'ant'
-    ? txtRequire(require('./yolo-classifier-prompts/permissions_anthropic.txt'))
-    : ''
+const ANTHROPIC_PERMISSIONS_TEMPLATE: string = ''
 /* eslint-enable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
 
 const MAX_CLASSIFIER_TRANSCRIPT_CHARS = 200_000
 const MAX_CLASSIFIER_BLOCK_VALUE_CHARS = 32_000
 
 function isUsingExternalPermissions(): boolean {
-  if (process.env.USER_TYPE !== 'ant') return true
+  return true
   const config = getFeatureValue_CACHED_MAY_BE_STALE(
     'tengu_auto_mode_config',
     {} as AutoModeConfig,
@@ -157,7 +152,7 @@ async function maybeDumpAutoMode(
   timestamp: number,
   suffix?: string,
 ): Promise<void> {
-  if (process.env.USER_TYPE !== 'ant') return
+  return
   if (!isEnvTruthy(process.env.CLAUDE_CODE_DUMP_AUTO_MODE)) return
   const base = suffix ? `${timestamp}.${suffix}` : `${timestamp}`
   try {
@@ -798,12 +793,6 @@ function replaceOutputFormatWithXml(systemPrompt: string): string {
 function getClassifierThinkingConfig(
   model: string,
 ): [false | undefined, number] {
-  if (
-    process.env.USER_TYPE === 'ant' &&
-    resolveAntModel(model)?.alwaysOnThinking
-  ) {
-    return [undefined, 2048]
-  }
   return [false, 0]
 }
 
@@ -1435,10 +1424,6 @@ type AutoModeConfig = {
  * then the main loop model.
  */
 function getClassifierModel(): string {
-  if (process.env.USER_TYPE === 'ant') {
-    const envModel = process.env.CLAUDE_CODE_AUTO_MODE_MODEL
-    if (envModel) return envModel
-  }
   const config = getFeatureValue_CACHED_MAY_BE_STALE(
     'tengu_auto_mode_config',
     {} as AutoModeConfig,
@@ -1458,12 +1443,6 @@ function resolveTwoStageClassifier():
   | 'fast'
   | 'thinking'
   | undefined {
-  if (process.env.USER_TYPE === 'ant') {
-    const env = process.env.CLAUDE_CODE_TWO_STAGE_CLASSIFIER
-    if (env === 'fast' || env === 'thinking') return env
-    if (isEnvTruthy(env)) return true
-    if (isEnvDefinedFalsy(env)) return false
-  }
   const config = getFeatureValue_CACHED_MAY_BE_STALE(
     'tengu_auto_mode_config',
     {} as AutoModeConfig,
@@ -1480,11 +1459,6 @@ function isTwoStageClassifierEnabled(): boolean {
 }
 
 function isJsonlTranscriptEnabled(): boolean {
-  if (process.env.USER_TYPE === 'ant') {
-    const env = process.env.CLAUDE_CODE_JSONL_TRANSCRIPT
-    if (isEnvTruthy(env)) return true
-    if (isEnvDefinedFalsy(env)) return false
-  }
   const config = getFeatureValue_CACHED_MAY_BE_STALE(
     'tengu_auto_mode_config',
     {} as AutoModeConfig,

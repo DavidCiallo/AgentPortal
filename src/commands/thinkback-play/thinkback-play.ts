@@ -8,10 +8,8 @@ const INTERNAL_MARKETPLACE_NAME = 'claude-code-marketplace'
 const SKILL_NAME = 'thinkback'
 
 function getPluginId(): string {
-  const marketplaceName =
-    process.env.USER_TYPE === 'ant'
-      ? INTERNAL_MARKETPLACE_NAME
-      : OFFICIAL_MARKETPLACE_NAME
+  const marketplaceName = 'claude-code-marketplace'
+
   return `thinkback@${marketplaceName}`
 }
 
