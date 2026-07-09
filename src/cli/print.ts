@@ -220,7 +220,6 @@ import {
   isQualifiedForGrove,
   checkGroveForNonInteractive,
 } from 'src/services/api/grove.js'
-import { EMPTY_USAGE } from 'src/services/api/emptyUsage.js'
 import {
   toInternalMessages,
   toSDKRateLimitInfo,
@@ -2357,7 +2356,6 @@ function runHeadlessStreaming(
           stop_reason: null,
           session_id: getSessionId(),
           total_cost_usd: 0,
-          usage: EMPTY_USAGE,
           modelUsage: {},
           permission_denials: [],
           uuid: randomUUID(),
@@ -4752,7 +4750,6 @@ function emitLoadError(
       stop_reason: null,
       session_id: getSessionId(),
       total_cost_usd: 0,
-      usage: EMPTY_USAGE,
       modelUsage: {},
       permission_denials: [],
       uuid: randomUUID(),

@@ -14,7 +14,6 @@ import type { PromptCommand } from '../commands.js'
 import type { QuerySource } from '../constants/querySource.js'
 import type { CanUseToolFn } from '../hooks/useCanUseTool.js'
 import { query } from '../query.js'
-import { EMPTY_USAGE, type NonNullableUsage } from '../services/api/logging.js'
 import type { ToolUseContext } from '../Tool.js'
 import type { AgentDefinition } from '../tools/AgentTool/loadAgentsDir.js'
 import type { AgentId } from '../types/ids.js'
@@ -111,7 +110,7 @@ export type ForkedAgentResult = {
   /** All messages yielded during the query loop */
   messages: Message[]
   /** Accumulated usage across all API calls in the loop */
-  totalUsage: NonNullableUsage
+  totalUsage: number
 }
 
 /**
@@ -355,18 +354,18 @@ export function createSubagentContext(
     : overrides?.shareAbortController
       ? parentContext.getAppState
       : () => {
-          const state = parentContext.getAppState()
-          if (state.toolPermissionContext.shouldAvoidPermissionPrompts) {
-            return state
-          }
-          return {
-            ...state,
-            toolPermissionContext: {
-              ...state.toolPermissionContext,
-              shouldAvoidPermissionPrompts: true,
-            },
-          }
+        const state = parentContext.getAppState()
+        if (state.toolPermissionContext.shouldAvoidPermissionPrompts) {
+          return state
         }
+        return {
+          ...state,
+          toolPermissionContext: {
+            ...state.toolPermissionContext,
+            shouldAvoidPermissionPrompts: true,
+          },
+        }
+      }
 
   return {
     // Mutable state - cloned by default to maintain isolation
@@ -404,7 +403,7 @@ export function createSubagentContext(
     getAppState,
     setAppState: overrides?.shareSetAppState
       ? parentContext.setAppState
-      : () => {},
+      : () => { },
     // Task registration/kill must always reach the root store, even when
     // setAppState is a no-op — otherwise async agents' background bash tasks
     // are never registered and never killed (PPID=1 zombie).
@@ -417,14 +416,14 @@ export function createSubagentContext(
       : createDenialTrackingState(),
 
     // Mutation callbacks - no-op by default
-    setInProgressToolUseIDs: () => {},
+    setInProgressToolUseIDs: () => { },
     setResponseLength: overrides?.shareSetResponseLength
       ? parentContext.setResponseLength
-      : () => {},
+      : () => { },
     pushApiMetricsEntry: overrides?.shareSetResponseLength
       ? parentContext.pushApiMetricsEntry
       : undefined,
-    updateFileHistoryState: () => {},
+    updateFileHistoryState: () => { },
     // Attribution is scoped and functional (prev => next) — safe to share even
     // when setAppState is stubbed. Concurrent calls compose via React's state queue.
     updateAttributionState: parentContext.updateAttributionState,
@@ -496,7 +495,7 @@ export async function runForkedAgent({
 }: ForkedAgentParams): Promise<ForkedAgentResult> {
   const startTime = Date.now()
   const outputMessages: Message[] = []
-  let totalUsage: NonNullableUsage = { ...EMPTY_USAGE }
+  let totalUsage: { tokens: number, turns: number } = { tokens: 0, turns: 0 }
 
   const {
     systemPrompt,
@@ -551,14 +550,6 @@ export async function runForkedAgent({
     })) {
       // Extract real usage from message_delta stream events (final usage per API call)
       if (message.type === 'stream_event') {
-        if (
-          'event' in message &&
-          message.event?.type === 'message_delta' &&
-          message.event.usage
-        ) {
-          const turnUsage = updateUsage({ ...EMPTY_USAGE }, message.event.usage)
-          totalUsage = accumulateUsage(totalUsage, turnUsage)
-        }
         continue
       }
       if (message.type === 'stream_request_start') {
@@ -598,54 +589,8 @@ export async function runForkedAgent({
     initialMessages.length = 0
   }
 
-  logForDebugging(
-    `Forked agent [${forkLabel}] finished: ${outputMessages.length} messages, types=[${outputMessages.map(m => m.type).join(', ')}], totalUsage: input=${totalUsage.input_tokens} output=${totalUsage.output_tokens} cacheRead=${totalUsage.cache_read_input_tokens} cacheCreate=${totalUsage.cache_creation_input_tokens}`,
-  )
-
-  const durationMs = Date.now() - startTime
-
-  // Log the fork query metrics with full NonNullableUsage
-  logForkAgentQueryEvent({
-    forkLabel,
-    querySource,
-    durationMs,
-    messageCount: outputMessages.length,
-    totalUsage,
-    queryTracking: toolUseContext.queryTracking,
-  })
-
   return {
     messages: outputMessages,
-    totalUsage,
+    totalUsage: 0,
   }
-}
-
-/**
- * Logs the tengu_fork_agent_query event with full NonNullableUsage fields.
- */
-function logForkAgentQueryEvent({
-  forkLabel,
-  querySource,
-  durationMs,
-  messageCount,
-  totalUsage,
-  queryTracking,
-}: {
-  forkLabel: string
-  querySource: QuerySource
-  durationMs: number
-  messageCount: number
-  totalUsage: NonNullableUsage
-  queryTracking?: { chainId: string; depth: number }
-}): void {
-  // Calculate cache hit rate
-  const totalInputTokens =
-    totalUsage.input_tokens +
-    totalUsage.cache_creation_input_tokens +
-    totalUsage.cache_read_input_tokens
-  const cacheHitRate =
-    totalInputTokens > 0
-      ? totalUsage.cache_read_input_tokens / totalInputTokens
-      : 0
-
 }

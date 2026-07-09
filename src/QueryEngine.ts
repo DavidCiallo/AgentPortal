@@ -31,7 +31,6 @@ import type { CanUseToolFn } from './hooks/useCanUseTool.js'
 import { loadMemoryPrompt } from './memdir/memdir.js'
 import { hasAutoMemPathOverride } from './memdir/paths.js'
 import { query } from './query.js'
-import { EMPTY_USAGE, updateUsage } from './services/api/emptyUsage.js'
 import { categorizeRetryableAPIError } from './services/api/errors.js'
 import type { MCPServerConnection } from './services/mcp/types.js'
 import type { AppState } from './state/AppState.js'
@@ -105,7 +104,8 @@ import {
   handleOrphanedPermission,
   isResultSuccessful,
   normalizeMessage,
-} from './utils/queryHelpers.js'
+} from './utils/queryHelpers.js'
+
 /* eslint-disable @typescript-eslint/no-require-imports */
 const getCoordinatorUserContext: (
   mcpClients: ReadonlyArray<{ name: string }>,
@@ -113,7 +113,8 @@ const getCoordinatorUserContext: (
 ) => { [k: string]: string } = feature('COORDINATOR_MODE')
   ? require('./coordinator/coordinatorMode.js').getCoordinatorUserContext
   : () => ({})
-/* eslint-enable @typescript-eslint/no-require-imports */
+/* eslint-enable @typescript-eslint/no-require-imports */
+
 /* eslint-disable @typescript-eslint/no-require-imports */
 const snipModule = feature('HISTORY_SNIP')
   ? (require('./services/compact/snipCompact.js') as typeof import('./services/compact/snipCompact.js'))
@@ -199,7 +200,6 @@ export class QueryEngine {
     this.abortController = config.abortController ?? createAbortController()
     this.permissionDenials = []
     this.readFileState = config.readFileCache
-    this.totalUsage = EMPTY_USAGE
   }
 
   async *submitMessage(
@@ -650,8 +650,6 @@ export class QueryEngine {
         })
     }
 
-    // Track current message usage (reset on each message_start)
-    let currentMessageUsage: NonNullableUsage = EMPTY_USAGE
     let turnCount = 1
     let hasAcknowledgedInitialMessages = false
     // Track structured output from StructuredOutput tool calls
@@ -795,34 +793,11 @@ export class QueryEngine {
           yield* normalizeMessage(message)
           break
         case 'stream_event':
-          if (message.event.type === 'message_start') {
-            // Reset current message usage for new message
-            currentMessageUsage = EMPTY_USAGE
-            currentMessageUsage = updateUsage(
-              currentMessageUsage,
-              message.event.message.usage,
-            )
-          }
           if (message.event.type === 'message_delta') {
-            currentMessageUsage = updateUsage(
-              currentMessageUsage,
-              message.event.usage,
-            )
-            // Capture stop_reason from message_delta. The assistant message
-            // is yielded at content_block_stop with stop_reason=null; the
-            // real value only arrives here (see claude.ts message_delta
-            // handler). Without this, result.stop_reason is always null.
             if (message.event.delta.stop_reason != null) {
               lastStopReason = message.event.delta.stop_reason
             }
           }
-          // if (message.event.type === 'message_stop') {
-          //   // Accumulate current message usage into total
-          //   this.totalUsage = accumulateUsage(
-          //     this.totalUsage,
-          //     currentMessageUsage,
-          //   )
-          // }
 
           if (includePartialMessages) {
             yield {
