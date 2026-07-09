@@ -10,7 +10,6 @@ import { sequential } from '../../utils/sequential.js'
 import { getSessionIngressAuthToken } from '../../utils/sessionIngressAuth.js'
 import { sleep } from '../../utils/sleep.js'
 import { jsonStringify } from '../../utils/slowOperations.js'
-import { getOAuthHeaders } from '../../utils/teleport/api.js'
 
 interface SessionIngressError {
   error?: {
@@ -251,7 +250,6 @@ export async function getSessionLogsViaOAuth(
   const url = `${getOauthConfig().BASE_API_URL}/v1/session_ingress/session/${sessionId}`
   logForDebugging(`[session-ingress] Fetching session logs from: ${url}`)
   const headers = {
-    ...getOAuthHeaders(accessToken),
     'x-organization-uuid': orgUUID,
   }
   const result = await fetchSessionLogsFromUrl(sessionId, url, headers)
@@ -295,7 +293,6 @@ export async function getTeleportEvents(
 ): Promise<Entry[] | null> {
   const baseUrl = `${getOauthConfig().BASE_API_URL}/v1/code/sessions/${sessionId}/teleport-events`
   const headers = {
-    ...getOAuthHeaders(accessToken),
     'x-organization-uuid': orgUUID,
   }
 

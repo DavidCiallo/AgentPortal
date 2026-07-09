@@ -7,8 +7,6 @@ import type {
   BetaMessage,
   BetaStopReason,
 } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
-import { AFK_MODE_BETA_HEADER } from 'src/constants/betas.js'
-import type { SDKAssistantMessageError } from 'src/entrypoints/agentSdkTypes.js'
 import type {
   AssistantMessage,
   Message,
@@ -40,11 +38,6 @@ import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
 } from '../analytics/index.js'
-import {
-  type ClaudeAILimits,
-  getRateLimitErrorMessage,
-  type OverageDisabledReason,
-} from '../claudeAiLimits.js'
 import { shouldProcessRateLimits } from '../rateLimitMocking.js' // Used for /mock-limits command
 import { extractConnectionErrorDetails, formatAPIError } from './errorUtils.js'
 
@@ -446,7 +439,7 @@ export function getAssistantMessageFromError(
     // If we have the new headers, use the new message generation
     if (rateLimitType || overageStatus) {
       // Build limits object from error headers to determine the appropriate message
-      const limits: ClaudeAILimits = {
+      const limits: Record<string, any> = {
         status: 'rejected',
         unifiedRateLimitFallbackAvailable: false,
         isUsingOverage: false,
@@ -477,18 +470,9 @@ export function getAssistantMessageFromError(
 
       const overageDisabledReason = error.headers?.get?.(
         'anthropic-ratelimit-unified-overage-disabled-reason',
-      ) as OverageDisabledReason | null
+      )
       if (overageDisabledReason) {
         limits.overageDisabledReason = overageDisabledReason
-      }
-
-      // Use the new message format for all new API rate limits
-      const specificErrorMessage = getRateLimitErrorMessage(limits, model)
-      if (specificErrorMessage) {
-        return createAssistantAPIErrorMessage({
-          content: specificErrorMessage,
-          error: 'rate_limit',
-        })
       }
 
       // If getRateLimitErrorMessage returned null, it means the fallback mechanism

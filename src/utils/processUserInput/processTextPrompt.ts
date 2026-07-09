@@ -6,10 +6,8 @@ import type {
   SystemMessage,
   UserMessage,
 } from 'src/types/message.js'
-import { logEvent } from '../../services/analytics/index.js'
 import type { PermissionMode } from '../../types/permissions.js'
 import { createUserMessage } from '../messages.js'
-import { logOTelEvent, redactIfDisabled } from '../telemetry/events.js'
 import { startInteractionSpan } from '../telemetry/sessionTracing.js'
 import {
   matchesKeepGoingKeyword,
@@ -43,25 +41,8 @@ export function processTextPrompt(
   // For array input, use the LAST text block: createUserContent pushes the
   // user's message last (after any <ide_selection>/attachment context blocks),
   // so .findLast gets the actual prompt. userPromptText (first block) is kept
-  // unchanged for startInteractionSpan to preserve existing span attributes.
-  const otelPromptText =
-    typeof input === 'string'
-      ? input
-      : input.findLast(block => block.type === 'text')?.text || ''
-  if (otelPromptText) {
-    void logOTelEvent('user_prompt', {
-      prompt_length: String(otelPromptText.length),
-      prompt: redactIfDisabled(otelPromptText),
-      'prompt.id': promptId,
-    })
-  }
-
   const isNegative = matchesNegativeKeyword(userPromptText)
   const isKeepGoing = matchesKeepGoingKeyword(userPromptText)
-  logEvent('tengu_input_prompt', {
-    is_negative: isNegative,
-    is_keep_going: isKeepGoing,
-  })
 
   // If we have pasted images, create a message with image content
   if (imageContentBlocks.length > 0) {

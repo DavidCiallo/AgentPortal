@@ -11,8 +11,6 @@ import * as lockfile from './lockfile.js'
 import { logError } from './log.js'
 import { createSignal } from './signal.js'
 import { jsonParse, jsonStringify } from './slowOperations.js'
-import { getTeamName } from './teammate.js'
-import { getTeammateContext } from './teammateContext.js'
 
 // Listeners for task list updates (used for immediate UI refresh in same process)
 const tasksUpdated = createSignal()
@@ -200,13 +198,8 @@ export function getTaskListId(): string {
   if (process.env.CLAUDE_CODE_TASK_LIST_ID) {
     return process.env.CLAUDE_CODE_TASK_LIST_ID
   }
-  // In-process teammates use the leader's team name so they share the same
-  // task list that tmux/iTerm2 teammates also resolve to.
-  const teammateCtx = getTeammateContext()
-  if (teammateCtx) {
-    return teammateCtx.teamName
-  }
-  return getTeamName() || leaderTeamName || getSessionId()
+
+  return leaderTeamName || getSessionId()
 }
 
 /**

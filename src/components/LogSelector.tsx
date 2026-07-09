@@ -11,7 +11,6 @@ import { applyColor } from '../ink/colorize.js';
 import type { Color } from '../ink/styles.js';
 import { Box, Text, useInput, useTerminalFocus, useTheme } from '../ink.js';
 import { useKeybinding } from '../keybindings/useKeybinding.js';
-import { logEvent } from '../services/analytics/index.js';
 import type { LogOption, SerializedMessage } from '../types/logs.js';
 import { formatLogMetadata, truncateToWidth } from '../utils/format.js';
 import { getWorktreePaths } from '../utils/getWorktreePaths.js';
@@ -237,15 +236,11 @@ export function LogSelector(t0) {
   if ($[8] === Symbol.for("react.memo_cache_sentinel")) {
     t10 = () => {
       setViewMode("list");
-      logEvent("tengu_session_search_toggled", {
-        enabled: false
-      });
+      ;
     };
     t11 = () => {
       setViewMode("list");
-      logEvent("tengu_session_search_toggled", {
-        enabled: false
-      });
+      ;
     };
     t12 = ["n"];
     $[8] = t10;
@@ -764,9 +759,7 @@ export function LogSelector(t0) {
   if ($[92] === Symbol.for("react.memo_cache_sentinel")) {
     t33 = () => {
       setViewMode("list");
-      logEvent("tengu_session_search_toggled", {
-        enabled: false
-      });
+      ;
     };
     $[92] = t33;
   } else {
@@ -777,9 +770,7 @@ export function LogSelector(t0) {
   if ($[93] === Symbol.for("react.memo_cache_sentinel")) {
     t34 = () => {
       setViewMode("search");
-      logEvent("tengu_session_search_toggled", {
-        enabled: true
-      });
+      ;
     };
     $[93] = t34;
   } else {
@@ -798,9 +789,7 @@ export function LogSelector(t0) {
       setAgenticSearchState({
         status: "searching"
       });
-      logEvent("tengu_agentic_search_started", {
-        query_length: searchQuery.length
-      });
+      ;
       ;
       try {
         const results_0 = await onAgenticSearch(searchQuery, logs, abortController.signal);
@@ -812,10 +801,7 @@ export function LogSelector(t0) {
           results: results_0,
           query: searchQuery
         });
-        logEvent("tengu_agentic_search_completed", {
-          query_length: searchQuery.length,
-          results_count: results_0.length
-        });
+        ;
       } catch (t36) {
         const error = t36;
         if (abortController.signal.aborted) {
@@ -825,9 +811,7 @@ export function LogSelector(t0) {
           status: "error",
           message: error instanceof Error ? error.message : "Search failed"
         });
-        logEvent("tengu_agentic_search_error", {
-          query_length: searchQuery.length
-        });
+        ;
       }
     };
     $[94] = logs;
@@ -1083,10 +1067,7 @@ export function LogSelector(t0) {
               const current = prev < tagTabs.length ? prev : 0;
               const newIndex = (current + tagTabs.length + offset) % tagTabs.length;
               const newTab = tagTabs[newIndex];
-              logEvent("tengu_session_tag_filter_changed", {
-                is_all: newTab === "All",
-                tag_count: uniqueTags.length
-              });
+              ;
               return newIndex;
             });
             return;
@@ -1095,29 +1076,21 @@ export function LogSelector(t0) {
           const lowerInput = input.toLowerCase();
           if (lowerInput === "a" && key.ctrl && onToggleAllProjects) {
             onToggleAllProjects();
-            logEvent("tengu_session_all_projects_toggled", {
-              enabled: !showAllProjects
-            });
+            ;
           } else {
             if (lowerInput === "b" && key.ctrl) {
               const newEnabled = !branchFilterEnabled;
               setBranchFilterEnabled(newEnabled);
-              logEvent("tengu_session_branch_filter_toggled", {
-                enabled: newEnabled
-              });
+              ;
             } else {
               if (lowerInput === "w" && key.ctrl && hasMultipleWorktrees) {
                 const newValue = !showAllWorktrees;
                 setShowAllWorktrees(newValue);
-                logEvent("tengu_session_worktree_filter_toggled", {
-                  enabled: newValue
-                });
+                ;
               } else {
                 if (lowerInput === "/" && keyIsNotCtrlOrMeta) {
                   setViewMode("search");
-                  logEvent("tengu_session_search_toggled", {
-                    enabled: true
-                  });
+                  ;
                 } else {
                   if (lowerInput === "r" && key.ctrl && focusedLog) {
                     setViewMode("rename");
@@ -1127,16 +1100,12 @@ export function LogSelector(t0) {
                     if (lowerInput === "v" && key.ctrl && focusedLog) {
                       setPreviewLog(focusedLog);
                       setViewMode("preview");
-                      logEvent("tengu_session_preview_opened", {
-                        messageCount: focusedLog.messageCount
-                      });
+                      ;
                     } else {
                       if (focusedLog && keyIsNotCtrlOrMeta && input.length > 0 && !/^\s+$/.test(input)) {
                         setViewMode("search");
                         setSearchQuery(input);
-                        logEvent("tengu_session_search_toggled", {
-                          enabled: true
-                        });
+                        ;
                       }
                     }
                   }

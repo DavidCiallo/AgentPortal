@@ -1,8 +1,4 @@
 import { feature } from 'bun:bundle'
-import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  logEvent,
-} from '../services/analytics/index.js'
 import type { ToolUseContext } from '../Tool.js'
 import type { AgentDefinition } from '../tools/AgentTool/loadAgentsDir.js'
 import { isBuiltInAgent } from '../tools/AgentTool/loadAgentsDir.js'
@@ -84,16 +80,6 @@ export function buildEffectiveSystemPrompt({
 
   // Log agent memory loaded event for main loop agents
   if (mainThreadAgentDefinition?.memory) {
-    logEvent('tengu_agent_memory_loaded', {
-      ...(process.env.USER_TYPE === 'ant' && {
-        agent_type:
-          mainThreadAgentDefinition.agentType as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      }),
-      scope:
-        mainThreadAgentDefinition.memory as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      source:
-        'main-thread' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    })
   }
 
   // In proactive mode, agent instructions are appended to the default prompt

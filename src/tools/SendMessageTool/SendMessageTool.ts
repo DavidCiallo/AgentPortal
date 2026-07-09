@@ -327,12 +327,7 @@ async function handleShutdownApproval(
     }
   }
 
-  const approvedMessage = createShutdownApprovedMessage({
-    requestId,
-    from: agentName,
-    paneId: ownPaneId,
-    backendType: ownBackendType,
-  })
+  const approvedMessage = createShutdownApprovedMessage()
 
   await writeToMailbox(
     TEAM_LEAD_NAME,
@@ -405,11 +400,7 @@ async function handleShutdownRejection(
   const teamName = getTeamName()
   const agentName = getAgentName() || 'teammate'
 
-  const rejectedMessage = createShutdownRejectedMessage({
-    requestId,
-    from: agentName,
-    reason,
-  })
+  const rejectedMessage = createShutdownRejectedMessage()
 
   await writeToMailbox(
     TEAM_LEAD_NAME,

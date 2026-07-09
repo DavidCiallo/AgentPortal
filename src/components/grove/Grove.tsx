@@ -1,6 +1,5 @@
 import { c as _c } from "react-compiler-runtime";
 import React, { useEffect, useState } from 'react';
-import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS, logEvent } from 'src/services/analytics/index.js';
 import { Box, Link, Text, useInput } from '../../ink.js';
 import { type AccountSettings, calculateShouldShowGrove, type GroveConfig, getGroveNoticeConfig, getGroveSettings, markGroveNoticeViewed, updateGroveSettings } from '../../services/api/grove.js';
 import { Select } from '../CustomSelect/index.js';
@@ -165,10 +164,7 @@ export function GroveDialog(t0) {
           return;
         }
         markGroveNoticeViewed();
-        logEvent("tengu_grove_policy_viewed", {
-          location: location as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-          dismissable: config?.notice_is_grace_period as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-        });
+        ;
       };
       checkGroveSettings();
     };
@@ -196,26 +192,18 @@ export function GroveDialog(t0) {
         case "accept_opt_in":
           {
             await updateGroveSettings(true);
-            logEvent("tengu_grove_policy_submitted", {
-              state: true,
-              dismissable: groveConfig?.notice_is_grace_period as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-            });
+            ;
             break bb21;
           }
         case "accept_opt_out":
           {
             await updateGroveSettings(false);
-            logEvent("tengu_grove_policy_submitted", {
-              state: false,
-              dismissable: groveConfig?.notice_is_grace_period as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-            });
+            ;
             break bb21;
           }
         case "defer":
           {
-            logEvent("tengu_grove_policy_dismissed", {
-              state: true
-            });
+            ;
             break bb21;
           }
         case "escape":

@@ -20,7 +20,6 @@ import {
 } from '../settings/settings.js'
 import { jsonParse, jsonStringify } from '../slowOperations.js'
 import { getSystemDirectories } from '../systemDirectories.js'
-import { classifyFetchError, logPluginFetch } from './fetchTelemetry.js'
 /**
  * User configuration values for MCPB
  */
@@ -510,7 +509,6 @@ async function downloadMcpb(
     // Fire telemetry before writeFile — the event measures the network
     // fetch, not disk I/O. A writeFile EACCES would otherwise match
     // classifyFetchError's /permission denied/ → misreport as auth.
-    logPluginFetch('mcpb', url, 'success', performance.now() - started)
     fetchTelemetryFired = true
 
     // Save to disk (binary data)
@@ -523,15 +521,6 @@ async function downloadMcpb(
 
     return data
   } catch (error) {
-    if (!fetchTelemetryFired) {
-      logPluginFetch(
-        'mcpb',
-        url,
-        'failure',
-        performance.now() - started,
-        classifyFetchError(error),
-      )
-    }
     const errorMsg = errorMessage(error)
     const fullError = new Error(
       `Failed to download MCPB file from ${url}: ${errorMsg}`,

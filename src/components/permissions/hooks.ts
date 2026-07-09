@@ -1,9 +1,5 @@
 import { feature } from 'bun:bundle'
 import { useEffect, useRef } from 'react'
-import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  logEvent,
-} from 'src/services/analytics/index.js'
 import { sanitizeToolNameForAnalytics } from 'src/services/analytics/metadata.js'
 import { BashTool } from 'src/tools/BashTool/BashTool.js'
 import { splitCommand_DEPRECATED } from 'src/utils/bash/commands.js'
@@ -129,15 +125,6 @@ export function usePermissionRequestLogging(
     }))
 
     // Log analytics event
-    logEvent('tengu_tool_use_show_permission_request', {
-      messageID: toolUseConfirm.assistantMessage.message
-        .id as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      toolName: sanitizeToolNameForAnalytics(toolUseConfirm.tool.name),
-      isMcp: toolUseConfirm.tool.isMcp ?? false,
-      decisionReasonType: toolUseConfirm.permissionResult.decisionReason
-        ?.type as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      sandboxEnabled: SandboxManager.isSandboxingEnabled(),
-    })
 
     if (process.env.USER_TYPE === 'ant') {
       const permissionResult = toolUseConfirm.permissionResult
@@ -147,20 +134,7 @@ export function usePermissionRequestLogging(
         !hasRules(permissionResult.suggestions)
       ) {
         // Log if no rule suggestions ("always allow") are provided
-        logEvent('tengu_internal_tool_use_permission_request_no_always_allow', {
-          messageID: toolUseConfirm.assistantMessage.message
-            .id as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-          toolName: sanitizeToolNameForAnalytics(toolUseConfirm.tool.name),
-          isMcp: toolUseConfirm.tool.isMcp ?? false,
-          decisionReasonType: (permissionResult.decisionReason?.type ??
-            'unknown') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-          sandboxEnabled: SandboxManager.isSandboxingEnabled(),
-
-          // This DOES contain code/filepaths and should not be logged in the public build!
-          decisionReasonDetails: decisionReasonToString(
-            permissionResult.decisionReason,
-          ) as never,
-        })
+        // This DOES contain code/filepaths and should not be logged in the public build!
       }
     }
 
@@ -180,19 +154,6 @@ export function usePermissionRequestLogging(
         } catch {
           // Ignore parse errors here - just log the full command
         }
-        logEvent('tengu_internal_bash_tool_use_permission_request', {
-          parts: jsonStringify(
-            split,
-          ) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-          input: jsonStringify(
-            toolUseConfirm.input,
-          ) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-          decisionReasonType: toolUseConfirm.permissionResult.decisionReason
-            ?.type as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-          decisionReason: decisionReasonToString(
-            toolUseConfirm.permissionResult.decisionReason,
-          ) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        })
       }
     }
 

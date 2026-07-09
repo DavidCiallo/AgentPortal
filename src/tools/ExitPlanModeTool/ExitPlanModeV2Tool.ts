@@ -8,7 +8,6 @@ import {
   setNeedsAutoModeExitAttachment,
   setNeedsPlanModeExitAttachment,
 } from '../../bootstrap/state.js'
-import { logEvent } from '../../services/analytics/index.js'
 import type { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from '../../services/analytics/metadata.js'
 import {
   buildTool,
@@ -31,15 +30,7 @@ import {
   persistFileSnapshotIfRemote,
 } from '../../utils/plans.js'
 import { jsonStringify } from '../../utils/slowOperations.js'
-import {
-  getAgentName,
-  getTeamName,
-  isPlanModeRequired,
-  isTeammate,
-} from '../../utils/teammate.js'
-import { writeToMailbox } from '../../utils/teammateMailbox.js'
 import { AGENT_TOOL_NAME } from '../AgentTool/constants.js'
-import { TEAM_CREATE_TOOL_NAME } from '../TeamCreateTool/constants.js'
 import { EXIT_PLAN_MODE_V2_TOOL_NAME } from './constants.js'
 import { EXIT_PLAN_MODE_V2_TOOL_PROMPT } from './prompt.js'
 import {
@@ -183,32 +174,15 @@ export const ExitPlanModeV2Tool: Tool<InputSchema, Output> = buildTool({
     return false // Now writes to disk
   },
   requiresUserInteraction() {
-    // For ALL teammates, no local user interaction needed:
-    // - If isPlanModeRequired(): team lead approves via mailbox
-    // - Otherwise: exits locally without approval (voluntary plan mode)
-    if (isTeammate()) {
-      return false
-    }
     // For non-teammates, require user confirmation to exit plan mode
     return true
   },
   async validateInput(_input, { getAppState, options }) {
-    // Teammate AppState may show leader's mode (runAgent.ts skips override in
-    // acceptEdits/bypassPermissions/auto); isPlanModeRequired() is the real source
-    if (isTeammate()) {
-      return { result: true }
-    }
     // The deferred-tool list announces this tool regardless of mode, so the
     // model can call it after plan approval (fresh delta on compact/clear).
     // Reject before checkPermissions to avoid showing the approval dialog.
     const mode = getAppState().toolPermissionContext.mode
     if (mode !== 'plan') {
-      logEvent('tengu_exit_plan_mode_called_outside_plan', {
-        model:
-          options.mainLoopModel as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        mode: mode as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        hasExitedPlanModeInSession: hasExitedPlanModeInSession(),
-      })
       return {
         result: false,
         message:
@@ -223,13 +197,6 @@ export const ExitPlanModeV2Tool: Tool<InputSchema, Output> = buildTool({
     // The call() method handles the appropriate behavior:
     // - If isPlanModeRequired(): sends plan_approval_request to leader
     // - Otherwise: exits plan mode locally (voluntary plan mode)
-    if (isTeammate()) {
-      return {
-        behavior: 'allow' as const,
-        updatedInput: input,
-      }
-    }
-
     // For non-teammates, require user confirmation to exit plan mode
     return {
       behavior: 'ask' as const,
@@ -259,59 +226,6 @@ export const ExitPlanModeV2Tool: Tool<InputSchema, Output> = buildTool({
       await writeFile(filePath, inputPlan, 'utf-8').catch(e => logError(e))
       void persistFileSnapshotIfRemote()
     }
-
-    // Check if this is a teammate that requires leader approval
-    if (isTeammate() && isPlanModeRequired()) {
-      // Plan is required for plan_mode_required teammates
-      if (!plan) {
-        throw new Error(
-          `No plan file found at ${filePath}. Please write your plan to this file before calling ExitPlanMode.`,
-        )
-      }
-      const agentName = getAgentName() || 'unknown'
-      const teamName = getTeamName()
-      const requestId = generateRequestId(
-        'plan_approval',
-        formatAgentId(agentName, teamName || 'default'),
-      )
-
-      const approvalRequest = {
-        type: 'plan_approval_request',
-        from: agentName,
-        timestamp: new Date().toISOString(),
-        planFilePath: filePath,
-        planContent: plan,
-        requestId,
-      }
-
-      await writeToMailbox(
-        'team-lead',
-        {
-          from: agentName,
-          text: jsonStringify(approvalRequest),
-          timestamp: new Date().toISOString(),
-        },
-        teamName,
-      )
-
-      // Update task state to show awaiting approval (for in-process teammates)
-      const appState = context.getAppState()
-      const agentTaskId = findInProcessTeammateTaskId(agentName, appState)
-      if (agentTaskId) {
-        setAwaitingPlanApproval(agentTaskId, context.setAppState, true)
-      }
-
-      return {
-        data: {
-          plan,
-          isAgent: true,
-          filePath,
-          awaitingLeaderApproval: true,
-          requestId,
-        },
-      }
-    }
-
     // Note: Background verification hook is registered in REPL.tsx AFTER context clear
     // via registerPlanVerificationHook(). Registering here would be cleared during context clear.
 
@@ -467,10 +381,6 @@ Request ID: ${requestId}`,
       }
     }
 
-    const teamHint = hasTaskTool
-      ? `\n\nIf this plan can be broken down into multiple independent tasks, consider using the ${TEAM_CREATE_TOOL_NAME} tool to create a team and parallelize the work.`
-      : ''
-
     // Always include the plan — extractApprovedPlan() in the Ultraplan CCR
     // flow parses the tool_result to retrieve the plan text for the local CLI.
     // Label edited plans so the model knows the user changed something.
@@ -483,7 +393,7 @@ Request ID: ${requestId}`,
       content: `User has approved your plan. You can now start coding. Start with updating your todo list if applicable
 
 Your plan has been saved to: ${filePath}
-You can refer back to it if needed during implementation.${teamHint}
+You can refer back to it if needed during implementation.
 
 ## ${planLabel}:
 ${plan}`,

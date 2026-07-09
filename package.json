@@ -1,7 +1,7 @@
 {
-  "name": "@gitlawb/portal",
+  "name": "portal",
   "version": "0.2.3",
-  "description": "Portal — an open-source coding agent CLI for any LLM — OpenAI, Gemini, DeepSeek, Ollama, and 200+ models",
+  "description": "Portal — an coding agent base for openclaude",
   "type": "module",
   "bin": {
     "portal": "./bin/portal"

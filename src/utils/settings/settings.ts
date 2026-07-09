@@ -8,7 +8,6 @@ import {
   getOriginalCwd,
   getUseCoworkPlugins,
 } from '../../bootstrap/state.js'
-import { getRemoteManagedSettingsSyncFromCache } from '../../services/remoteManagedSettings/syncCacheState.js'
 import { uniq } from '../array.js'
 import { logForDebugging } from '../debug.js'
 import { logForDiagnosticsNoPII } from '../diagLogs.js'
@@ -321,10 +320,6 @@ function getSettingsForSourceUncached(
 ): SettingsJson | null {
   // For policySettings: first source wins (remote > HKLM/plist > file > HKCU)
   if (source === 'policySettings') {
-    const remoteSettings = getRemoteManagedSettingsSyncFromCache()
-    if (remoteSettings && Object.keys(remoteSettings).length > 0) {
-      return remoteSettings
-    }
 
     const mdmResult = getMdmSettings()
     if (Object.keys(mdmResult.settings).length > 0) {
@@ -379,12 +374,7 @@ export function getPolicySettingsOrigin():
   | 'file'
   | 'hkcu'
   | null {
-  // 1. Remote (highest)
-  const remoteSettings = getRemoteManagedSettingsSyncFromCache()
-  if (remoteSettings && Object.keys(remoteSettings).length > 0) {
-    return 'remote'
-  }
-
+  // 1. Remote (highest, now removed)
   // 2. Admin-only MDM (HKLM / macOS plist)
   const mdmResult = getMdmSettings()
   if (Object.keys(mdmResult.settings).length > 0) {
@@ -678,20 +668,7 @@ function loadSettingsFromDisk(): SettingsWithErrors {
         let policySettings: SettingsJson | null = null
         const policyErrors: ValidationError[] = []
 
-        // 1. Remote (highest priority)
-        const remoteSettings = getRemoteManagedSettingsSyncFromCache()
-        if (remoteSettings && Object.keys(remoteSettings).length > 0) {
-          const result = SettingsSchema().safeParse(remoteSettings)
-          if (result.success) {
-            policySettings = result.data
-          } else {
-            // Remote exists but is invalid — surface errors even as we fall through
-            policyErrors.push(
-              ...formatZodError(result.error, 'remote managed settings'),
-            )
-          }
-        }
-
+        // 1. Remote (highest priority, but removed)
         // 2. Admin-only MDM (HKLM / macOS plist)
         if (!policySettings) {
           const mdmResult = getMdmSettings()

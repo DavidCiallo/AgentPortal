@@ -2,8 +2,8 @@
  * Files are loaded in the following order:
  *
  * 1. Managed memory (eg. /etc/claude-code/CLAUDE.md) - Global instructions for all users
- * 2. User memory (~/.portal/CLAUDE.md) - Private global instructions for all projects
- * 3. Project memory (AGENTS.md or fallback CLAUDE.md, plus .portal/CLAUDE.md and .portal/rules/*.md in project roots) - Instructions checked into the codebase
+ * 2. User memory (~/.openclaude/CLAUDE.md) - Private global instructions for all projects
+ * 3. Project memory (AGENTS.md or fallback CLAUDE.md, plus .openclaude/CLAUDE.md and .openclaude/rules/*.md in project roots) - Instructions checked into the codebase
  * 4. Local memory (CLAUDE.local.md in project roots) - Private project-specific instructions
  *
  * Files are loaded in reverse order of priority, i.e. the latest files are highest priority
@@ -14,7 +14,7 @@
  * - Project and Local files are discovered by traversing from the current directory up to root
  * - Files closer to the current directory have higher priority (loaded later)
  * - AGENTS.md is preferred for root project instructions; CLAUDE.md is only used when AGENTS.md is absent
- * - .portal/CLAUDE.md and all .md files in .portal/rules/ are checked in each directory for Project memory
+ * - .openclaude/CLAUDE.md and all .md files in .openclaude/rules/ are checked in each directory for Project memory
  *
  * Memory @include directive:
  * - Memory files can include other files using @ notation
@@ -41,7 +41,6 @@ import {
   sep,
 } from 'path'
 import picomatch from 'picomatch'
-import { logEvent } from 'src/services/analytics/index.js'
 import {
   getAdditionalDirectoriesForClaudeMd,
   getOriginalCwd,
@@ -423,10 +422,6 @@ function handleMemoryFileReadError(error: unknown, filePath: string): void {
   // Log permission errors (EACCES) as they're actionable
   if (code === 'EACCES') {
     // Don't log the full file path to avoid PII/security issues
-    logEvent('tengu_claude_md_permission_error', {
-      is_access_error: 1,
-      has_home_dir: filePath.includes(getClaudeConfigHomeDir()) ? 1 : 0,
-    })
   }
 }
 
@@ -699,7 +694,7 @@ export async function processMemoryFile(
 }
 
 /**
- * Processes all .md files in the .portal/rules/ directory and its subdirectories
+ * Processes all .md files in the .openclaude/rules/ directory and its subdirectories
  * @param rulesDir The path to the rules directory
  * @param type Type of memory file (User, Project, Local)
  * @param processedPaths Set of already processed file paths
@@ -792,10 +787,6 @@ export async function processMdRules({
     return result
   } catch (error) {
     if (error instanceof Error && error.message.includes('EACCES')) {
-      logEvent('tengu_claude_rules_md_permission_error', {
-        is_access_error: 1,
-        has_home_dir: rulesDir.includes(getClaudeConfigHomeDir()) ? 1 : 0,
-      })
     }
     return []
   }
@@ -813,6 +804,10 @@ export const getMemoryFiles = memoize(
       forceIncludeExternal ||
       config.hasClaudeMdExternalIncludesApproved ||
       false
+    const includeExternalForUser =
+      forceIncludeExternal ||
+      config.hasClaudeMdExternalIncludesApprovedForUser ||
+      false
 
     // Process Managed file first (always loaded - policy settings)
     const managedClaudeMd = getMemoryPath('Managed')
@@ -824,7 +819,7 @@ export const getMemoryFiles = memoize(
         includeExternal,
       )),
     )
-    // Process Managed .portal/rules/*.md files
+    // Process Managed .openclaude/rules/*.md files
     const managedClaudeRulesDir = getManagedClaudeRulesDir()
     result.push(
       ...(await processMdRules({
@@ -844,17 +839,17 @@ export const getMemoryFiles = memoize(
           userClaudeMd,
           'User',
           processedPaths,
-          true, // User memory can always include external files
+          includeExternalForUser, // User-scope external-includes gate
         )),
       )
-      // Process User ~/.portal/rules/*.md files
+      // Process User ~/.openclaude/rules/*.md files
       const userClaudeRulesDir = getUserClaudeRulesDir()
       result.push(
         ...(await processMdRules({
           rulesDir: userClaudeRulesDir,
           type: 'User',
           processedPaths,
-          includeExternal: true,
+          includeExternal: includeExternalForUser, // User-scope external-includes gate
           conditionalRule: false,
         })),
       )
@@ -871,9 +866,9 @@ export const getMemoryFiles = memoize(
     }
 
     // When running from a git worktree nested inside its main repo (e.g.,
-    // .portal/worktrees/<name>/ from `claude -w`), the upward walk passes
+    // .openclaude/worktrees/<name>/ from `claude -w`), the upward walk passes
     // through both the worktree root and the main repo root. Both contain
-    // checked-in files like AGENTS.md/CLAUDE.md and .portal/rules/*.md, so the same
+    // checked-in files like AGENTS.md/CLAUDE.md and .openclaude/rules/*.md, so the same
     // content gets loaded twice. Skip Project-type (checked-in) files from
     // directories above the worktree but within the main repo — the worktree
     // already has its own checkout. CLAUDE.local.md is gitignored so it only
@@ -912,8 +907,8 @@ export const getMemoryFiles = memoize(
           )),
         )
 
-        // Try reading .portal/CLAUDE.md (Project)
-        const dotClaudePath = join(dir, '.portal', 'CLAUDE.md')
+        // Try reading .openclaude/CLAUDE.md (Project)
+        const dotClaudePath = join(dir, '.openclaude', 'CLAUDE.md')
         result.push(
           ...(await processMemoryFile(
             dotClaudePath,
@@ -923,8 +918,8 @@ export const getMemoryFiles = memoize(
           )),
         )
 
-        // Try reading .portal/rules/*.md files (Project)
-        const rulesDir = join(dir, '.portal', 'rules')
+        // Try reading .openclaude/rules/*.md files (Project)
+        const rulesDir = join(dir, '.openclaude', 'rules')
         result.push(
           ...(await processMdRules({
             rulesDir,
@@ -971,8 +966,8 @@ export const getMemoryFiles = memoize(
           )),
         )
 
-        // Try reading .portal/CLAUDE.md from the additional directory
-        const dotClaudePath = join(dir, '.portal', 'CLAUDE.md')
+        // Try reading .openclaude/CLAUDE.md from the additional directory
+        const dotClaudePath = join(dir, '.openclaude', 'CLAUDE.md')
         result.push(
           ...(await processMemoryFile(
             dotClaudePath,
@@ -982,8 +977,8 @@ export const getMemoryFiles = memoize(
           )),
         )
 
-        // Try reading .portal/rules/*.md files from the additional directory
-        const rulesDir = join(dir, '.portal', 'rules')
+        // Try reading .openclaude/rules/*.md files from the additional directory
+        const rulesDir = join(dir, '.openclaude', 'rules')
         result.push(
           ...(await processMdRules({
             rulesDir,
@@ -1044,19 +1039,6 @@ export const getMemoryFiles = memoize(
 
     if (!hasLoggedInitialLoad) {
       hasLoggedInitialLoad = true
-      logEvent('tengu_claudemd__initial_load', {
-        file_count: result.length,
-        total_content_length: totalContentLength,
-        user_count: typeCounts['User'] ?? 0,
-        project_count: typeCounts['Project'] ?? 0,
-        local_count: typeCounts['Local'] ?? 0,
-        managed_count: typeCounts['Managed'] ?? 0,
-        automem_count: typeCounts['AutoMem'] ?? 0,
-        ...(feature('TEAMMEM')
-          ? { teammem_count: typeCounts['TeamMem'] ?? 0 }
-          : {}),
-        duration_ms: Date.now() - startTime,
-      })
     }
 
     // Fire InstructionsLoaded hook for each instruction file loaded
@@ -1227,8 +1209,9 @@ export async function getManagedAndUserConditionalRules(
   processedPaths: Set<string>,
 ): Promise<MemoryFileInfo[]> {
   const result: MemoryFileInfo[] = []
+  const config = getCurrentProjectConfig()
 
-  // Process Managed conditional .portal/rules/*.md files
+  // Process Managed conditional .openclaude/rules/*.md files
   const managedClaudeRulesDir = getManagedClaudeRulesDir()
   result.push(
     ...(await processConditionedMdRules(
@@ -1241,15 +1224,19 @@ export async function getManagedAndUserConditionalRules(
   )
 
   if (isSettingSourceEnabled('userSettings')) {
-    // Process User conditional .portal/rules/*.md files
+    // Process User conditional .openclaude/rules/*.md files
+    // Gate external includes through the same User-scope approval flag
+    // as unconditional User rules, so declining approval blocks the
+    // conditional path too.
     const userClaudeRulesDir = getUserClaudeRulesDir()
+    const includeExternalForUser = config.hasClaudeMdExternalIncludesApprovedForUser ?? false
     result.push(
       ...(await processConditionedMdRules(
         targetPath,
         userClaudeRulesDir,
         'User',
         processedPaths,
-        true,
+        includeExternalForUser,
       )),
     )
   }
@@ -1273,7 +1260,7 @@ export async function getMemoryFilesForNestedDirectory(
 ): Promise<MemoryFileInfo[]> {
   const result: MemoryFileInfo[] = []
 
-  // Process project memory files (AGENTS.md first, otherwise CLAUDE.md, plus .portal/CLAUDE.md)
+  // Process project memory files (AGENTS.md first, otherwise CLAUDE.md, plus .openclaude/CLAUDE.md)
   if (isSettingSourceEnabled('projectSettings')) {
     const projectPath = getProjectInstructionFilePath(
       dir,
@@ -1287,7 +1274,7 @@ export async function getMemoryFilesForNestedDirectory(
         false,
       )),
     )
-    const dotClaudePath = join(dir, '.portal', 'CLAUDE.md')
+    const dotClaudePath = join(dir, '.openclaude', 'CLAUDE.md')
     result.push(
       ...(await processMemoryFile(
         dotClaudePath,
@@ -1306,9 +1293,9 @@ export async function getMemoryFilesForNestedDirectory(
     )
   }
 
-  const rulesDir = join(dir, '.portal', 'rules')
+  const rulesDir = join(dir, '.openclaude', 'rules')
 
-  // Process project unconditional .portal/rules/*.md files, which were not eagerly loaded
+  // Process project unconditional .openclaude/rules/*.md files, which were not eagerly loaded
   // Use a separate processedPaths set to avoid marking conditional rule files as processed
   const unconditionalProcessedPaths = new Set(processedPaths)
   result.push(
@@ -1321,7 +1308,7 @@ export async function getMemoryFilesForNestedDirectory(
     })),
   )
 
-  // Process project conditional .portal/rules/*.md files
+  // Process project conditional .openclaude/rules/*.md files
   result.push(
     ...(await processConditionedMdRules(
       targetPath,
@@ -1354,7 +1341,7 @@ export async function getConditionalRulesForCwdLevelDirectory(
   targetPath: string,
   processedPaths: Set<string>,
 ): Promise<MemoryFileInfo[]> {
-  const rulesDir = join(dir, '.portal', 'rules')
+  const rulesDir = join(dir, '.openclaude', 'rules')
   return processConditionedMdRules(
     targetPath,
     rulesDir,
@@ -1365,7 +1352,7 @@ export async function getConditionalRulesForCwdLevelDirectory(
 }
 
 /**
- * Processes all .md files in the .portal/rules/ directory and its subdirectories,
+ * Processes all .md files in the .openclaude/rules/ directory and its subdirectories,
  * filtering to only include files with frontmatter paths that match the target path
  * @param targetPath The file path to match against frontmatter glob patterns
  * @param rulesDir The path to the rules directory
@@ -1395,11 +1382,11 @@ export async function processConditionedMdRules(
       return false
     }
 
-    // For Project rules: glob patterns are relative to the directory containing .portal
+    // For Project rules: glob patterns are relative to the directory containing .openclaude
     // For Managed/User rules: glob patterns are relative to the original CWD
     const baseDir =
       type === 'Project'
-        ? dirname(dirname(rulesDir)) // Parent of .portal
+        ? dirname(dirname(rulesDir)) // Parent of .openclaude
         : getOriginalCwd() // Project root for managed/user rules
 
     const relativePath = isAbsolute(targetPath)
@@ -1426,34 +1413,45 @@ export type ExternalClaudeMdInclude = {
 
 export function getExternalClaudeMdIncludes(
   files: MemoryFileInfo[],
+  types?: MemoryType[],
 ): ExternalClaudeMdInclude[] {
   const externals: ExternalClaudeMdInclude[] = []
   for (const file of files) {
-    if (file.type !== 'User' && file.parent && !pathInOriginalCwd(file.path)) {
+    if (types && !types.includes(file.type)) continue
+    if (file.parent && !pathInOriginalCwd(file.path)) {
       externals.push({ path: file.path, parent: file.parent })
     }
   }
   return externals
 }
 
-export function hasExternalClaudeMdIncludes(files: MemoryFileInfo[]): boolean {
-  return getExternalClaudeMdIncludes(files).length > 0
+export function hasExternalClaudeMdIncludes(files: MemoryFileInfo[], types?: MemoryType[]): boolean {
+  return getExternalClaudeMdIncludes(files, types).length > 0
 }
 
-export async function shouldShowClaudeMdExternalIncludesWarning(): Promise<boolean> {
-  const config = getCurrentProjectConfig()
-  if (
-    config.hasClaudeMdExternalIncludesApproved ||
-    config.hasClaudeMdExternalIncludesWarningShown
-  ) {
-    return false
-  }
+export type ExternalIncludesScope = 'User' | 'Project' | 'None'
 
-  return hasExternalClaudeMdIncludes(await getMemoryFiles(true))
+export async function shouldShowClaudeMdExternalIncludesWarning(): Promise<ExternalIncludesScope> {
+  const config = getCurrentProjectConfig()
+  const files = await getMemoryFiles(true)
+
+  const hasProjectExternals =
+    !config.hasClaudeMdExternalIncludesApproved &&
+    !config.hasClaudeMdExternalIncludesWarningShown &&
+    hasExternalClaudeMdIncludes(files, ['Project', 'Local'])
+
+  const hasUserExternals =
+    !config.hasClaudeMdExternalIncludesApprovedForUser &&
+    !config.hasClaudeMdExternalIncludesWarningShownForUser &&
+    hasExternalClaudeMdIncludes(files, ['User'])
+
+  if (hasProjectExternals) return 'Project'
+  if (hasUserExternals) return 'User'
+  return 'None'
 }
 
 /**
- * Check if a file path is a memory file (AGENTS.md, CLAUDE.md, CLAUDE.local.md, or .portal/rules/*.md)
+ * Check if a file path is a memory file (AGENTS.md, CLAUDE.md, CLAUDE.local.md, or .openclaude/rules/*.md)
  */
 export function isMemoryFilePath(filePath: string): boolean {
   const name = basename(filePath)
@@ -1463,10 +1461,10 @@ export function isMemoryFilePath(filePath: string): boolean {
     return true
   }
 
-  // .md files in .portal/rules/ directories
+  // .md files in .openclaude/rules/ directories
   if (
     name.endsWith('.md') &&
-    filePath.includes(`${sep}.portal${sep}rules${sep}`)
+    filePath.includes(`${sep}.openclaude${sep}rules${sep}`)
   ) {
     return true
   }

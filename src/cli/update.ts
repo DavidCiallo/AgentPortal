@@ -1,5 +1,4 @@
 import chalk from 'chalk'
-import { logEvent } from 'src/services/analytics/index.js'
 import {
   getLatestVersion,
   type InstallStatus,
@@ -39,7 +38,6 @@ export async function update() {
   )
   return
 
-  logEvent('tengu_update_check', {})
   writeToStdout(`Current version: ${MACRO.VERSION}\n`)
 
   const channel = getInitialSettings()?.autoUpdatesChannel ?? 'latest'

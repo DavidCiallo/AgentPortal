@@ -1,7 +1,5 @@
 import { createHash } from 'crypto'
 import type { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from 'src/services/analytics/index.js'
-import { logEvent } from 'src/services/analytics/index.js'
-
 /**
  * Creates a truncated SHA256 hash (16 chars) for file paths
  * Used for privacy-preserving analytics on file operations
@@ -67,5 +65,4 @@ export function logFileOperation(params: {
       params.type as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
   }
 
-  logEvent('tengu_file_operation', metadata)
 }
