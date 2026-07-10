@@ -48,7 +48,6 @@ type State = {
   // never updated by mid-session EnterWorktreeTool.
   // Use for project identity (history, skills, sessions) not file operations.
   projectRoot: string
-  totalCostUSD: number
   totalAPIDuration: number
   totalAPIDurationWithoutRetries: number
   totalToolDuration: number
@@ -60,9 +59,6 @@ type State = {
   turnClassifierCount: number
   startTime: number
   lastInteractionTime: number
-  totalLinesAdded: number
-  totalLinesRemoved: number
-  hasUnknownModelCost: boolean
   cwd: string
   modelUsage: { [modelName: string]: ModelUsage }
   mainLoopModelOverride: ModelSetting | undefined
@@ -92,8 +88,6 @@ type State = {
   locCounter: AttributedCounter | null
   prCounter: AttributedCounter | null
   commitCounter: AttributedCounter | null
-  costCounter: AttributedCounter | null
-  tokenCounter: AttributedCounter | null
   codeEditToolDecisionCounter: AttributedCounter | null
   activeTimeCounter: AttributedCounter | null
   statsStore: { observe(name: string, value: number): void } | null
@@ -277,7 +271,6 @@ function getInitialState(): State {
   const state: State = {
     originalCwd: resolvedCwd,
     projectRoot: resolvedCwd,
-    totalCostUSD: 0,
     totalAPIDuration: 0,
     totalAPIDurationWithoutRetries: 0,
     totalToolDuration: 0,
@@ -289,9 +282,6 @@ function getInitialState(): State {
     turnClassifierCount: 0,
     startTime: Date.now(),
     lastInteractionTime: Date.now(),
-    totalLinesAdded: 0,
-    totalLinesRemoved: 0,
-    hasUnknownModelCost: false,
     cwd: resolvedCwd,
     modelUsage: {},
     mainLoopModelOverride: undefined,
@@ -323,8 +313,6 @@ function getInitialState(): State {
     locCounter: null,
     prCounter: null,
     commitCounter: null,
-    costCounter: null,
-    tokenCounter: null,
     codeEditToolDecisionCounter: null,
     activeTimeCounter: null,
     statsStore: null,
@@ -543,25 +531,6 @@ export function addToTotalDurationState(
   STATE.totalAPIDurationWithoutRetries += durationWithoutRetries
 }
 
-export function resetTotalDurationStateAndCost_FOR_TESTS_ONLY(): void {
-  STATE.totalAPIDuration = 0
-  STATE.totalAPIDurationWithoutRetries = 0
-  STATE.totalCostUSD = 0
-}
-
-export function addToTotalCostState(
-  cost: number,
-  modelUsage: ModelUsage,
-  model: string,
-): void {
-  STATE.modelUsage[model] = modelUsage
-  STATE.totalCostUSD += cost
-}
-
-export function getTotalCostUSD(): number {
-  return STATE.totalCostUSD
-}
-
 export function getTotalAPIDuration(): number {
   return STATE.totalAPIDuration
 }
@@ -683,19 +652,6 @@ function flushInteractionTime_inner(): void {
   interactionTimeDirty = false
 }
 
-export function addToTotalLinesChanged(added: number, removed: number): void {
-  STATE.totalLinesAdded += added
-  STATE.totalLinesRemoved += removed
-}
-
-export function getTotalLinesAdded(): number {
-  return STATE.totalLinesAdded
-}
-
-export function getTotalLinesRemoved(): number {
-  return STATE.totalLinesRemoved
-}
-
 export function getTotalInputTokens(): number {
   return sumBy(Object.values(STATE.modelUsage), 'inputTokens')
 }
@@ -735,14 +691,6 @@ export function getBudgetContinuationCount(): number {
 }
 export function incrementBudgetContinuationCount(): void {
   budgetContinuationCount++
-}
-
-export function setHasUnknownModelCost(): void {
-  STATE.hasUnknownModelCost = true
-}
-
-export function hasUnknownModelCost(): boolean {
-  return STATE.hasUnknownModelCost
 }
 
 export function getLastMainRequestId(): string | undefined {
@@ -856,60 +804,6 @@ export function setSdkBetas(betas: string[] | undefined): void {
   STATE.sdkBetas = betas
 }
 
-export function resetCostState(): void {
-  STATE.totalCostUSD = 0
-  STATE.totalAPIDuration = 0
-  STATE.totalAPIDurationWithoutRetries = 0
-  STATE.totalToolDuration = 0
-  STATE.startTime = Date.now()
-  STATE.totalLinesAdded = 0
-  STATE.totalLinesRemoved = 0
-  STATE.hasUnknownModelCost = false
-  STATE.modelUsage = {}
-  STATE.promptId = null
-}
-
-/**
- * Sets cost state values for session restore.
- * Called by restoreCostStateForSession in cost-tracker.ts.
- */
-export function setCostStateForRestore({
-  totalCostUSD,
-  totalAPIDuration,
-  totalAPIDurationWithoutRetries,
-  totalToolDuration,
-  totalLinesAdded,
-  totalLinesRemoved,
-  lastDuration,
-  modelUsage,
-}: {
-  totalCostUSD: number
-  totalAPIDuration: number
-  totalAPIDurationWithoutRetries: number
-  totalToolDuration: number
-  totalLinesAdded: number
-  totalLinesRemoved: number
-  lastDuration: number | undefined
-  modelUsage: { [modelName: string]: ModelUsage } | undefined
-}): void {
-  STATE.totalCostUSD = totalCostUSD
-  STATE.totalAPIDuration = totalAPIDuration
-  STATE.totalAPIDurationWithoutRetries = totalAPIDurationWithoutRetries
-  STATE.totalToolDuration = totalToolDuration
-  STATE.totalLinesAdded = totalLinesAdded
-  STATE.totalLinesRemoved = totalLinesRemoved
-
-  // Restore per-model usage breakdown
-  if (modelUsage) {
-    STATE.modelUsage = modelUsage
-  }
-
-  // Adjust startTime to make wall duration accumulate
-  if (lastDuration) {
-    STATE.startTime = Date.now() - lastDuration
-  }
-}
-
 // Only used in tests
 export function resetStateForTests(): void {
   if (process.env.NODE_ENV !== 'test') {
@@ -960,14 +854,6 @@ export function setMeter(
   STATE.commitCounter = createCounter('claude_code.commit.count', {
     description: 'Number of git commits created',
   })
-  STATE.costCounter = createCounter('claude_code.cost.usage', {
-    description: 'Cost of the Portal session',
-    unit: 'USD',
-  })
-  STATE.tokenCounter = createCounter('claude_code.token.usage', {
-    description: 'Number of tokens used',
-    unit: 'tokens',
-  })
   STATE.codeEditToolDecisionCounter = createCounter(
     'claude_code.code_edit_tool.decision',
     {
@@ -999,14 +885,6 @@ export function getPrCounter(): AttributedCounter | null {
 
 export function getCommitCounter(): AttributedCounter | null {
   return STATE.commitCounter
-}
-
-export function getCostCounter(): AttributedCounter | null {
-  return STATE.costCounter
-}
-
-export function getTokenCounter(): AttributedCounter | null {
-  return STATE.tokenCounter
 }
 
 export function getCodeEditToolDecisionCounter(): AttributedCounter | null {

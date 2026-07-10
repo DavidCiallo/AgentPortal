@@ -7,7 +7,6 @@ import { getOriginalCwd, switchSession } from '../bootstrap/state.js';
 import type { Command } from '../commands.js';
 import { LogSelector } from '../components/LogSelector.js';
 import { Spinner } from '../components/Spinner.js';
-import { restoreCostStateForSession } from '../cost-tracker.js';
 import { setClipboard } from '../ink/termio/osc.js';
 import { Box, Text } from '../ink.js';
 import { useKeybinding } from '../keybindings/useKeybinding.js';
@@ -223,7 +222,6 @@ export function ResumeConversation({
         switchSession(asSessionId(result_3.sessionId), log_0.fullPath ? dirname(log_0.fullPath) : null);
         await renameRecordingForSession();
         await resetSessionFilePointer();
-        restoreCostStateForSession(result_3.sessionId);
       } else if (forkSession && result_3.contentReplacements?.length) {
         await recordContentReplacement(result_3.contentReplacements);
       }

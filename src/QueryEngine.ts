@@ -23,10 +23,8 @@ import {
   LOCAL_COMMAND_STDOUT_TAG,
 } from './constants/xml.js'
 import {
-  getModelUsage,
   getTotalAPIDuration,
-  getTotalCost,
-} from './cost-tracker.js'
+} from './bootstrap/state.js'
 import type { CanUseToolFn } from './hooks/useCanUseTool.js'
 import { loadMemoryPrompt } from './memdir/memdir.js'
 import { hasAutoMemPathOverride } from './memdir/paths.js'
@@ -621,9 +619,9 @@ export class QueryEngine {
         result: resultText ?? '',
         stop_reason: null,
         session_id: getSessionId(),
-        total_cost_usd: getTotalCost(),
+        total_cost_usd: 0,
         usage: this.totalUsage,
-        modelUsage: getModelUsage(),
+        modelUsage: {},
         permission_denials: this.permissionDenials,
         fast_mode_state: getFastModeState(
           mainLoopModel,
@@ -841,9 +839,9 @@ export class QueryEngine {
               num_turns: message.attachment.turnCount,
               stop_reason: lastStopReason,
               session_id: getSessionId(),
-              total_cost_usd: getTotalCost(),
+              total_cost_usd: 0,
               usage: this.totalUsage,
-              modelUsage: getModelUsage(),
+              modelUsage: {},
               permission_denials: this.permissionDenials,
               fast_mode_state: getFastModeState(
                 mainLoopModel,
@@ -952,39 +950,6 @@ export class QueryEngine {
           break
       }
 
-      // Check if USD budget has been exceeded
-      if (maxBudgetUsd !== undefined && getTotalCost() >= maxBudgetUsd) {
-        if (persistSession) {
-          if (
-            isEnvTruthy(process.env.CLAUDE_CODE_EAGER_FLUSH) ||
-            isEnvTruthy(process.env.CLAUDE_CODE_IS_COWORK)
-          ) {
-            await flushSessionStorage()
-          }
-        }
-        yield {
-          type: 'result',
-          subtype: 'error_max_budget_usd',
-          duration_ms: Date.now() - startTime,
-          duration_api_ms: getTotalAPIDuration(),
-          is_error: true,
-          num_turns: turnCount,
-          stop_reason: lastStopReason,
-          session_id: getSessionId(),
-          total_cost_usd: getTotalCost(),
-          usage: this.totalUsage,
-          modelUsage: getModelUsage(),
-          permission_denials: this.permissionDenials,
-          fast_mode_state: getFastModeState(
-            mainLoopModel,
-            initialAppState.fastMode,
-          ),
-          uuid: randomUUID(),
-          errors: [`Reached maximum budget ($${maxBudgetUsd})`],
-        }
-        return
-      }
-
       // Check if structured output retry limit exceeded (only on user messages)
       if (message.type === 'user' && jsonSchema) {
         const currentCalls = countToolCalls(
@@ -1014,9 +979,9 @@ export class QueryEngine {
             num_turns: turnCount,
             stop_reason: lastStopReason,
             session_id: getSessionId(),
-            total_cost_usd: getTotalCost(),
+            total_cost_usd: 0,
             usage: this.totalUsage,
-            modelUsage: getModelUsage(),
+            modelUsage: {},
             permission_denials: this.permissionDenials,
             fast_mode_state: getFastModeState(
               mainLoopModel,
@@ -1073,9 +1038,9 @@ export class QueryEngine {
         num_turns: turnCount,
         stop_reason: lastStopReason,
         session_id: getSessionId(),
-        total_cost_usd: getTotalCost(),
+        total_cost_usd: 0,
         usage: this.totalUsage,
-        modelUsage: getModelUsage(),
+        modelUsage: {},
         permission_denials: this.permissionDenials,
         fast_mode_state: getFastModeState(
           mainLoopModel,
@@ -1126,9 +1091,9 @@ export class QueryEngine {
       result: textResult,
       stop_reason: lastStopReason,
       session_id: getSessionId(),
-      total_cost_usd: getTotalCost(),
+      total_cost_usd: 0,
       usage: this.totalUsage,
-      modelUsage: getModelUsage(),
+      modelUsage: {},
       permission_denials: this.permissionDenials,
       structured_output: structuredOutputFromTool,
       fast_mode_state: getFastModeState(

@@ -139,7 +139,6 @@ import {
 } from 'src/constants/betas.js'
 import type { QuerySource } from 'src/constants/querySource.js'
 import type { Notification } from 'src/context/notifications.js'
-import { addToTotalSessionCost } from 'src/cost-tracker.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from 'src/services/analytics/growthbook.js'
 import type { AgentId } from 'src/types/ids.js'
 import {
@@ -172,7 +171,6 @@ import {
 import { returnValue } from 'src/utils/generators.js'
 import { headlessProfilerCheckpoint } from 'src/utils/headlessProfiler.js'
 import { isMcpInstructionsDeltaEnabled } from 'src/utils/mcpInstructionsDelta.js'
-import { calculateUSDCost } from 'src/utils/modelCost.js'
 import { endQueryProfile, queryCheckpoint } from 'src/utils/queryProfiler.js'
 import {
   modelSupportsAdaptiveThinking,
@@ -2676,18 +2674,8 @@ async function* queryModel(
     // until the generator itself is GC'd (see GH #32920).
     releaseStreamResources()
 
-    // Non-streaming fallback cost: the streaming path tracks cost in the
-    // message_delta handler before any yield. Fallback pushes to newMessages
-    // then yields, so tracking must be here to survive .return() at the yield.
     if (fallbackMessage) {
-      const fallbackUsage = fallbackMessage.message.usage
       stopReason = fallbackMessage.message.stop_reason
-      const fallbackCost = calculateUSDCost(resolvedModel, fallbackUsage)
-      costUSD += addToTotalSessionCost(
-        fallbackCost,
-        fallbackUsage,
-        options.model,
-      )
     }
   }
 

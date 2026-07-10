@@ -19,7 +19,6 @@ import { openFileInExternalEditor } from '../utils/editor.js';
 import { writeFile } from 'fs/promises';
 import { Box, Text, useStdin, useTheme, useTerminalFocus, useTerminalTitle, useTabStatus } from '../ink.js';
 import type { TabStatusKind } from '../ink/hooks/use-tab-status.js';
-import { CostThresholdDialog } from '../components/CostThresholdDialog.js';
 import { IdleReturnDialog } from '../components/IdleReturnDialog.js';
 import * as React from 'react';
 import { useEffect, useMemo, useRef, useState, useCallback, useDeferredValue, useLayoutEffect, type RefObject } from 'react';
@@ -29,7 +28,7 @@ import { startPreventSleep, stopPreventSleep } from '../services/preventSleep.js
 import { useTerminalNotification } from '../ink/useTerminalNotification.js';
 import { hasCursorUpViewportYankBug } from '../ink/terminal.js';
 import { createFileStateCacheWithSizeLimit, mergeFileStateCaches, READ_FILE_STATE_CACHE_SIZE } from '../utils/fileStateCache.js';
-import { updateLastInteractionTime, getLastInteractionTime, getOriginalCwd, getProjectRoot, getSessionId, switchSession, setCostStateForRestore, getTurnHookDurationMs, getTurnHookCount, resetTurnHookDuration, getTurnToolDurationMs, getTurnToolCount, resetTurnToolDuration, getTurnClassifierDurationMs, getTurnClassifierCount, resetTurnClassifierDuration } from '../bootstrap/state.js';
+import { updateLastInteractionTime, getLastInteractionTime, getOriginalCwd, getProjectRoot, getSessionId, switchSession, getTurnHookDurationMs, getTurnHookCount, resetTurnHookDuration, getTurnToolDurationMs, getTurnToolCount, resetTurnToolDuration, getTurnClassifierDurationMs, getTurnClassifierCount, resetTurnClassifierDuration } from '../bootstrap/state.js';
 import { asSessionId, asAgentId } from '../types/ids.js';
 import { logForDebugging } from '../utils/debug.js';
 import { QueryGuard } from '../utils/QueryGuard.js';
@@ -72,8 +71,6 @@ import { buildEffectiveSystemPrompt } from '../utils/systemPrompt.js';
 import { getSystemContext, getUserContext } from '../context.js';
 import { getMemoryFiles } from '../utils/claudemd.js';
 import { startBackgroundHousekeeping } from '../utils/backgroundHousekeeping.js';
-import { getTotalCost, saveCurrentSessionCosts, resetCostState, getStoredSessionCosts } from '../cost-tracker.js';
-import { useCostSummary } from '../costHook.js';
 import { useFpsMetrics } from '../context/fpsMetrics.js';
 import { useAfterFirstRender } from '../hooks/useAfterFirstRender.js';
 import { useDeferredHookMessages } from '../hooks/useDeferredHookMessages.js';
@@ -92,7 +89,7 @@ import { useSwarmInitialization } from '../hooks/useSwarmInitialization.js';
 import { useTeammateViewAutoExit } from '../hooks/useTeammateViewAutoExit.js';
 import { errorMessage } from '../utils/errors.js';
 import { isHumanTurn } from '../utils/messagePredicates.js';
-import { logError } from '../utils/log.js';
+import { logError } from '../utils/log.js';
 /* eslint-disable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
 const useVoiceIntegration: typeof import('../hooks/useVoiceIntegration.js').useVoiceIntegration = feature('VOICE_MODE') ? require('../hooks/useVoiceIntegration.js').useVoiceIntegration : () => ({
   stripTrailing: () => 0,
@@ -109,7 +106,7 @@ const useFrustrationDetection: typeof import('../components/FeedbackSurvey/useFr
 });
 // Ant-only org warning. Conditional require so the org UUID list is
 // eliminated from external builds (one UUID is on excluded-strings).
-const useAntOrgWarningNotification: typeof import('../hooks/notifs/useAntOrgWarningNotification.js').useAntOrgWarningNotification = "external" === 'ant' ? require('../hooks/notifs/useAntOrgWarningNotification.js').useAntOrgWarningNotification : () => { };
+const useAntOrgWarningNotification: typeof import('../hooks/notifs/useAntOrgWarningNotification.js').useAntOrgWarningNotification = "external" === 'ant' ? require('../hooks/notifs/useAntOrgWarningNotification.js').useAntOrgWarningNotification : () => { };
 const getCoordinatorUserContext: (mcpClients: ReadonlyArray<{
   name: string;
 }>, scratchpadDir?: string) => {
@@ -127,7 +124,6 @@ import { SLEEP_TOOL_NAME } from '../tools/SleepTool/prompt.js';
 import { clearSpeculativeChecks } from '../tools/BashTool/bashPermissions.js';
 import type { AutoUpdaterResult } from '../utils/autoUpdater.js';
 import { getGlobalConfig, saveGlobalConfig, getGlobalConfigWriteCount } from '../utils/config.js';
-import { hasConsoleBillingAccess } from '../utils/billing.js';
 import { getFeatureValue_CACHED_MAY_BE_STALE } from 'src/services/analytics/growthbook.js';
 import { textForResubmit, handleMessageFromStream, type StreamingToolUse, type StreamingThinking, isCompactBoundaryMessage, getMessagesAfterCompactBoundary, getContentText, createUserMessage, createAssistantMessage, createTurnDurationMessage, createAgentsKilledMessage, createApiMetricsMessage, createSystemMessage, createCommandInputMessage, formatCommandInputTags } from '../utils/messages.js';
 import { generateSessionTitle } from '../utils/sessionTitle.js';
@@ -185,7 +181,7 @@ import { computeStandaloneAgentContext, restoreAgentFromSession, restoreSessionS
 import { isBgSession, updateSessionName, updateSessionActivity } from '../utils/concurrentSessions.js';
 import { isInProcessTeammateTask, type InProcessTeammateTaskState } from '../tasks/InProcessTeammateTask/types.js';
 import { restoreRemoteAgentTasks } from '../tasks/RemoteAgentTask/RemoteAgentTask.js';
-import { useInboxPoller } from '../hooks/useInboxPoller.js';
+import { useInboxPoller } from '../hooks/useInboxPoller.js';
 /* eslint-disable @typescript-eslint/no-require-imports */
 const proactiveModule = feature('PROACTIVE') || feature('KAIROS') ? require('../proactive/index.js') : null;
 const PROACTIVE_NO_OP_SUBSCRIBE = (_cb: () => void) => () => { };
@@ -718,7 +714,7 @@ export function REPL({
   const [ideSelection, setIDESelection] = useState<IDESelection | undefined>(undefined);
   const [ideToInstallExtension, setIDEToInstallExtension] = useState<IdeType | null>(null);
   const [ideInstallationStatus, setIDEInstallationStatus] = useState<IDEExtensionInstallationStatus | null>(null);
-  const [showIdeOnboarding, setShowIdeOnboarding] = useState(false);
+  const [showIdeOnboarding, setShowIdeOnboarding] = useState(false);
   const [showModelSwitchCallout, setShowModelSwitchCallout] = useState(() => {
     if ("external" === 'ant') {
       return shouldShowAntModelSwitch();
@@ -1487,7 +1483,6 @@ export function REPL({
   const [spinnerShimmerColor, setSpinnerShimmerColor] = useState<keyof Theme | null>(null);
   const [isMessageSelectorVisible, setIsMessageSelectorVisible] = useState(false);
   const [messageSelectorPreselect, setMessageSelectorPreselect] = useState<UserMessage | undefined>(undefined);
-  const [showCostDialog, setShowCostDialog] = useState(false);
   const [conversationId, setConversationId] = useState(randomUUID());
 
   // Idle-return dialog: shown when user submits after a long idle gap
@@ -1513,7 +1508,6 @@ export function REPL({
   const [contentReplacementStateRef] = useState(() => ({
     current: provisionContentReplacementState(initialMessages, initialContentReplacements)
   }));
-  const [haveShownCostDialog, setHaveShownCostDialog] = useState(getGlobalConfig().hasAcknowledgedCostThreshold);
   const [vimMode, setVimMode] = useState<VimMode>('INSERT');
   const [showBashesDialog, setShowBashesDialog] = useState<string | boolean>(false);
   const [isSearchingHistory, setIsSearchingHistory] = useState(false);
@@ -1840,16 +1834,6 @@ export function REPL({
       setAbortController(null);
       setConversationId(sessionId);
 
-      // Get target session's costs BEFORE saving current session
-      // (saveCurrentSessionCosts overwrites the config, so we need to read first)
-      const targetSessionCosts = getStoredSessionCosts(sessionId);
-
-      // Save current session's costs before switching to avoid losing accumulated costs
-      saveCurrentSessionCosts();
-
-      // Reset cost state for clean slate before restoring target session
-      resetCostState();
-
       // Switch session (id + project dir atomically). fullPath may point to
       // a different project (cross-worktree, /branch); null derives from
       // current originalCwd.
@@ -1912,11 +1896,6 @@ export function REPL({
         } = require('../coordinator/coordinatorMode.js') as typeof import('../coordinator/coordinatorMode.js');
         /* eslint-enable @typescript-eslint/no-require-imports */
         saveMode(isCoordinatorMode() ? 'coordinator' : 'normal');
-      }
-
-      // Restore target session's costs from the data we read earlier
-      if (targetSessionCosts) {
-        setCostStateForRestore(targetSessionCosts);
       }
 
       // Reconstruct replacement state for the resumed session. Runs after
@@ -2010,14 +1989,11 @@ export function REPL({
   const [exitFlow, setExitFlow] = useState<React.ReactNode>(null);
   const [isExiting, setIsExiting] = useState(false);
 
-  // Calculate if cost dialog should be shown
-  const showingCostDialog = !isLoading && showCostDialog;
-
   // Determine which dialog should have focus (if any)
   // Permission and interactive dialogs can show even when toolJSX is set,
   // as long as shouldContinueAnimation is true. This prevents deadlocks when
   // agents set background hints while waiting for user interaction.
-  function getFocusedInputDialog(): 'message-selector' | 'sandbox-permission' | 'tool-permission' | 'prompt' | 'worker-sandbox-permission' | 'elicitation' | 'cost' | 'idle-return' | 'init-onboarding' | 'ide-onboarding' | 'model-switch' | 'undercover-callout' | 'effort-callout' | 'remote-callout' | 'lsp-recommendation' | 'plugin-hint' | 'desktop-upsell' | 'ultraplan-choice' | 'ultraplan-launch' | undefined {
+  function getFocusedInputDialog(): 'message-selector' | 'sandbox-permission' | 'tool-permission' | 'prompt' | 'worker-sandbox-permission' | 'elicitation' | 'idle-return' | 'init-onboarding' | 'ide-onboarding' | 'model-switch' | 'undercover-callout' | 'effort-callout' | 'remote-callout' | 'lsp-recommendation' | 'plugin-hint' | 'desktop-upsell' | 'ultraplan-choice' | 'ultraplan-launch' | undefined {
     // Exit states always take precedence
     if (isExiting || exitFlow) return undefined;
 
@@ -2035,7 +2011,6 @@ export function REPL({
     // Worker sandbox permission prompts (network access) from swarm workers
     if (allowDialogsWithAnimation && workerSandboxPermissions.queue[0]) return 'worker-sandbox-permission';
     if (allowDialogsWithAnimation && elicitation.queue[0]) return 'elicitation';
-    if (allowDialogsWithAnimation && showingCostDialog) return 'cost';
     if (allowDialogsWithAnimation && idleReturnPending) return 'idle-return';
     if (feature('ULTRAPLAN') && allowDialogsWithAnimation && !isLoading && ultraplanPendingChoice) return 'ultraplan-choice';
     if (feature('ULTRAPLAN') && allowDialogsWithAnimation && !isLoading && ultraplanLaunchPending) return 'ultraplan-launch';
@@ -2069,7 +2044,7 @@ export function REPL({
   const focusedInputDialog = getFocusedInputDialog();
 
   // True when permission prompts exist but are hidden because the user is typing
-  const hasSuppressedDialogs = promptTypingSuppressionActive && (sandboxPermissionRequestQueue[0] || toolUseConfirmQueue[0] || promptQueue[0] || workerSandboxPermissions.queue[0] || elicitation.queue[0] || showingCostDialog);
+  const hasSuppressedDialogs = promptTypingSuppressionActive && (sandboxPermissionRequestQueue[0] || toolUseConfirmQueue[0] || promptQueue[0] || workerSandboxPermissions.queue[0] || elicitation.queue[0]);
 
   // Keep ref in sync so timer callbacks can read the current value
   focusedInputDialogRef.current = focusedInputDialog;
@@ -2204,19 +2179,6 @@ export function REPL({
     inputValue,
     streamMode
   };
-  useEffect(() => {
-    const totalCost = getTotalCost();
-    if (totalCost >= 5 /* $5 */ && !showCostDialog && !haveShownCostDialog) {
-      logEvent('tengu_cost_threshold_reached', {});
-      // Mark as shown even if the dialog won't render (no console billing
-      // access). Otherwise this effect re-fires on every message change for
-      // the rest of the session — 200k+ spurious events observed.
-      setHaveShownCostDialog(true);
-      if (hasConsoleBillingAccess()) {
-        setShowCostDialog(true);
-      }
-    }
-  }, [messages, showCostDialog, haveShownCostDialog]);
   const sandboxAskCallback: SandboxAskCallback = useCallback(async (hostPattern: NetworkHostPattern) => {
     // If running as a swarm worker, forward the request to the leader via mailbox
     if (isAgentSwarmsEnabled() && isSwarmWorker()) {
@@ -3800,9 +3762,6 @@ export function REPL({
     // Initial message handling is done via the initialMessage effect
   }
 
-  // Register cost summary tracker
-  useCostSummary(useFpsMetrics());
-
   // Record transcripts locally, for debugging and conversation recovery
   // Don't record conversation if we only have initial messages; optimizes
   // the case where user resumes a conversation then quites before doing
@@ -4707,15 +4666,6 @@ export function REPL({
               }
             }));
             currentRequest?.onWaitingDismiss?.(action);
-          }} />}
-          {focusedInputDialog === 'cost' && <CostThresholdDialog onDone={() => {
-            setShowCostDialog(false);
-            setHaveShownCostDialog(true);
-            saveGlobalConfig(current => ({
-              ...current,
-              hasAcknowledgedCostThreshold: true
-            }));
-            logEvent('tengu_cost_threshold_acknowledged', {});
           }} />}
           {focusedInputDialog === 'idle-return' && idleReturnPending && <IdleReturnDialog idleMinutes={idleReturnPending.idleMinutes} totalInputTokens={getTotalInputTokens()} onDone={async action => {
             const pending = idleReturnPending;

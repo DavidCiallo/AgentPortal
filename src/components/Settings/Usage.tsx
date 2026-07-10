@@ -2,7 +2,6 @@ import { c as _c } from "react-compiler-runtime";
 import * as React from 'react';
 import { useEffect, useState } from 'react';
 import { extraUsage as extraUsageCommand } from 'src/commands/extra-usage/index.js';
-import { formatCost } from 'src/cost-tracker.js';
 import { getSubscriptionType } from 'src/utils/auth.js';
 import { useTerminalSize } from '../../hooks/useTerminalSize.js';
 import { Box, Text } from '../../ink.js';
@@ -311,7 +310,7 @@ function ExtraUsageSection(t0) {
   const t1 = extraUsage.used_credits / 100;
   let t2;
   if ($[2] !== t1) {
-    t2 = formatCost(t1, 2);
+    t2 = `$${t1.toFixed(2)}`;
     $[2] = t1;
     $[3] = t2;
   } else {
@@ -321,7 +320,7 @@ function ExtraUsageSection(t0) {
   const t3 = extraUsage.monthly_limit / 100;
   let t4;
   if ($[4] !== t3) {
-    t4 = formatCost(t3, 2);
+    t4 = `$${t3.toFixed(2)}`;
     $[4] = t3;
     $[5] = t4;
   } else {

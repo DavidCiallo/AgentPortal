@@ -4,8 +4,6 @@ import { mkdir, readFile, writeFile } from 'fs/promises'
 import isPlainObject from 'lodash-es/isPlainObject.js'
 import mapValues from 'lodash-es/mapValues.js'
 import { dirname, join } from 'path'
-import { addToTotalSessionCost } from 'src/cost-tracker.js'
-import { calculateUSDCost } from 'src/utils/modelCost.js'
 import type {
   AssistantMessage,
   Message,
@@ -116,7 +114,6 @@ export async function withVCR(
     const cached = jsonParse(
       await readFile(filename, { encoding: 'utf8' }),
     ) as { output: (AssistantMessage | StreamEvent)[] }
-    cached.output.forEach(addCachedCostToTotalSessionCost)
     return cached.output.map((message, index) =>
       mapMessage(message, hydrateValue, index, randomUUID()),
     )
@@ -155,18 +152,6 @@ export async function withVCR(
     { encoding: 'utf8' },
   )
   return results
-}
-
-function addCachedCostToTotalSessionCost(
-  message: AssistantMessage | StreamEvent,
-): void {
-  if (message.type === 'stream_event') {
-    return
-  }
-  const model = message.message.model
-  const usage = message.message.usage
-  const costUSD = calculateUSDCost(model, usage)
-  addToTotalSessionCost(costUSD, usage, model)
 }
 
 function mapMessages(

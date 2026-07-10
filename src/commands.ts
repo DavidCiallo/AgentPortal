@@ -9,7 +9,6 @@ import commitPushPr from './commands/commit-push-pr.js'
 import compact from './commands/compact/index.js'
 import config from './commands/config/index.js'
 import { context, contextNonInteractive } from './commands/context/index.js'
-import cost from './commands/cost/index.js'
 import diff from './commands/diff/index.js'
 import dream from './commands/dream/index.js'
 import doctor from './commands/doctor/index.js'
@@ -122,7 +121,6 @@ import wiki from './commands/wiki/index.js'
 import sandboxToggle from './commands/sandbox-toggle/index.js'
 import stickers from './commands/stickers/index.js'
 import advisor from './commands/advisor.js'
-import summary from './commands/summary/index.js'
 import { logError } from './utils/log.js'
 import { toError } from './utils/errors.js'
 import { logForDebugging } from './utils/debug.js'
@@ -217,7 +215,6 @@ const COMMANDS = memoize((): Command[] => [
   config,
   copy,
   contextNonInteractive,
-  cost,
   diff,
   dream,
   doctor,
@@ -554,7 +551,6 @@ export const REMOTE_SAFE_COMMANDS: Set<Command> = new Set([
   theme, // Change terminal theme
   color, // Change agent color
   vim, // Toggle vim mode
-  cost, // Show session cost (local cost tracking)
   usage, // Show usage info
   copy, // Copy last message
   btw, // Quick note
@@ -581,8 +577,6 @@ export const BRIDGE_SAFE_COMMANDS: Set<Command> = new Set(
   [
     compact, // Shrink context — useful mid-session from a phone
     clear, // Wipe transcript
-    cost, // Show session cost
-    summary, // Summarize conversation
     releaseNotes, // Show changelog
     files, // List tracked files
   ].filter((c): c is Command => c !== null),

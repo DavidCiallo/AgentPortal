@@ -1,7 +1,6 @@
 import { feature } from 'bun:bundle'
 import * as React from 'react'
 
-import { resetCostState } from '../../bootstrap/state.js'
 import {
   clearTrustedDeviceToken,
   enrollTrustedDevice,
@@ -58,7 +57,6 @@ export async function call(
 
         // Post-login refresh logic. Keep in sync with onboarding in
         // src/interactiveHelpers.tsx.
-        resetCostState()
         void refreshRemoteManagedSettings()
         void refreshPolicyLimits()
         resetUserCache()
