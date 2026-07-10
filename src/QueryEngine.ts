@@ -2,19 +2,7 @@ import { feature } from 'bun:bundle'
 import type { ContentBlockParam } from '@anthropic-ai/sdk/resources/messages.mjs'
 import { randomUUID } from 'crypto'
 import last from 'lodash-es/last.js'
-import {
-  getSessionId,
-  isSessionPersistenceDisabled,
-} from 'src/bootstrap/state.js'
-import type {
-  PermissionMode,
-  SDKCompactBoundaryMessage,
-  SDKMessage,
-  SDKPermissionDenial,
-  SDKStatus,
-  SDKUserMessageReplay,
-} from 'src/entrypoints/agentSdkTypes.js'
-import type { NonNullableUsage } from 'src/entrypoints/sdk/sdkUtilityTypes.js'
+import { getSessionId, isSessionPersistenceDisabled, } from 'src/bootstrap/state.js'
 import stripAnsi from 'strip-ansi'
 import type { Command } from './commands.js'
 import { getSlashCommandToolSkills } from './commands.js'
@@ -49,29 +37,17 @@ import {
   fileHistoryEnabled,
   fileHistoryMakeSnapshot,
 } from './utils/fileHistory.js'
-import {
-  cloneFileStateCache,
-  type FileStateCache,
-} from './utils/fileStateCache.js'
+import { cloneFileStateCache, type FileStateCache, } from './utils/fileStateCache.js'
 import { headlessProfilerCheckpoint } from './utils/headlessProfiler.js'
 import { registerStructuredOutputEnforcement } from './utils/hooks/hookHelpers.js'
 import { getInMemoryErrors } from './utils/log.js'
 import { countToolCalls, SYNTHETIC_MESSAGES } from './utils/messages.js'
-import {
-  getMainLoopModel,
-  parseUserSpecifiedModel,
-} from './utils/model/model.js'
+import { getMainLoopModel, parseUserSpecifiedModel, } from './utils/model/model.js'
 import { loadAllPluginsCacheOnly } from './utils/plugins/pluginLoader.js'
-import {
-  type ProcessUserInputContext,
-  processUserInput,
-} from './utils/processUserInput/processUserInput.js'
+import { type ProcessUserInputContext, processUserInput, } from './utils/processUserInput/processUserInput.js'
 import { fetchSystemPromptParts } from './utils/queryContext.js'
 import { setCwd } from './utils/Shell.js'
-import {
-  flushSessionStorage,
-  recordTranscript,
-} from './utils/sessionStorage.js'
+import { flushSessionStorage, recordTranscript, } from './utils/sessionStorage.js'
 import { asSystemPrompt } from './utils/systemPromptType.js'
 import { resolveThemeSetting } from './utils/systemTheme.js'
 import {
@@ -109,8 +85,8 @@ const getCoordinatorUserContext: (
   mcpClients: ReadonlyArray<{ name: string }>,
   scratchpadDir?: string,
 ) => { [k: string]: string } = feature('COORDINATOR_MODE')
-  ? require('./coordinator/coordinatorMode.js').getCoordinatorUserContext
-  : () => ({})
+    ? require('./coordinator/coordinatorMode.js').getCoordinatorUserContext
+    : () => ({})
 /* eslint-enable @typescript-eslint/no-require-imports */
 
 /* eslint-disable @typescript-eslint/no-require-imports */
@@ -139,7 +115,6 @@ export type QueryEngineConfig = {
   fallbackModel?: string
   thinkingConfig?: ThinkingConfig
   maxTurns?: number
-  maxBudgetUsd?: number
   taskBudget?: { total: number }
   jsonSchema?: Record<string, unknown>
   verbose?: boolean
@@ -181,7 +156,6 @@ export class QueryEngine {
   private mutableMessages: Message[]
   private abortController: AbortController
   private permissionDenials: SDKPermissionDenial[]
-  private totalUsage: NonNullableUsage
   private hasHandledOrphanedPermission = false
   private readFileState: FileStateCache
   // Turn-scoped skill discovery tracking (feeds was_discovered on
@@ -212,7 +186,6 @@ export class QueryEngine {
       verbose = false,
       thinkingConfig,
       maxTurns,
-      maxBudgetUsd,
       taskBudget,
       canUseTool,
       customSystemPrompt,
@@ -338,7 +311,7 @@ export class QueryEngine {
       setMessages: fn => {
         this.mutableMessages = fn(this.mutableMessages)
       },
-      onChangeAPIKey: () => {},
+      onChangeAPIKey: () => { },
       handleElicitation: this.config.handleElicitation,
       options: {
         commands,
@@ -355,7 +328,6 @@ export class QueryEngine {
         appendSystemPrompt,
         agentDefinitions: { activeAgents: agents, allAgents: [] },
         theme: resolveThemeSetting(getGlobalConfig().theme),
-        maxBudgetUsd,
       },
       getAppState,
       setAppState,
@@ -365,8 +337,8 @@ export class QueryEngine {
       loadedNestedMemoryPaths: this.loadedNestedMemoryPaths,
       dynamicSkillDirTriggers: new Set<string>(),
       discoveredSkillNames: this.discoveredSkillNames,
-      setInProgressToolUseIDs: () => {},
-      setResponseLength: () => {},
+      setInProgressToolUseIDs: () => { },
+      setResponseLength: () => { },
       updateFileHistoryState: (
         updater: (prev: FileHistoryState) => FileHistoryState,
       ) => {
@@ -410,7 +382,7 @@ export class QueryEngine {
     } = await processUserInput({
       input: prompt,
       mode: 'prompt',
-      setToolJSX: () => {},
+      setToolJSX: () => { },
       context: {
         ...processUserInputContext,
         messages: this.mutableMessages,
@@ -485,8 +457,8 @@ export class QueryEngine {
     // model (from slash commands).
     processUserInputContext = {
       messages,
-      setMessages: () => {},
-      onChangeAPIKey: () => {},
+      setMessages: () => { },
+      onChangeAPIKey: () => { },
       handleElicitation: this.config.handleElicitation,
       options: {
         commands,
@@ -503,7 +475,6 @@ export class QueryEngine {
         appendSystemPrompt,
         theme: resolveThemeSetting(getGlobalConfig().theme),
         agentDefinitions: { activeAgents: agents, allAgents: [] },
-        maxBudgetUsd,
       },
       getAppState,
       setAppState,
@@ -513,8 +484,8 @@ export class QueryEngine {
       loadedNestedMemoryPaths: this.loadedNestedMemoryPaths,
       dynamicSkillDirTriggers: new Set<string>(),
       discoveredSkillNames: this.discoveredSkillNames,
-      setInProgressToolUseIDs: () => {},
-      setResponseLength: () => {},
+      setInProgressToolUseIDs: () => { },
+      setResponseLength: () => { },
       updateFileHistoryState: processUserInputContext.updateFileHistoryState,
       updateAttributionState: processUserInputContext.updateAttributionState,
       setSDKStatus,
@@ -620,7 +591,7 @@ export class QueryEngine {
         stop_reason: null,
         session_id: getSessionId(),
         total_cost_usd: 0,
-        usage: this.totalUsage,
+        usage: {},
         modelUsage: {},
         permission_denials: this.permissionDenials,
         fast_mode_state: getFastModeState(
@@ -840,7 +811,7 @@ export class QueryEngine {
               stop_reason: lastStopReason,
               session_id: getSessionId(),
               total_cost_usd: 0,
-              usage: this.totalUsage,
+              usage: {},
               modelUsage: {},
               permission_denials: this.permissionDenials,
               fast_mode_state: getFastModeState(
@@ -980,7 +951,7 @@ export class QueryEngine {
             stop_reason: lastStopReason,
             session_id: getSessionId(),
             total_cost_usd: 0,
-            usage: this.totalUsage,
+            usage: {},
             modelUsage: {},
             permission_denials: this.permissionDenials,
             fast_mode_state: getFastModeState(
@@ -1039,7 +1010,7 @@ export class QueryEngine {
         stop_reason: lastStopReason,
         session_id: getSessionId(),
         total_cost_usd: 0,
-        usage: this.totalUsage,
+        usage: {},
         modelUsage: {},
         permission_denials: this.permissionDenials,
         fast_mode_state: getFastModeState(
@@ -1092,7 +1063,7 @@ export class QueryEngine {
       stop_reason: lastStopReason,
       session_id: getSessionId(),
       total_cost_usd: 0,
-      usage: this.totalUsage,
+      usage: {},
       modelUsage: {},
       permission_denials: this.permissionDenials,
       structured_output: structuredOutputFromTool,
@@ -1143,7 +1114,6 @@ export async function* ask({
   verbose = false,
   thinkingConfig,
   maxTurns,
-  maxBudgetUsd,
   taskBudget,
   canUseTool,
   mutableMessages = [],
@@ -1174,7 +1144,6 @@ export async function* ask({
   mcpClients: MCPServerConnection[]
   thinkingConfig?: ThinkingConfig
   maxTurns?: number
-  maxBudgetUsd?: number
   taskBudget?: { total: number }
   canUseTool: CanUseToolFn
   mutableMessages?: Message[]
@@ -1212,7 +1181,6 @@ export async function* ask({
     fallbackModel,
     thinkingConfig,
     maxTurns,
-    maxBudgetUsd,
     taskBudget,
     jsonSchema,
     verbose,
@@ -1224,12 +1192,12 @@ export async function* ask({
     orphanedPermission,
     ...(feature('HISTORY_SNIP')
       ? {
-          snipReplay: (yielded: Message, store: Message[]) => {
-            if (!snipProjection!.isSnipBoundaryMessage(yielded))
-              return undefined
-            return snipModule!.snipCompactIfNeeded(store, { force: true })
-          },
-        }
+        snipReplay: (yielded: Message, store: Message[]) => {
+          if (!snipProjection!.isSnipBoundaryMessage(yielded))
+            return undefined
+          return snipModule!.snipCompactIfNeeded(store, { force: true })
+        },
+      }
       : {}),
   })
 

@@ -952,11 +952,6 @@ export async function getAttachments(
             ),
           ),
         ),
-        maybe('budget_usd', async () =>
-          Promise.resolve(
-            getMaxBudgetUsdAttachment(toolUseContext.options.maxBudgetUsd),
-          ),
-        ),
         maybe('output_token_usage', async () =>
           Promise.resolve(getOutputTokenUsageAttachment()),
         ),
@@ -3778,24 +3773,6 @@ function getOutputTokenUsageAttachment(): Attachment[] {
     ]
   }
   return []
-}
-
-function getMaxBudgetUsdAttachment(maxBudgetUsd?: number): Attachment[] {
-  if (maxBudgetUsd === undefined) {
-    return []
-  }
-
-  const usedCost = 0
-  const remainingBudget = maxBudgetUsd - usedCost
-
-  return [
-    {
-      type: 'budget_usd',
-      used: usedCost,
-      total: maxBudgetUsd,
-      remaining: remainingBudget,
-    },
-  ]
 }
 
 /**

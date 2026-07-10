@@ -955,8 +955,6 @@ export class WebServer {
                 send({ type: 'error', message: event.result || 'Execution error' })
               } else if (event.subtype === 'error_max_turns') {
                 send({ type: 'error', message: event.result || 'Reached max turns' })
-              } else if (event.subtype === 'error_max_budget_usd') {
-                send({ type: 'error', message: event.result || 'Exceeded USD budget' })
               }
             } else if (event.type === 'system') {
               // System events (e.g. init) — no-op

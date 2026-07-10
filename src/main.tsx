@@ -59,10 +59,10 @@ import { settingsChangeDetector } from './utils/settings/changeDetector.js';
 import { skillChangeDetector } from './utils/skills/skillChangeDetector.js';
 import { jsonParse, writeFileSync_DEPRECATED } from './utils/slowOperations.js';
 import { initializeWarningHandler } from './utils/warningHandler.js';
-import { isWorktreeModeEnabled } from './utils/worktreeModeEnabled.js';
+import { isWorktreeModeEnabled } from './utils/worktreeModeEnabled.js';
 /* eslint-disable @typescript-eslint/no-require-imports */
 const coordinatorModeModule = feature('COORDINATOR_MODE') ? require('./coordinator/coordinatorMode.js') as typeof import('./coordinator/coordinatorMode.js') : null;
-/* eslint-enable @typescript-eslint/no-require-imports */
+/* eslint-enable @typescript-eslint/no-require-imports */
 /* eslint-disable @typescript-eslint/no-require-imports */
 const assistantModule = feature('KAIROS') ? require('./assistant/index.js') as typeof import('./assistant/index.js') : null;
 const kairosGate = feature('KAIROS') ? require('./assistant/gate.js') as typeof import('./assistant/gate.js') : null;
@@ -2457,7 +2457,6 @@ async function run(): Promise<CommanderCommand> {
         allowedTools,
         thinkingConfig,
         maxTurns: options.maxTurns,
-        maxBudgetUsd: options.maxBudgetUsd,
         taskBudget: options.taskBudget ? {
           total: options.taskBudget
         } : undefined,
