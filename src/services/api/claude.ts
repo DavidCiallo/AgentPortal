@@ -1,6 +1,6 @@
 import type {
   BetaContentBlock,
-  BetaContentBlockParam,
+
   BetaImageBlockParam,
   BetaJSONOutputFormat,
   BetaMessage,
@@ -52,7 +52,6 @@ import {
   splitSysPromptPrefix,
   toolToAPISchema,
 } from '../../utils/api.js'
-import { getOauthAccountInfo } from '../../utils/auth.js'
 import {
   getMergedBetas,
   getModelBetas,
@@ -119,7 +118,6 @@ import {
   getSessionId,
   getThinkingClearLatched,
   setAfkModeHeaderLatched,
-  setCacheEditingHeaderLatched,
   setFastModeHeaderLatched,
   setLastMainRequestId,
   setPromptCache1hAllowlist,
@@ -204,7 +202,6 @@ import {
 import { jsonStringify } from '../../utils/slowOperations.js'
 import {
   isBetaTracingEnabled,
-  type LLMRequestNewContext,
   startLLMRequestSpan,
 } from '../../utils/telemetry/sessionTracing.js'
 /* eslint-enable @typescript-eslint/no-require-imports */
@@ -232,8 +229,6 @@ import {
   type GlobalCacheStrategy,
   logAPIError,
   logAPIQuery,
-  logAPISuccessAndDuration,
-  type NonNullableUsage,
 } from './logging.js'
 import {
   CACHE_TTL_1HOUR_MS,
@@ -482,8 +477,6 @@ export function getAPIMetadata() {
     user_id: jsonStringify({
       ...extra,
       device_id: getOrCreateUserID(),
-      // Only include OAuth account UUID when actively using OAuth authentication
-      account_uuid: getOauthAccountInfo()?.accountUuid ?? '',
       session_id: getSessionId(),
     }),
   }
@@ -685,7 +678,6 @@ export async function queryModelWithoutStreaming({
   options: Options
 }): Promise<AssistantMessage> {
   // Store the assistant message but continue consuming the generator to ensure
-  // logAPISuccessAndDuration gets called (which happens after all yields)
   let assistantMessage: AssistantMessage | undefined
   for await (const message of withStreamingVCR(messages, async function* () {
     yield* queryModel(
@@ -903,13 +895,13 @@ function getPreviousRequestIdFromMessages(
 }
 
 function isMedia(
-  block: BetaContentBlockParam,
+  block: { type?: string },
 ): block is BetaImageBlockParam | BetaRequestDocumentBlock {
   return block.type === 'image' || block.type === 'document'
 }
 
 function isToolResult(
-  block: BetaContentBlockParam,
+  block: { type?: string; content?: unknown },
 ): block is BetaToolResultBlockParam {
   return block.type === 'tool_result'
 }
@@ -1150,17 +1142,12 @@ async function* queryModel(
     const {
       isCachedMicrocompactEnabled,
       isModelSupportedForCacheEditing,
-      getCachedMCConfig,
     } = await import('../compact/cachedMicrocompact.js')
     const betas = await import('src/constants/betas.js')
     cacheEditingBetaHeader = betas.CACHE_EDITING_BETA_HEADER
     const featureEnabled = isCachedMicrocompactEnabled()
     const modelSupported = isModelSupportedForCacheEditing(options.model)
     cachedMCEnabled = featureEnabled && modelSupported
-    const config = getCachedMCConfig()
-    logForDebugging(
-      `Cached MC gate: enabled=${featureEnabled} modelSupported=${modelSupported} model=${options.model} supportedModels=${jsonStringify(config.supportedModels)}`,
-    )
   }
 
   const useGlobalCacheFeature = shouldUseGlobalCacheScope()
@@ -1437,7 +1424,7 @@ async function* queryModel(
     })
   }
 
-  const newContext: LLMRequestNewContext | undefined = isBetaTracingEnabled()
+  const newContext= isBetaTracingEnabled()
     ? {
         systemPrompt: systemPrompt.join('\n\n'),
         querySource: options.querySource,
@@ -1753,9 +1740,9 @@ async function* queryModel(
             { ...params, stream: true },
             {
               signal,
-              ...(clientRequestId && {
-                headers: { [CLIENT_REQUEST_ID_HEADER]: clientRequestId },
-              }),
+              ...(clientRequestId
+                ? { headers: { [CLIENT_REQUEST_ID_HEADER]: clientRequestId } }
+                : {}),
             },
           )
           .withResponse()
@@ -2697,46 +2684,6 @@ async function* queryModel(
   ) {
     setLastMainRequestId(streamRequestId)
   }
-
-  // Precompute scalars so the fire-and-forget .then() closure doesn't pin the
-  // full messagesForAPI array (the entire conversation up to the context window
-  // limit) until getToolPermissionContext() resolves.
-  const logMessageCount = messagesForAPI.length
-  const logMessageTokens = tokenCountFromLastAPIResponse(messagesForAPI)
-  void options.getToolPermissionContext().then(permissionContext => {
-    logAPISuccessAndDuration({
-      model:
-        newMessages[0]?.message.model ?? partialMessage?.model ?? options.model,
-      preNormalizedModel: options.model,
-      usage: 0,
-      start,
-      startIncludingRetries,
-      attempt: attemptNumber,
-      messageCount: logMessageCount,
-      messageTokens: logMessageTokens,
-      requestId: streamRequestId ?? null,
-      stopReason,
-      ttftMs,
-      didFallBackToNonStreaming,
-      querySource: options.querySource,
-      headers: responseHeaders,
-      costUSD,
-      queryTracking: options.queryTracking,
-      permissionMode: permissionContext.mode,
-      // Pass newMessages for beta tracing - extraction happens in logging.ts
-      // only when beta tracing is enabled
-      newMessages,
-      llmSpan,
-      globalCacheStrategy,
-      requestSetupMs: start - startIncludingRetries,
-      attemptStartTimes,
-      fastMode: isFastModeRequest,
-      previousRequestId,
-      betas: lastRequestBetas,
-    })
-  })
-
-  // Defensive: also release on normal completion (no-op if finally already ran).
   releaseStreamResources()
 }
 

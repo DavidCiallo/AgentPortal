@@ -1,5 +1,6 @@
 import { feature } from 'bun:bundle'
 import type { ContentBlockParam } from '@anthropic-ai/sdk/resources/messages.mjs'
+import type { SDKMessage, SDKStatus } from './entrypoints/agentSdkTypes.js'
 import { randomUUID } from 'crypto'
 import last from 'lodash-es/last.js'
 import { getSessionId, isSessionPersistenceDisabled, } from 'src/bootstrap/state.js'
@@ -67,7 +68,6 @@ import {
 } from './utils/messages/mappers.js'
 import {
   buildSystemInitMessage,
-  sdkCompatToolName,
 } from './utils/messages/systemInit.js'
 import {
   getScratchpadDir,
@@ -155,7 +155,6 @@ export class QueryEngine {
   private config: QueryEngineConfig
   private mutableMessages: Message[]
   private abortController: AbortController
-  private permissionDenials: SDKPermissionDenial[]
   private hasHandledOrphanedPermission = false
   private readFileState: FileStateCache
   // Turn-scoped skill discovery tracking (feeds was_discovered on
@@ -170,7 +169,6 @@ export class QueryEngine {
     this.config = config
     this.mutableMessages = config.initialMessages ?? []
     this.abortController = config.abortController ?? createAbortController()
-    this.permissionDenials = []
     this.readFileState = config.readFileCache
   }
 
@@ -224,15 +222,6 @@ export class QueryEngine {
         toolUseID,
         forceDecision,
       )
-
-      // Track denials for SDK reporting
-      if (result.behavior !== 'allow') {
-        this.permissionDenials.push({
-          tool_name: sdkCompatToolName(tool.name),
-          tool_use_id: toolUseID,
-          tool_input: input,
-        })
-      }
 
       return result
     }
@@ -506,8 +495,7 @@ export class QueryEngine {
       tools,
       mcpClients,
       model: mainLoopModel,
-      permissionMode: initialAppState.toolPermissionContext
-        .mode as PermissionMode, // TODO: avoid the cast
+      permissionMode: initialAppState.toolPermissionContext.mode,
       commands,
       agents,
       skills,
@@ -540,9 +528,9 @@ export class QueryEngine {
             parent_tool_use_id: null,
             uuid: msg.uuid,
             timestamp: msg.timestamp,
-            isReplay: !msg.isCompactSummary,
+            isReplay: true,
             isSynthetic: msg.isMeta || msg.isVisibleInTranscriptOnly,
-          } as SDKUserMessageReplay
+          }
         }
 
         // Local command output — yield as a synthetic assistant message so
@@ -566,7 +554,7 @@ export class QueryEngine {
             session_id: getSessionId(),
             uuid: msg.uuid,
             compact_metadata: toSDKCompactMetadata(msg.compactMetadata),
-          } as SDKCompactBoundaryMessage
+          }
         }
       }
 
@@ -591,9 +579,6 @@ export class QueryEngine {
         stop_reason: null,
         session_id: getSessionId(),
         total_cost_usd: 0,
-        usage: {},
-        modelUsage: {},
-        permission_denials: this.permissionDenials,
         fast_mode_state: getFastModeState(
           mainLoopModel,
           initialAppState.fastMode,
@@ -720,7 +705,7 @@ export class QueryEngine {
                 uuid: msgToAck.uuid,
                 timestamp: msgToAck.timestamp,
                 isReplay: true,
-              } as SDKUserMessageReplay
+              }
             }
           }
         }
@@ -811,10 +796,7 @@ export class QueryEngine {
               stop_reason: lastStopReason,
               session_id: getSessionId(),
               total_cost_usd: 0,
-              usage: {},
-              modelUsage: {},
-              permission_denials: this.permissionDenials,
-              fast_mode_state: getFastModeState(
+                    fast_mode_state: getFastModeState(
                 mainLoopModel,
                 initialAppState.fastMode,
               ),
@@ -841,7 +823,7 @@ export class QueryEngine {
               uuid: message.attachment.source_uuid || message.uuid,
               timestamp: message.timestamp,
               isReplay: true,
-            } as SDKUserMessageReplay
+            }
           }
           break
         case 'stream_request_start':
@@ -951,10 +933,7 @@ export class QueryEngine {
             stop_reason: lastStopReason,
             session_id: getSessionId(),
             total_cost_usd: 0,
-            usage: {},
-            modelUsage: {},
-            permission_denials: this.permissionDenials,
-            fast_mode_state: getFastModeState(
+                fast_mode_state: getFastModeState(
               mainLoopModel,
               initialAppState.fastMode,
             ),
@@ -1010,9 +989,6 @@ export class QueryEngine {
         stop_reason: lastStopReason,
         session_id: getSessionId(),
         total_cost_usd: 0,
-        usage: {},
-        modelUsage: {},
-        permission_denials: this.permissionDenials,
         fast_mode_state: getFastModeState(
           mainLoopModel,
           initialAppState.fastMode,
@@ -1063,9 +1039,6 @@ export class QueryEngine {
       stop_reason: lastStopReason,
       session_id: getSessionId(),
       total_cost_usd: 0,
-      usage: {},
-      modelUsage: {},
-      permission_denials: this.permissionDenials,
       structured_output: structuredOutputFromTool,
       fast_mode_state: getFastModeState(
         mainLoopModel,

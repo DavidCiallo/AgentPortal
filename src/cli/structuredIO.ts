@@ -11,7 +11,7 @@ import type {
   PermissionUpdate,
   SDKMessage,
   SDKUserMessage,
-} from 'src/entrypoints/agentSdkTypes.js'
+} from 'src/entrypoints/sdk/coreTypes.js'
 import { SDKControlElicitationResponseSchema } from 'src/entrypoints/sdk/controlSchemas.js'
 import type {
   SDKControlRequest,

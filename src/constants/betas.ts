@@ -28,6 +28,7 @@ export const AFK_MODE_BETA_HEADER = feature('TRANSCRIPT_CLASSIFIER')
   : ''
 export const CLI_INTERNAL_BETA_HEADER =
   ''
+export const CACHE_EDITING_BETA_HEADER = 'cache-editing-2025-12-01'
 export const ADVISOR_BETA_HEADER = 'advisor-tool-2026-03-01'
 
 /**

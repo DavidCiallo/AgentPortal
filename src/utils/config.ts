@@ -155,7 +155,6 @@ import type { EDITOR_MODES, NOTIFICATION_CHANNELS } from './configConstants.js'
 export type NotificationChannel = (typeof NOTIFICATION_CHANNELS)[number]
 
 export type AccountInfo = {
-  accountUuid: string
   emailAddress: string
   organizationUuid?: string
   organizationName?: string | null // added 4/23/2025, not populated for existing users
@@ -305,11 +304,8 @@ export type GlobalConfig = {
     ReferralEligibilityResponse & { timestamp: number }
   >
 
-  // Grove config cache per account - key is account UUID
-  groveConfigCache?: Record<
-    string,
-    { grove_enabled: boolean; timestamp: number }
-  >
+  // Grove config cache
+  groveConfigCache?: { grove_enabled: boolean; timestamp: number }
 
   // Guest passes upsell tracking
   passesUpsellSeenCount?: number // Number of times the guest passes upsell has been shown

@@ -652,47 +652,6 @@ function flushInteractionTime_inner(): void {
   interactionTimeDirty = false
 }
 
-export function getTotalInputTokens(): number {
-  return sumBy(Object.values(STATE.modelUsage), 'inputTokens')
-}
-
-export function getTotalOutputTokens(): number {
-  return sumBy(Object.values(STATE.modelUsage), 'outputTokens')
-}
-
-export function getTotalCacheReadInputTokens(): number {
-  return sumBy(Object.values(STATE.modelUsage), 'cacheReadInputTokens')
-}
-
-export function getTotalCacheCreationInputTokens(): number {
-  return sumBy(Object.values(STATE.modelUsage), 'cacheCreationInputTokens')
-}
-
-export function getTotalWebSearchRequests(): number {
-  return sumBy(Object.values(STATE.modelUsage), 'webSearchRequests')
-}
-
-let outputTokensAtTurnStart = 0
-let currentTurnTokenBudget: number | null = null
-export function getTurnOutputTokens(): number {
-  return getTotalOutputTokens() - outputTokensAtTurnStart
-}
-export function getCurrentTurnTokenBudget(): number | null {
-  return currentTurnTokenBudget
-}
-let budgetContinuationCount = 0
-export function snapshotOutputTokensForTurn(budget: number | null): void {
-  outputTokensAtTurnStart = getTotalOutputTokens()
-  currentTurnTokenBudget = budget
-  budgetContinuationCount = 0
-}
-export function getBudgetContinuationCount(): number {
-  return budgetContinuationCount
-}
-export function incrementBudgetContinuationCount(): void {
-  budgetContinuationCount++
-}
-
 export function getLastMainRequestId(): string | undefined {
   return STATE.lastMainRequestId
 }
@@ -812,9 +771,6 @@ export function resetStateForTests(): void {
   Object.entries(getInitialState()).forEach(([key, value]) => {
     STATE[key as keyof State] = value as never
   })
-  outputTokensAtTurnStart = 0
-  currentTurnTokenBudget = null
-  budgetContinuationCount = 0
   sessionSwitched.clear()
 }
 

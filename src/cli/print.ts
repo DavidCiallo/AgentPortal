@@ -6,9 +6,7 @@ import {
   downloadUserSettings,
   redownloadUserSettings,
 } from 'src/services/settingsSync/index.js'
-import { waitForRemoteManagedSettingsToLoad } from 'src/services/remoteManagedSettings/index.js'
 import { StructuredIO } from 'src/cli/structuredIO.js'
-import { RemoteIO } from 'src/cli/remoteIO.js'
 import {
   type Command,
   formatDescriptionWithSource,
@@ -34,6 +32,7 @@ import {
   isBuiltInAgent,
   parseAgentsFromJson,
 } from 'src/tools/AgentTool/loadAgentsDir.js'
+import type { McpServerConfigForProcessTransport, McpServerStatus, ModelInfo, PermissionMode, SDKControlRequest, SDKMessage, SDKStatus, SDKUserMessageReplay } from 'src/entrypoints/agentSdkTypes.js'
 import type { Message, NormalizedUserMessage } from 'src/types/message.js'
 import type { QueuedCommand } from 'src/types/textInputTypes.js'
 import {
@@ -303,6 +302,9 @@ import { initializeGrowthBook } from '../services/analytics/growthbook.js'
 import { errorMessage, toError } from '../utils/errors.js'
 import { sleep } from '../utils/sleep.js'
 import { isExtractModeActive } from '../memdir/paths.js'
+import { SDKControlInitializeRequest, SDKControlMcpSetServersResponse, SDKControlReloadPluginsResponse, StdoutMessage } from 'src/entrypoints/sdk/controlTypes.js'
+import { ReplBridgeHandle } from 'src/bridge/replBridgeHandle.js'
+import { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from 'src/services/analytics/index.js'
 /* eslint-disable @typescript-eslint/no-require-imports */
 const coordinatorModeModule = feature('COORDINATOR_MODE')
   ? (require('../coordinator/coordinatorMode.js') as typeof import('../coordinator/coordinatorMode.js'))
@@ -540,14 +542,14 @@ export async function runHeadless(
     if (SandboxManager.isSandboxRequired()) {
       process.stderr.write(
         `\nError: sandbox required but unavailable: ${sandboxUnavailableReason}\n` +
-          `  sandbox.failIfUnavailable is set — refusing to start without a working sandbox.\n\n`,
+        `  sandbox.failIfUnavailable is set — refusing to start without a working sandbox.\n\n`,
       )
       gracefulShutdownSync(1)
       return
     }
     process.stderr.write(
       `\n⚠ Sandbox disabled: ${sandboxUnavailableReason}\n` +
-        `  Commands will run WITHOUT sandboxing. Network and filesystem restrictions will NOT be enforced.\n\n`,
+      `  Commands will run WITHOUT sandboxing. Network and filesystem restrictions will NOT be enforced.\n\n`,
     )
   } else if (SandboxManager.isSandboxingEnabled()) {
     // Initialize sandbox with a callback that forwards network permission
@@ -792,8 +794,8 @@ export async function runHeadless(
   // Build flag gates this out of external builds; env var is the runtime opt-in for ant builds
   const transformToStreamlined =
     feature('STREAMLINED_OUTPUT') &&
-    isEnvTruthy(process.env.CLAUDE_CODE_STREAMLINED_OUTPUT) &&
-    options.outputFormat === 'stream-json'
+      isEnvTruthy(process.env.CLAUDE_CODE_STREAMLINED_OUTPUT) &&
+      options.outputFormat === 'stream-json'
       ? createStreamlinedTransformer()
       : null
 
@@ -1056,22 +1058,6 @@ function runHeadlessStreaming(
     })
   }
 
-  // Set up rate limit status listener to emit SDKRateLimitEvent for all status changes.
-  // Emitting for all statuses (including 'allowed') ensures consumers can clear warnings
-  // when rate limits reset. The upstream emitStatusChange already deduplicates via isEqual.
-  const rateLimitListener = (limits: ClaudeAILimits) => {
-    const rateLimitInfo = toSDKRateLimitInfo(limits)
-    if (rateLimitInfo) {
-      output.enqueue({
-        type: 'rate_limit_event',
-        rate_limit_info: rateLimitInfo,
-        uuid: randomUUID(),
-        session_id: getSessionId(),
-      })
-    }
-  }
-  statusListeners.add(rateLimitListener)
-
   // Messages for internal tracking, directly mutated by ask(). These messages
   // include Assistant, User, Attachment, and Progress messages.
   // TODO: Clean up this code to avoid passing around a mutable array.
@@ -1243,8 +1229,8 @@ function runHeadlessStreaming(
             const requestedSchema =
               'requestedSchema' in request.params
                 ? (request.params.requestedSchema as
-                    | Record<string, unknown>
-                    | undefined)
+                  | Record<string, unknown>
+                  | undefined)
                 : undefined
 
             const elicitationId =
@@ -1575,13 +1561,13 @@ function runHeadlessStreaming(
       const serverTools =
         connection.type === 'connected'
           ? filterToolsByServer(allMcpTools, connection.name).map(tool => ({
-              name: tool.mcpInfo?.toolName ?? tool.name,
-              annotations: {
-                readOnly: tool.isReadOnly({}) || undefined,
-                destructive: tool.isDestructive?.({}) || undefined,
-                openWorld: tool.isOpenWorld?.({}) || undefined,
-              },
-            }))
+            name: tool.mcpInfo?.toolName ?? tool.name,
+            annotations: {
+              readOnly: tool.isReadOnly({}) || undefined,
+              destructive: tool.isDestructive?.({}) || undefined,
+              openWorld: tool.isOpenWorld?.({}) || undefined,
+            },
+          }))
           : undefined
       // Capabilities passthrough with allowlist pre-filter. The IDE reads
       // experimental['claude/channel'] to decide whether to show the
@@ -1628,14 +1614,11 @@ function runHeadlessStreaming(
       // its promise so this awaits the same in-flight request.
       await Promise.all([
         feature('DOWNLOAD_USER_SETTINGS') &&
-        (isEnvTruthy(process.env.CLAUDE_CODE_REMOTE) || getIsRemoteMode())
+          (isEnvTruthy(process.env.CLAUDE_CODE_REMOTE) || getIsRemoteMode())
           ? withDiagnosticsTiming('headless_user_settings_download', () =>
-              downloadUserSettings(),
-            )
+            downloadUserSettings(),
+          )
           : Promise.resolve(),
-        withDiagnosticsTiming('headless_managed_settings_wait', () =>
-          waitForRemoteManagedSettingsToLoad(),
-        ),
       ])
 
       const pluginsInstalled = await installPluginsForHeadless()
@@ -1754,25 +1737,25 @@ function runHeadlessStreaming(
   const scheduleProactiveTick =
     feature('PROACTIVE') || feature('KAIROS')
       ? () => {
-          setTimeout(() => {
-            if (
-              !proactiveModule?.isProactiveActive() ||
-              proactiveModule.isProactivePaused() ||
-              inputClosed
-            ) {
-              return
-            }
-            const tickContent = `<${TICK_TAG}>${new Date().toLocaleTimeString()}</${TICK_TAG}>`
-            enqueue({
-              mode: 'prompt' as const,
-              value: tickContent,
-              uuid: randomUUID(),
-              priority: 'later',
-              isMeta: true,
-            })
-            void run()
-          }, 0)
-        }
+        setTimeout(() => {
+          if (
+            !proactiveModule?.isProactiveActive() ||
+            proactiveModule.isProactivePaused() ||
+            inputClosed
+          ) {
+            return
+          }
+          const tickContent = `<${TICK_TAG}>${new Date().toLocaleTimeString()}</${TICK_TAG}>`
+          enqueue({
+            mode: 'prompt' as const,
+            value: tickContent,
+            uuid: randomUUID(),
+            priority: 'later',
+            isMeta: true,
+          })
+          void run()
+        }, 0)
+      }
       : undefined
 
   // Abort the current operation when a 'now' priority message arrives.
@@ -1997,12 +1980,12 @@ function runHeadlessStreaming(
                 usage:
                   totalTokensMatch && toolUsesMatch
                     ? {
-                        total_tokens: parseInt(totalTokensMatch[1]!, 10),
-                        tool_uses: parseInt(toolUsesMatch[1]!, 10),
-                        duration_ms: durationMsMatch
-                          ? parseInt(durationMsMatch[1]!, 10)
-                          : 0,
-                      }
+                      total_tokens: parseInt(totalTokensMatch[1]!, 10),
+                      tool_uses: parseInt(toolUsesMatch[1]!, 10),
+                      duration_ms: durationMsMatch
+                        ? parseInt(durationMsMatch[1]!, 10)
+                        : 0,
+                    }
                     : undefined,
                 session_id: getSessionId(),
                 uuid: randomUUID(),
@@ -2012,10 +1995,6 @@ function runHeadlessStreaming(
           }
 
           const input = command.value
-
-          if (structuredIO instanceof RemoteIO && command.mode === 'prompt') {
-
-          }
 
           // Abort any in-flight suggestion generation and track acceptance
           suggestionState.abortController?.abort()
@@ -2029,10 +2008,10 @@ function runHeadlessStreaming(
                 typeof input === 'string'
                   ? input
                   : (
-                      input.find(b => b.type === 'text') as
-                        | { type: 'text'; text: string }
-                        | undefined
-                    )?.text
+                    input.find(b => b.type === 'text') as
+                    | { type: 'text'; text: string }
+                    | undefined
+                  )?.text
               if (typeof inputText === 'string') {
                 logSuggestionOutcome(
                   suggestionState.lastEmitted.text,
@@ -2350,8 +2329,6 @@ function runHeadlessStreaming(
           stop_reason: null,
           session_id: getSessionId(),
           total_cost_usd: 0,
-          modelUsage: {},
-          permission_denials: [],
           uuid: randomUUID(),
           errors: [
             errorMessage(error),
@@ -2408,155 +2385,11 @@ function runHeadlessStreaming(
       return
     }
 
-    // Check for unread teammate messages and process them
-    // This mirrors what useInboxPoller does in interactive REPL mode
-    // Poll until no more messages (teammates may still be working)
-    {
-      const currentAppState = getAppState()
-      const teamContext = currentAppState.teamContext
-
-      if (teamContext && isTeamLead(teamContext)) {
-        const agentName = 'team-lead'
-
-        // Poll for messages while teammates are active
-        // This is needed because teammates may send messages while we're waiting
-        // Keep polling until the team is shut down
-        const POLL_INTERVAL_MS = 500
-
-        while (true) {
-          // Check if teammates are still active
-          const refreshedState = getAppState()
-          const hasActiveTeammates =
-            hasActiveInProcessTeammates(refreshedState) ||
-            (refreshedState.teamContext &&
-              Object.keys(refreshedState.teamContext.teammates).length > 0)
-
-          if (!hasActiveTeammates) {
-            logForDebugging(
-              '[print.ts] No more active teammates, stopping poll',
-            )
-            break
-          }
-
-          const unread = await readUnreadMessages(
-            agentName,
-            refreshedState.teamContext?.teamName,
-          )
-
-          if (unread.length > 0) {
-            logForDebugging(
-              `[print.ts] Team-lead found ${unread.length} unread messages`,
-            )
-
-            // Mark as read immediately to avoid duplicate processing
-            await markMessagesAsRead(
-              agentName,
-              refreshedState.teamContext?.teamName,
-            )
-
-            // Process shutdown_approved messages - remove teammates from team file
-            // This mirrors what useInboxPoller does in interactive mode (lines 546-606)
-            const teamName = refreshedState.teamContext?.teamName
-            for (const m of unread) {
-              const shutdownApproval = isShutdownApproved(m.text)
-              if (shutdownApproval && teamName) {
-                const teammateToRemove = shutdownApproval.from
-                logForDebugging(
-                  `[print.ts] Processing shutdown_approved from ${teammateToRemove}`,
-                )
-
-                // Find the teammate ID by name
-                const teammateId = refreshedState.teamContext?.teammates
-                  ? Object.entries(refreshedState.teamContext.teammates).find(
-                      ([, t]) => t.name === teammateToRemove,
-                    )?.[0]
-                  : undefined
-
-                if (teammateId) {
-                  // Remove from team file
-                  removeTeammateFromTeamFile(teamName, {
-                    agentId: teammateId,
-                    name: teammateToRemove,
-                  })
-                  logForDebugging(
-                    `[print.ts] Removed ${teammateToRemove} from team file`,
-                  )
-
-                  // Unassign tasks owned by this teammate
-                  await unassignTeammateTasks(
-                    teamName,
-                    teammateId,
-                    teammateToRemove,
-                    'shutdown',
-                  )
-
-                  // Remove from teamContext in AppState
-                  setAppState(prev => {
-                    if (!prev.teamContext?.teammates) return prev
-                    if (!(teammateId in prev.teamContext.teammates)) return prev
-                    const { [teammateId]: _, ...remainingTeammates } =
-                      prev.teamContext.teammates
-                    return {
-                      ...prev,
-                      teamContext: {
-                        ...prev.teamContext,
-                        teammates: remainingTeammates,
-                      },
-                    }
-                  })
-                }
-              }
-            }
-
-            // Format messages same as useInboxPoller
-            const formatted = unread
-              .map(
-                (m: { from: string; text: string; color?: string }) =>
-                  `<${TEAMMATE_MESSAGE_TAG} teammate_id="${m.from}"${m.color ? ` color="${m.color}"` : ''}>\n${m.text}\n</${TEAMMATE_MESSAGE_TAG}>`,
-              )
-              .join('\n\n')
-
-            // Enqueue and process
-            enqueue({
-              mode: 'prompt',
-              value: formatted,
-              uuid: randomUUID(),
-            })
-            void run()
-            return // run() will come back here after processing
-          }
-
-          // No messages - check if we need to prompt for shutdown
-          // If input is closed and teammates are active, inject shutdown prompt once
-          if (inputClosed && !shutdownPromptInjected) {
-            shutdownPromptInjected = true
-            logForDebugging(
-              '[print.ts] Input closed with active teammates, injecting shutdown prompt',
-            )
-            enqueue({
-              mode: 'prompt',
-              value: SHUTDOWN_TEAM_PROMPT,
-              uuid: randomUUID(),
-            })
-            void run()
-            return // run() will come back here after processing
-          }
-
-          // Wait and check again
-          await sleep(POLL_INTERVAL_MS)
-        }
-      }
-    }
-
     if (inputClosed) {
       // Check for active swarm that needs shutdown
       const hasActiveSwarm = await (async () => {
         // Wait for any working in-process team members to finish
         const currentAppState = getAppState()
-        if (hasWorkingInProcessTeammates(currentAppState)) {
-          await waitForTeammatesToBecomeIdle(setAppState, currentAppState)
-        }
-
         // Re-fetch state after potential wait
         const refreshedAppState = getAppState()
         const refreshedTeamContext = refreshedAppState.teamContext
@@ -2564,10 +2397,7 @@ function runHeadlessStreaming(
           refreshedTeamContext &&
           Object.keys(refreshedTeamContext.teammates).length > 0
 
-        return (
-          hasTeamMembersNotCleanedUp ||
-          hasActiveInProcessTeammates(refreshedAppState)
-        )
+        return hasTeamMembersNotCleanedUp
       })()
 
       if (hasActiveSwarm) {
@@ -2588,7 +2418,6 @@ function runHeadlessStreaming(
         await finalizePendingAsyncHooks()
         unsubscribeSkillChanges()
         unsubscribeAuthStatus?.()
-        statusListeners.delete(rateLimitListener)
         output.done()
       }
     }
@@ -2714,7 +2543,7 @@ function runHeadlessStreaming(
   // installOAuthTokens — after it resolves, the in-process memoized token
   // cache is already cleared and the next API call picks up the new creds.
   let claudeOAuth: {
-    service: OAuthService
+    service: any
     flow: Promise<void>
   } | null = null
 
@@ -3330,9 +3159,9 @@ function runHeadlessStreaming(
                       resources:
                         result.resources && result.resources.length > 0
                           ? {
-                              ...prev.mcp.resources,
-                              [serverName]: result.resources,
-                            }
+                            ...prev.mcp.resources,
+                            [serverName]: result.resources,
+                          }
                           : omit(prev.mcp.resources, serverName),
                     },
                   }))
@@ -3596,9 +3425,9 @@ function runHeadlessStreaming(
                 resources:
                   result.resources && result.resources.length > 0
                     ? {
-                        ...prev.mcp.resources,
-                        [serverName]: result.resources,
-                      }
+                      ...prev.mcp.resources,
+                      [serverName]: result.resources,
+                    }
                     : omit(prev.mcp.resources, serverName),
               },
             }))
@@ -3742,35 +3571,35 @@ function runHeadlessStreaming(
               const saved = getLastCacheSafeParams()
               const cacheSafeParams = saved
                 ? {
-                    ...saved,
-                    // If the last turn was interrupted, the snapshot holds an
-                    // already-aborted controller; createChildAbortController in
-                    // createSubagentContext would propagate it and the fork
-                    // would die before sending a request. The controller is
-                    // not part of the cache key — swapping in a fresh one is
-                    // safe. Same guard as generate_session_title above.
-                    toolUseContext: {
-                      ...saved.toolUseContext,
-                      abortController: createAbortController(),
-                    },
-                  }
+                  ...saved,
+                  // If the last turn was interrupted, the snapshot holds an
+                  // already-aborted controller; createChildAbortController in
+                  // createSubagentContext would propagate it and the fork
+                  // would die before sending a request. The controller is
+                  // not part of the cache key — swapping in a fresh one is
+                  // safe. Same guard as generate_session_title above.
+                  toolUseContext: {
+                    ...saved.toolUseContext,
+                    abortController: createAbortController(),
+                  },
+                }
                 : await buildSideQuestionFallbackParams({
-                    tools: buildAllTools(getAppState()),
-                    commands: currentCommands,
-                    mcpClients: [
-                      ...getAppState().mcp.clients,
-                      ...sdkClients,
-                      ...dynamicMcpState.clients,
-                    ],
-                    messages: mutableMessages,
-                    readFileState,
-                    getAppState,
-                    setAppState,
-                    customSystemPrompt: options.systemPrompt,
-                    appendSystemPrompt: options.appendSystemPrompt,
-                    thinkingConfig: options.thinkingConfig,
-                    agents: currentAgents,
-                  })
+                  tools: buildAllTools(getAppState()),
+                  commands: currentCommands,
+                  mcpClients: [
+                    ...getAppState().mcp.clients,
+                    ...sdkClients,
+                    ...dynamicMcpState.clients,
+                  ],
+                  messages: mutableMessages,
+                  readFileState,
+                  getAppState,
+                  setAppState,
+                  customSystemPrompt: options.systemPrompt,
+                  appendSystemPrompt: options.appendSystemPrompt,
+                  thinkingConfig: options.thinkingConfig,
+                  agents: currentAgents,
+                })
               const result = await runSideQuestion({
                 question,
                 cacheSafeParams,
@@ -3886,7 +3715,7 @@ function runHeadlessStreaming(
                   sendControlResponseError(
                     message,
                     bridgeFailureDetail ??
-                      'Remote Control initialization failed',
+                    'Remote Control initialization failed',
                   )
                 } else {
                   bridgeHandle = handle
@@ -3991,7 +3820,7 @@ function runHeadlessStreaming(
               uuid: message.uuid,
               timestamp: message.timestamp,
               isReplay: true,
-            } as SDKUserMessageReplay)
+            })
           }
           // Historical dup = transcript already has this turn's output, so it
           // ran but its lifecycle was never closed (interrupted before ack).
@@ -4042,7 +3871,6 @@ function runHeadlessStreaming(
       await finalizePendingAsyncHooks()
       unsubscribeSkillChanges()
       unsubscribeAuthStatus?.()
-      statusListeners.delete(rateLimitListener)
       output.done()
     }
   })()
@@ -4744,8 +4572,6 @@ function emitLoadError(
       stop_reason: null,
       session_id: getSessionId(),
       total_cost_usd: 0,
-      modelUsage: {},
-      permission_denials: [],
       uuid: randomUUID(),
       errors: [message],
     }
@@ -5112,10 +4938,7 @@ function getStructuredIO(
     inputStream = inputPrompt
   }
 
-  // Use RemoteIO if sdkUrl is provided, otherwise use regular StructuredIO
-  return options.sdkUrl
-    ? new RemoteIO(options.sdkUrl, inputStream, options.replayUserMessages)
-    : new StructuredIO(inputStream, options.replayUserMessages)
+  return new StructuredIO(inputStream, options.replayUserMessages)
 }
 
 /**

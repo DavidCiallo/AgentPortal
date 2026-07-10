@@ -81,7 +81,7 @@ function formatToolUseForDisplay(toolName: string, input: any, cwd?: string): st
             }
           }
         }
-      } catch {}
+      } catch { }
 
       // Format old and new content with line numbers
       const parts = [`${header} ${diffStr} lines`]
@@ -905,7 +905,7 @@ export class WebServer {
                 if (currentToolUse) {
                   // Parse accumulated tool input and send formatted display
                   let toolInput: any = {}
-                  try { toolInput = JSON.parse(currentToolUse.inputJson) } catch {}
+                  try { toolInput = JSON.parse(currentToolUse.inputJson) } catch { }
                   const display = formatToolUseForDisplay(currentToolUse.name, toolInput, cwd)
                   send({
                     type: 'tool_use_display',
@@ -917,7 +917,7 @@ export class WebServer {
                 }
               }
             } else if (event.type === 'user') {
-              const content = event.message.content
+              const content = event.message.content as Array<{ type: string, content: any, tool_use_id: string, is_error: boolean }>
               if (Array.isArray(content)) {
                 for (const block of content) {
                   if (block.type === 'tool_result') {
@@ -959,7 +959,7 @@ export class WebServer {
             } else if (event.type === 'system') {
               // System events (e.g. init) — no-op
             } else {
-              console.log('[web] unhandled event:', event.type, event.subtype || '')
+              console.log('[web] unhandled event:', event)
             }
           }
 

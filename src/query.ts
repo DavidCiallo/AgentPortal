@@ -92,12 +92,6 @@ import { buildQueryConfig } from './query/config.js'
 import { productionDeps, type QueryDeps } from './query/deps.js'
 import type { Terminal, Continue } from './query/transitions.js'
 import { feature } from 'bun:bundle'
-import {
-  getCurrentTurnTokenBudget,
-  getTurnOutputTokens,
-  incrementBudgetContinuationCount,
-} from './bootstrap/state.js'
-import { createBudgetTracker, checkTokenBudget } from './query/tokenBudget.js'
 import { count } from './utils/array.js'
 
 /* eslint-disable @typescript-eslint/no-require-imports */
@@ -182,7 +176,6 @@ export type QueryParams = {
   // API task_budget (output_config.task_budget, beta task-budgets-2026-03-13).
   // Distinct from the tokenBudget +500k auto-continue feature. `total` is the
   // budget for the whole agentic turn; `remaining` is computed per iteration
-  // from cumulative API usage. See configureTaskBudgetParams in claude.ts.
   taskBudget?: { total: number }
   deps?: QueryDeps
 }
@@ -266,8 +259,6 @@ async function* queryLoop(
     pendingToolUseSummary: undefined,
     transition: undefined,
   }
-  const budgetTracker = feature('TOKEN_BUDGET') ? createBudgetTracker() : null
-
   // task_budget.remaining tracking across compaction boundaries. Undefined
   // until first compact fires — while context is uncompacted the server can
   // see the full history and handles the countdown from {total} itself (see
@@ -390,7 +381,6 @@ async function* queryLoop(
 
     // Apply snip before microcompact (both may run — they are not mutually exclusive).
     // snipTokensFreed is plumbed to autocompact so its threshold check reflects
-    // what snip removed; tokenCountWithEstimation alone can't see it (reads usage
     // from the protected-tail assistant, which survives snip unchanged).
     let snipTokensFreed = 0
     if (feature('HISTORY_SNIP')) {
@@ -463,13 +453,6 @@ async function* queryLoop(
     queryCheckpoint('query_autocompact_end')
 
     if (compactionResult) {
-      const {
-        preCompactTokenCount,
-        postCompactTokenCount,
-        truePostCompactTokenCount,
-        compactionUsage,
-      } = compactionResult
-
       // task_budget: capture pre-compact final context window before
       // messagesForQuery is replaced with postCompactMessages below.
       // iterations[-1] is the authoritative final window (post server tool
@@ -559,7 +542,6 @@ async function* queryLoop(
     // stale input_tokens from kept messages that reflect pre-compaction context size.
     // Same staleness applies to snip: subtract snipTokensFreed (otherwise we'd
     // falsely block in the window where snip brought us under autocompact threshold
-    // but the stale usage is still above blocking limit — before this PR that
     // window never existed because autocompact always fired on the stale count).
     // Also skip for compact/session_memory queries — these are forked agents that
     // inherit the full conversation and would deadlock if blocked here (the compact
@@ -821,34 +803,6 @@ async function* queryLoop(
             }
           }
           queryCheckpoint('query_api_streaming_end')
-
-          // Yield deferred microcompact boundary message using actual API-reported
-          // token deletion count instead of client-side estimates.
-          // Entire block gated behind feature() so the excluded string
-          // is eliminated from external builds.
-          if (feature('CACHED_MICROCOMPACT') && pendingCacheEdits) {
-            const lastAssistant = assistantMessages.at(-1)
-            // The API field is cumulative/sticky across requests, so we
-            // subtract the baseline captured before this request to get the delta.
-            const usage = lastAssistant?.message.usage
-            const cumulativeDeleted = usage
-              ? ((usage as unknown as Record<string, number>)
-                  .cache_deleted_input_tokens ?? 0)
-              : 0
-            const deletedTokens = Math.max(
-              0,
-              cumulativeDeleted - pendingCacheEdits.baselineCacheDeletedTokens,
-            )
-            if (deletedTokens > 0) {
-              yield createMicrocompactBoundaryMessage(
-                pendingCacheEdits.trigger,
-                0,
-                deletedTokens,
-                pendingCacheEdits.deletedToolIds,
-                [],
-              )
-            }
-          }
         } catch (innerError) {
           if (innerError instanceof FallbackTriggeredError && fallbackModel) {
             // Fallback was triggered - switch model and retry
@@ -1239,52 +1193,6 @@ async function* queryLoop(
         state = next
         continue
       }
-
-      if (feature('TOKEN_BUDGET')) {
-        const decision = checkTokenBudget(
-          budgetTracker!,
-          toolUseContext.agentId,
-          getCurrentTurnTokenBudget(),
-          getTurnOutputTokens(),
-        )
-
-        if (decision.action === 'continue') {
-          incrementBudgetContinuationCount()
-          logForDebugging(
-            `Token budget continuation #${decision.continuationCount}: ${decision.pct}% (${decision.turnTokens.toLocaleString()} / ${decision.budget.toLocaleString()})`,
-          )
-          state = {
-            messages: [
-              ...messagesForQuery,
-              ...assistantMessages,
-              createUserMessage({
-                content: decision.nudgeMessage,
-                isMeta: true,
-              }),
-            ],
-            toolUseContext,
-            autoCompactTracking: tracking,
-            maxOutputTokensRecoveryCount: 0,
-            hasAttemptedReactiveCompact: false,
-            maxOutputTokensOverride: undefined,
-            pendingToolUseSummary: undefined,
-            stopHookActive: undefined,
-            turnCount,
-            transition: { reason: 'token_budget_continuation' },
-          }
-          continue
-        }
-
-        if (decision.completionEvent) {
-          if (decision.completionEvent.diminishingReturns) {
-            logForDebugging(
-              `Token budget early stop: diminishing returns at ${decision.completionEvent.pct}%`,
-            )
-          }
-
-        }
-      }
-
       return { reason: 'completed' }
     }
 

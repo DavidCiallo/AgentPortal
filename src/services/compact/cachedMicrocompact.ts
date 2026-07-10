@@ -6,7 +6,3 @@ export function isCachedMicrocompactEnabled(): boolean {
 export function isModelSupportedForCacheEditing(_model: string): boolean {
   return false
 }
-
-export function getCachedMCConfig() {
-  return null
-}

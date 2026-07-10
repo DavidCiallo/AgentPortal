@@ -1,32 +1,35 @@
-/**
- * Main entrypoint for Claude Code Agent SDK types.
- *
- * This file re-exports the public SDK API from:
- * - sdk/coreTypes.ts - Common serializable types (messages, configs)
- * - sdk/runtimeTypes.ts - Non-serializable types (callbacks, interfaces)
- *
- * SDK builders who need control protocol types should import from
- * sdk/controlTypes.ts directly.
- */
-
 import type {
   CallToolResult,
   ToolAnnotations,
 } from '@modelcontextprotocol/sdk/types.js'
+import type {
+  AnyZodRawShape,
+  ForkSessionOptions,
+  ForkSessionResult,
+  GetSessionInfoOptions,
+  GetSessionMessagesOptions,
+  InferShape,
+  InternalOptions,
+  InternalQuery,
+  ListSessionsOptions,
+  McpSdkServerConfigWithInstance,
+  Options,
+  Query,
+  SDKMessage,
+  SDKResultMessage,
+  SDKSession,
+  SDKSessionInfo,
+  SDKSessionOptions,
+  SDKUserMessage,
+  SdkMcpToolDefinition,
+  SessionMessage,
+  SessionMutationOptions,
+} from './sdk/runtimeTypes.js'
 
-// Control protocol types for SDK builders (bridge subpath consumers)
-/** @alpha */
-export type {
-  SDKControlRequest,
-  SDKControlResponse,
-} from './sdk/controlTypes.js'
 // Re-export core types (common serializable types)
 export * from './sdk/coreTypes.js'
 // Re-export runtime types (callbacks, interfaces with methods)
 export * from './sdk/runtimeTypes.js'
-
-// Re-export settings types (generated from settings JSON schema)
-export type { Settings } from './sdk/settingsTypes.generated.js'
 // Re-export tool types (all marked @internal until SDK API stabilizes)
 export * from './sdk/toolTypes.js'
 
