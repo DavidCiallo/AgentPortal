@@ -19,7 +19,7 @@ import { normalizeApiKeyForConfig } from './utils/authPortable.js';
 import { getMemoryFiles } from './utils/claudemd.js';
 import { checkHasTrustDialogAccepted, getCustomApiKeyStatus, getGlobalConfig, saveGlobalConfig } from './utils/config.js';
 import { updateDeepLinkTerminalPreference } from './utils/deepLink/terminalPreference.js';
-import { isEnvTruthy, isRunningOnHomespace } from './utils/envUtils.js';
+import { isEnvTruthy } from './utils/envUtils.js';
 import { type FpsMetrics, FpsTracker } from './utils/fpsTracker.js';
 import { updateGithubRepoPathMapping } from './utils/githubRepoPathMapping.js';
 import { applyConfigEnvironmentVariables } from './utils/managedEnv.js';
@@ -202,9 +202,7 @@ export async function showSetupScreens(root: Root, permissionMode: PermissionMod
   }
 
   // Check for custom API key
-  // On homespace, OPENAI_API_KEY is preserved in process.env for child
-  // processes but ignored by Claude Code itself (see auth.ts).
-  if (process.env.OPENAI_API_KEY && !isRunningOnHomespace()) {
+  if (process.env.OPENAI_API_KEY) {
     const customApiKeyTruncated = normalizeApiKeyForConfig(process.env.OPENAI_API_KEY);
     const keyStatus = getCustomApiKeyStatus(customApiKeyTruncated);
     if (keyStatus === 'new') {

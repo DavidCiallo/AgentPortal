@@ -8,7 +8,6 @@ import {
   getSubscriptionType,
   isUsing3PServices,
 } from '../../utils/auth.js'
-import { isRunningOnHomespace } from '../../utils/envUtils.js'
 import { jsonStringify } from '../../utils/slowOperations.js'
 import {
   buildAccountProperties,
@@ -22,7 +21,7 @@ export async function authStatus(opts: {
   const { source: authTokenSource, hasToken } = getAuthTokenSource()
   const { source: apiKeySource } = getAnthropicApiKeyWithSource()
   const hasApiKeyEnvVar =
-    !!process.env.OPENAI_API_KEY && !isRunningOnHomespace()
+    !!process.env.OPENAI_API_KEY
   const oauthAccount = getOauthAccountInfo()
   const subscriptionType = getSubscriptionType()
   const using3P = isUsing3PServices()
