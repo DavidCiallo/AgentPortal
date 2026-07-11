@@ -878,6 +878,18 @@ export function scrollUp(s: ScrollBoxHandle, amount: number): void {
     s.scrollTo(0);
     return;
   }
+  // Snap back to bottom if the user is within one wheel-step of the end.
+  // Without this, wheel-up at the bottom clears stickyScroll before the
+  // renderer drains the pending delta — the guard in onScrollAway sees
+  // scrollTop+pendingDelta < max (pendingDelta is already negative from
+  // scrollBy) and snapshots the divider even though the user never left
+  // the bottom. By snapping to bottom we keep stickyScroll intact so the
+  // renderer auto-follows new content and onScrollAway never fires.
+  const max = Math.max(0, s.getScrollHeight() - s.getViewportHeight());
+  if (effectiveTop >= max) {
+    s.scrollToBottom();
+    return;
+  }
   s.scrollBy(-amount);
 }
 export type ModalPagerAction = 'lineUp' | 'lineDown' | 'halfPageUp' | 'halfPageDown' | 'fullPageUp' | 'fullPageDown' | 'top' | 'bottom';

@@ -2,8 +2,6 @@ import { c as _c } from "react-compiler-runtime";
 // biome-ignore-all assist/source/organizeImports: internal-only import markers must not be reordered
 import { feature } from 'bun:bundle';
 import { spawnSync } from 'child_process';
-import { snapshotOutputTokensForTurn, getCurrentTurnTokenBudget, getTurnOutputTokens, getBudgetContinuationCount, getTotalInputTokens } from '../bootstrap/state.js';
-import { parseTokenBudget } from '../utils/tokenBudget.js';
 import { count } from '../utils/array.js';
 import { dirname, join } from 'path';
 import { tmpdir } from 'os';
@@ -37,7 +35,6 @@ import { formatTokens, truncateToWidth } from '../utils/format.js';
 import { consumeEarlyInput } from '../utils/earlyInput.js';
 import { setMemberActive } from '../utils/swarm/teamHelpers.js';
 import { isSwarmWorker, generateSandboxRequestId, sendSandboxPermissionRequestViaMailbox, sendSandboxPermissionResponseViaMailbox } from '../utils/swarm/permissionSync.js';
-import { registerSandboxPermissionCallback } from '../hooks/useSwarmPermissionPoller.js';
 import { getTeamName, getAgentName } from '../utils/teammate.js';
 import { WorkerPendingPermission } from '../components/permissions/WorkerPendingPermission.js';
 import { injectUserMessageToTeammate, getAllInProcessTeammateTasks } from '../tasks/InProcessTeammateTask/InProcessTeammateTask.js';
@@ -71,7 +68,6 @@ import { buildEffectiveSystemPrompt } from '../utils/systemPrompt.js';
 import { getSystemContext, getUserContext } from '../context.js';
 import { getMemoryFiles } from '../utils/claudemd.js';
 import { startBackgroundHousekeeping } from '../utils/backgroundHousekeeping.js';
-import { useFpsMetrics } from '../context/fpsMetrics.js';
 import { useAfterFirstRender } from '../hooks/useAfterFirstRender.js';
 import { useDeferredHookMessages } from '../hooks/useDeferredHookMessages.js';
 import { addToHistory, removeLastFromHistory, expandPastedTextRefs, parseReferences } from '../history.js';
@@ -2109,11 +2105,6 @@ export function REPL({
     }
     resetLoadingState();
 
-    // Clear any active token budget so the backstop doesn't fire on
-    // a stale budget if the query generator hasn't exited yet.
-    if (feature('TOKEN_BUDGET')) {
-      snapshotOutputTokensForTurn(null);
-    }
     if (focusedInputDialog === 'tool-permission') {
       // Tool use confirm handles the abort signal itself
       toolUseConfirmQueue[0]?.onAbort();
@@ -2196,13 +2187,6 @@ export function REPL({
           }]);
           return;
         }
-
-        // Register the callback for when the leader responds
-        registerSandboxPermissionCallback({
-          requestId,
-          host: hostPattern.host,
-          resolve: resolveShouldAllowHost
-        });
 
         // Update AppState to show pending indicator
         setAppState(prev => ({
@@ -2852,10 +2836,7 @@ export function REPL({
       resetTimingRefs();
       setMessages(oldMessages => [...oldMessages, ...newMessages]);
       responseLengthRef.current = 0;
-      if (feature('TOKEN_BUDGET')) {
-        const parsedBudget = input ? parseTokenBudget(input) : null;
-        snapshotOutputTokensForTurn(parsedBudget ?? getCurrentTurnTokenBudget());
-      }
+
       apiMetricsRef.current = [];
       setStreamingToolUses([]);
       setStreamingText(null);
@@ -2894,64 +2875,6 @@ export function REPL({
         // Notify bridge clients that the turn is complete so mobile apps
         // can stop the spark animation and show post-turn UI.
         sendBridgeResultRef.current();
-
-        // Auto-hide tungsten panel content at turn end (internal-only), but keep
-        // tungstenActiveSession set so the pill stays in the footer and the user
-        // can reopen the panel. Background tmux tasks (e.g. /hunter) run for
-        // minutes — wiping the session made the pill disappear entirely, forcing
-        // the user to re-invoke Tmux just to peek. Skip on abort so the panel
-        // stays open for inspection (matches the turn-duration guard below).
-        if ("external" === 'ant' && !abortController.signal.aborted) {
-          setAppState(prev => {
-            if (prev.tungstenActiveSession === undefined) return prev;
-            if (prev.tungstenPanelAutoHidden === true) return prev;
-            return {
-              ...prev,
-              tungstenPanelAutoHidden: true
-            };
-          });
-        }
-
-        // Capture budget info before clearing (internal-only)
-        let budgetInfo: {
-          tokens: number;
-          limit: number;
-          nudges: number;
-        } | undefined;
-        if (feature('TOKEN_BUDGET')) {
-          if (getCurrentTurnTokenBudget() !== null && getCurrentTurnTokenBudget()! > 0 && !abortController.signal.aborted) {
-            budgetInfo = {
-              tokens: getTurnOutputTokens(),
-              limit: getCurrentTurnTokenBudget()!,
-              nudges: getBudgetContinuationCount()
-            };
-          }
-          snapshotOutputTokensForTurn(null);
-        }
-
-        // Add turn duration message for turns longer than 30s or with a budget
-        // Skip if user aborted or if in loop mode (too noisy between ticks)
-        // Defer if swarm teammates are still running (show when they finish)
-        const turnDurationMs = Date.now() - loadingStartTimeRef.current - totalPausedMsRef.current;
-        if ((turnDurationMs > 30000 || budgetInfo !== undefined) && !abortController.signal.aborted && !proactiveActive) {
-          const hasRunningSwarmAgents = getAllInProcessTeammateTasks(store.getState().tasks).some(t => t.status === 'running');
-          if (hasRunningSwarmAgents) {
-            // Only record start time on the first deferred turn
-            if (swarmStartTimeRef.current === null) {
-              swarmStartTimeRef.current = loadingStartTimeRef.current;
-            }
-            // Always update budget — later turns may carry the actual budget
-            if (budgetInfo) {
-              swarmBudgetInfoRef.current = budgetInfo;
-            }
-          } else {
-            setMessages(prev => [...prev, createTurnDurationMessage(turnDurationMs, budgetInfo, count(prev, isLoggableMessage))]);
-          }
-        }
-        // Clear the controller so CancelRequestHandler's canCancelRunningTask
-        // reads false at the idle prompt. Without this, the stale non-aborted
-        // controller makes ctrl+c fire onCancel() (aborting nothing) instead of
-        // propagating to the double-press exit flow.
         setAbortController(null);
       }
 
@@ -3233,29 +3156,6 @@ export function REPL({
     // Remote mode: skip empty input early before any state mutations
     if (activeRemote.isRemoteMode && !input.trim()) {
       return;
-    }
-
-    // Idle-return: prompt returning users to start fresh when the
-    // conversation is large and the cache is cold. tengu_willow_mode
-    // controls treatment: "dialog" (blocking), "hint" (notification), "off".
-    {
-      const willowMode = getFeatureValue_CACHED_MAY_BE_STALE('tengu_willow_mode', 'off');
-      const idleThresholdMin = Number(process.env.CLAUDE_CODE_IDLE_THRESHOLD_MINUTES ?? 75);
-      const tokenThreshold = Number(process.env.CLAUDE_CODE_IDLE_TOKEN_THRESHOLD ?? 100_000);
-      if (willowMode !== 'off' && !getGlobalConfig().idleReturnDismissed && !skipIdleCheckRef.current && !speculationAccept && !input.trim().startsWith('/') && lastQueryCompletionTimeRef.current > 0 && getTotalInputTokens() >= tokenThreshold) {
-        const idleMs = Date.now() - lastQueryCompletionTimeRef.current;
-        const idleMinutes = idleMs / 60_000;
-        if (idleMinutes >= idleThresholdMin && willowMode === 'dialog') {
-          setIdleReturnPending({
-            input,
-            idleMinutes
-          });
-          setInputValue('');
-          helpers.setCursorOffset(0);
-          helpers.clearBuffer();
-          return;
-        }
-      }
     }
 
     // Add to history for direct user submissions.
@@ -3891,31 +3791,11 @@ export function REPL({
     if (willowMode !== 'hint' && willowMode !== 'hint_v2') return;
     if (getGlobalConfig().idleReturnDismissed) return;
     const tokenThreshold = Number(process.env.CLAUDE_CODE_IDLE_TOKEN_THRESHOLD ?? 100_000);
-    if (getTotalInputTokens() < tokenThreshold) return;
     const idleThresholdMs = Number(process.env.CLAUDE_CODE_IDLE_THRESHOLD_MINUTES ?? 75) * 60_000;
     const elapsed = Date.now() - lastQueryCompletionTime;
     const remaining = idleThresholdMs - elapsed;
     const timer = setTimeout((lqct, addNotif, msgsRef, mode, hintRef) => {
       if (msgsRef.current.length === 0) return;
-      const totalTokens = getTotalInputTokens();
-      const formattedTokens = formatTokens(totalTokens);
-      const idleMinutes = (Date.now() - lqct) / 60_000;
-      addNotif({
-        key: 'idle-return-hint',
-        jsx: mode === 'hint_v2' ? <>
-          <Text dimColor>new task? </Text>
-          <Text color="suggestion">/clear</Text>
-          <Text dimColor> to save </Text>
-          <Text color="suggestion">{formattedTokens} tokens</Text>
-        </> : <Text color="warning">
-          new task? /clear to save {formattedTokens} tokens
-        </Text>,
-        priority: 'medium',
-        // Persist until submit — the hint fires at T+75min idle, user may
-        // not return for hours. removeNotification in useEffect cleanup
-        // handles dismissal. 0x7FFFFFFF = setTimeout max (~24.8 days).
-        timeoutMs: 0x7fffffff
-      });
       hintRef.current = mode;
     }, Math.max(0, remaining), lastQueryCompletionTime, addNotification, messagesRef, willowMode, idleHintShownRef);
     return () => {
@@ -4668,7 +4548,7 @@ export function REPL({
             }));
             currentRequest?.onWaitingDismiss?.(action);
           }} />}
-          {focusedInputDialog === 'idle-return' && idleReturnPending && <IdleReturnDialog idleMinutes={idleReturnPending.idleMinutes} totalInputTokens={getTotalInputTokens()} onDone={async action => {
+          {focusedInputDialog === 'idle-return' && idleReturnPending && <IdleReturnDialog idleMinutes={idleReturnPending.idleMinutes}  onDone={async action => {
             const pending = idleReturnPending;
             setIdleReturnPending(null);
             if (action === 'dismiss') {
