@@ -2908,6 +2908,11 @@ export type StreamingThinking = {
   streamingEndedAt?: number
 }
 
+export type StreamingTextState = {
+  text: string
+  index: number
+}
+
 /**
  * Handles messages from a stream, updating response length for deltas and appending completed messages
  */
@@ -2929,7 +2934,9 @@ export function handleMessageFromStream(
     f: (current: StreamingThinking | null) => StreamingThinking | null,
   ) => void,
   onApiMetrics?: (metrics: { ttftMs: number }) => void,
-  onStreamingText?: (f: (current: string | null) => string | null) => void,
+  onStreamingText?: (
+    f: (current: StreamingTextState | null) => StreamingTextState | null,
+  ) => void,
 ): void {
   if (
     message.type !== 'stream_event' &&
@@ -2984,6 +2991,9 @@ export function handleMessageFromStream(
 
   switch (message.event.type) {
     case 'content_block_start':
+      // Reset streaming text for the new block, carrying its content
+      // block index so it can be interleaved with tool_use blocks by
+      // position during rendering.
       onStreamingText?.(() => null)
       if (
         feature('CONNECTOR_TEXT') &&
@@ -2999,6 +3009,10 @@ export function handleMessageFromStream(
           return
         case 'text':
           onSetStreamMode('responding')
+          onStreamingText?.(() => ({
+            text: '',
+            index: message.event.index,
+          }))
           return
         case 'tool_use': {
           onSetStreamMode('tool-input')
@@ -3033,8 +3047,12 @@ export function handleMessageFromStream(
       switch (message.event.delta.type) {
         case 'text_delta': {
           const deltaText = message.event.delta.text
+          const index = message.event.index
           onUpdateLength(deltaText)
-          onStreamingText?.(text => (text ?? '') + deltaText)
+          onStreamingText?.(current => ({
+            text: (current?.text ?? '') + deltaText,
+            index,
+          }))
           return
         }
         case 'input_json_delta': {
@@ -4212,7 +4230,7 @@ You have exited auto mode. The user may now want to interact more directly. You 
         createUserMessage({ content: parts.join('\n\n'), isMeta: true }),
       ])
     }
-    case 'verify_plan_reminder': {
+    case 'verify_plan_reminder': {
       /* eslint-disable-next-line custom-rules/no-process-env-top-level */
       const toolName =
         process.env.CLAUDE_CODE_VERIFY_PLAN === 'true'
