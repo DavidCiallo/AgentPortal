@@ -201,13 +201,6 @@ export const getClaudeAIOAuthTokens = memoize(
 )
 
 /**
- * Clear OAuth token cache
- */
-export function clearOAuthTokenCache(): void {
-  // no-op
-}
-
-/**
  * Handle OAuth 401 error
  */
 export function handleOAuth401Error(_error: Error): boolean {
