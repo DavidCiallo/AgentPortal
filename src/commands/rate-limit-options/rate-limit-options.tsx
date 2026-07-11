@@ -11,9 +11,7 @@ import { getOauthAccountInfo, getRateLimitTier, getSubscriptionType } from '../.
 import { hasClaudeAiBillingAccess } from '../../utils/billing.js';
 import { call as extraUsageCall } from '../extra-usage/extra-usage.js';
 import { extraUsage } from '../extra-usage/index.js';
-import upgrade from '../upgrade/index.js';
-import { call as upgradeCall } from '../upgrade/upgrade.js';
-type RateLimitOptionsMenuOptionType = 'upgrade' | 'extra-usage' | 'cancel';
+type RateLimitOptionsMenuOptionType = 'extra-usage' | 'cancel';
 type RateLimitOptionsMenuProps = {
   onDone: (result?: string, options?: {
     display?: CommandResultDisplay | undefined;
@@ -80,19 +78,6 @@ function RateLimitOptionsMenu(t0) {
           actionOptions.push(t4);
         }
       }
-      if (!isMax20x && !isTeamOrEnterprise && upgrade.isEnabled()) {
-        let t4;
-        if ($[7] === Symbol.for("react.memo_cache_sentinel")) {
-          t4 = {
-            label: "Upgrade your plan",
-            value: "upgrade"
-          };
-          $[7] = t4;
-        } else {
-          t4 = $[7];
-        }
-        actionOptions.push(t4);
-      }
       $[2] = claudeAiLimits.overageDisabledReason;
       $[3] = claudeAiLimits.overageStatus;
       $[4] = actionOptions;
@@ -150,25 +135,16 @@ function RateLimitOptionsMenu(t0) {
   let t5;
   if ($[15] !== context || $[16] !== handleCancel || $[17] !== onDone) {
     t5 = function handleSelect(value) {
-      if (value === "upgrade") {
-        logEvent("tengu_rate_limit_options_menu_select_upgrade", {});
-        upgradeCall(onDone, context).then(jsx => {
-          if (jsx) {
-            setSubCommandJSX(jsx);
+      if (value === "extra-usage") {
+        logEvent("tengu_rate_limit_options_menu_select_extra_usage", {});
+        extraUsageCall(onDone, context).then(jsx_0 => {
+          if (jsx_0) {
+            setSubCommandJSX(jsx_0);
           }
         });
       } else {
-        if (value === "extra-usage") {
-          logEvent("tengu_rate_limit_options_menu_select_extra_usage", {});
-          extraUsageCall(onDone, context).then(jsx_0 => {
-            if (jsx_0) {
-              setSubCommandJSX(jsx_0);
-            }
-          });
-        } else {
-          if (value === "cancel") {
-            handleCancel();
-          }
+        if (value === "cancel") {
+          handleCancel();
         }
       }
     };

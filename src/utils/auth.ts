@@ -257,13 +257,6 @@ export function isOverageProvisioningAllowed(): boolean {
 }
 
 /**
- * Check if user has Opus access
- */
-export function hasOpusAccess(): boolean {
-  return false
-}
-
-/**
  * Get subscription type
  */
 export function getSubscriptionType(): unknown | null {

@@ -4,10 +4,13 @@
 
 export interface ReplBridgeHandle {
   bridgeSessionId: string
+  sessionIngressUrl: string
   disconnect: () => void
   sendMessage: (message: unknown) => void
+  writeMessages: (messages: unknown[]) => void
+  sendResult: (result?: unknown) => void
+  teardown: () => void
 }
-
 let handle: ReplBridgeHandle | null = null
 
 export function setReplBridgeHandle(h: ReplBridgeHandle | null): void {
