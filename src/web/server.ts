@@ -1,5 +1,5 @@
 import { createServer } from 'node:http'
-import { readFile, readdir, mkdir, stat } from 'node:fs/promises'
+import { readFile, readdir, mkdir, stat, unlink } from 'node:fs/promises'
 import { join, extname, basename, resolve, win32 } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
@@ -13,7 +13,7 @@ import { getTools } from '../tools.js'
 import { getDefaultAppState } from '../state/AppStateStore.js'
 import { AppState } from '../state/AppState.js'
 import { FileStateCache, READ_FILE_STATE_CACHE_SIZE } from '../utils/fileStateCache.js'
-import { setMainLoopModelOverride, switchSession, getOriginalCwd } from '../bootstrap/state.js'
+import { setMainLoopModelOverride, switchSession, getOriginalCwd, getSessionId } from '../bootstrap/state.js'
 import { resetSessionFilePointer } from '../utils/sessionStorage.js'
 import { parseUserSpecifiedModel } from '../utils/model/model.js'
 import {
@@ -511,6 +511,11 @@ export class WebServer {
       const baseUrl = url.searchParams.get('baseUrl') || undefined
       return this.handleListModels(res, baseUrl)
     }
+    if (url.pathname === '/api/session' && req.method === 'DELETE') {
+      const project = url.searchParams.get('project') || ''
+      const session = url.searchParams.get('session') || ''
+      return this.handleDeleteSession(res, project, session)
+    }
 
     // Static files
     let filePath = url.pathname === '/' ? '/index.html' : url.pathname
@@ -590,6 +595,45 @@ export class WebServer {
 
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify(sessions))
+    } catch (err: any) {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: err.message }))
+    }
+  }
+
+  private async handleDeleteSession(res: any, project: string, session: string) {
+    try {
+      if (!project || !session) {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'Missing project or session parameter' }))
+        return
+      }
+
+      // Don't allow deleting the current active session
+      const currentSessionId = getSessionId()
+      if (session === currentSessionId) {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'Cannot delete the currently active session' }))
+        return
+      }
+
+      const projectsDir = getProjectsDir()
+      const sessionPath = join(projectsDir, project, `${session}.jsonl`)
+
+      // Verify the session file exists
+      try {
+        await stat(sessionPath)
+      } catch {
+        res.writeHead(404, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'Session not found' }))
+        return
+      }
+
+      // Delete the session file
+      await unlink(sessionPath)
+
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ success: true }))
     } catch (err: any) {
       res.writeHead(500, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({ error: err.message }))
