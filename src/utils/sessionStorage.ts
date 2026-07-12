@@ -1074,6 +1074,16 @@ class Project {
           this.currentSessionLastPrompt =
             flat.length > 200 ? flat.slice(0, 200).trim() + '…' : flat
         }
+        // Re-append metadata at EOF so customTitle / lastPrompt never
+        // fall out of the 64 KB tail window read by the web server and
+        // --resume picker. Without this, enough messages after a /rename
+        // push the custom-title entry into the gap between head and tail
+        // reads, causing the sidebar title to revert to lastPrompt.
+        try {
+          this.reAppendSessionMetadata()
+        } catch {
+          // Best-effort — don't let a metadata write failure abort the turn
+        }
       }
     })
   }
