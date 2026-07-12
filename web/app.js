@@ -1,9 +1,11 @@
 const WS_URL = `ws://${location.host}`
 let ws = null
 let sessionId = ''
+let currentProject = ''      // raw cwd of the active session
+let currentProjectId = ''    // sanitized project dir name (matches /api/projects id)
 let isGenerating = false
 let currentAssistantEl = null
-let pendingToolCalls = []  // Buffered tool_use_display events, rendered when tool_result arrives
+let pendingToolElements = new Map()  // toolUseId → rendered DOM element, for live output updates
 let pendingPrompts = new Map()
 let currentModel = ''  // Model name from settings
 let currentToolContainer = null  // .tool-calls-container for live tool calls
@@ -43,17 +45,6 @@ function toggleTheme() {
   const current = getTheme()
   const next = current === 'dark' ? 'light' : 'dark'
   setTheme(next)
-}
-
-// Auto-approve toggle
-function toggleAutoApprove(enabled) {
-  localStorage.setItem('autoApprove', enabled ? '1' : '0')
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({
-      type: 'set_permission_mode',
-      mode: enabled ? 'auto_approve' : 'ask',
-    }))
-  }
 }
 
 // Toggle tool calls expansion
@@ -156,7 +147,7 @@ function renderToolCallLive(toolName, display, output = '', isError = false) {
     }
     updateToolContainerCount()
     scrollToBottom()
-    return
+    return lastDisplay
   }
 
   // New element
@@ -176,6 +167,7 @@ function renderToolCallLive(toolName, display, output = '', isError = false) {
   list.appendChild(el)
   updateToolContainerCount()
   scrollToBottom()
+  return el
 }
 
 function getOrCreateToolList() {
@@ -242,10 +234,6 @@ function renderToolCallsList(toolCalls) {
   return list
 }
 
-// Restore auto-approve state
-const savedAutoApprove = localStorage.getItem('autoApprove') === '1'
-document.getElementById('autoApproveToggle').checked = savedAutoApprove
-
 // Restore show-tools state (default: expanded)
 const savedShowTools = localStorage.getItem('showTools') !== '0'
 document.getElementById('showToolsToggle').checked = savedShowTools
@@ -260,14 +248,12 @@ function connect() {
   ws.onopen = () => {
     setConnectionStatus(true)
     sendBtn.disabled = false
-    // Sync auto-approve state to server
-    if (localStorage.getItem('autoApprove') === '1') {
-      ws.send(JSON.stringify({ type: 'set_permission_mode', mode: 'auto_approve' }))
-    }
     // Load config to populate currentModel
     ws.send(JSON.stringify({ type: 'get_config' }))
-    // Restore the last session from localStorage
+    // Restore the last session from localStorage (also subscribes if restored)
     autoRestoreLastSession()
+    // If already in a session (e.g. after reconnect), resubscribe to live updates
+    if (sessionId) subscribeToSession()
   }
 
   ws.onclose = () => {
@@ -309,23 +295,30 @@ function handleMessage(msg) {
     case 'tool_use_display':
       // Finalize current text bubble — next text_chunk starts a new message
       currentAssistantEl = null
-      // Buffer — render on tool_result so we have output/isError for coloring
-      pendingToolCalls.push({ toolName: msg.toolName, display: msg.display })
-      break
-
-    case 'tool_result':
-      // Render now that we have output and error status
-      if (pendingToolCalls.length > 0) {
-        const tc = pendingToolCalls.shift()
-        // Skip Read tool display — file contents are noisy and unnecessary in chat
-        if (tc.toolName !== 'Read') {
-          renderToolCallLive(tc.toolName, tc.display, msg.output || '', msg.isError || false)
+      // Render immediately so user sees the tool running (real-time feedback)
+      if (msg.toolName !== 'Read') {
+        const el = renderToolCallLive(msg.toolName, msg.display)
+        if (msg.toolUseId && el) {
+          pendingToolElements.set(msg.toolUseId, el)
         }
       }
       break
 
-    case 'action_required':
-      showPermissionDialog(msg)
+    case 'tool_result':
+      // Match by toolUseId and append output to the already-rendered element
+      if (msg.toolUseId && pendingToolElements.has(msg.toolUseId)) {
+        const el = pendingToolElements.get(msg.toolUseId)
+        pendingToolElements.delete(msg.toolUseId)
+        if (msg.output) {
+          const statusClass = msg.isError ? 'tool-result-error' : 'tool-result-neutral'
+          const outDiv = document.createElement('div')
+          outDiv.className = `tool-result-output ${statusClass}`
+          outDiv.textContent = msg.output
+          el.appendChild(outDiv)
+          if (msg.isError) el.classList.add('tool-error')
+          scrollToBottom()
+        }
+      }
       break
 
     case 'done':
@@ -336,21 +329,33 @@ function handleMessage(msg) {
         if (currentProject) {
           localStorage.setItem('lastProjectDir', currentProject)
         }
-        // Also save in the same format switchSession() uses
-        const projectDir = currentProject
-          ? currentProject.replace(/[/\\:]/g, '-')
-          : 'unknown'
+        // Also save in the same format switchSession() uses. Prefer the
+        // server-provided sanitized project id (currentProjectId, set from
+        // session_started) over re-deriving it client-side — the server's
+        // sanitizePath handles characters the simple regex would miss.
+        const projectDir = currentProjectId
+          || (currentProject ? currentProject.replace(/[/\\:]/g, '-') : 'unknown')
         localStorage.setItem('lastSession', JSON.stringify({
           projectId: projectDir,
           sessionId,
           cwd: currentProject || '',
         }))
+
+        // Refresh the sidebar so a brand-new conversation appears in the
+        // list immediately. The session entry only becomes visible once
+        // its JSONL has a summary/last-prompt record, which is written
+        // during the round we just finished — so reload now, then mark
+        // the active row. Skip the network round-trip if the project
+        // container isn't mounted (sidebar never opened).
+        if (currentProjectId && document.getElementById(`sessions-${currentProjectId}`)) {
+          loadSessions(currentProjectId).then(() => {
+            document.querySelectorAll('.session-item').forEach(el => el.classList.remove('active'))
+            document.querySelector(`.session-item[data-session-id="${sessionId}"]`)?.classList.add('active')
+          })
+        }
       }
-      // Flush any remaining buffered tool calls (no output — never got results)
-      while (pendingToolCalls.length > 0) {
-        const tc = pendingToolCalls.shift()
-        renderToolCallLive(tc.toolName, tc.display)
-      }
+      // Flush any remaining buffered tool elements (never got results)
+      pendingToolElements.clear()
       // Reset container for next response
       currentToolContainer = null
       currentToolList = null
@@ -372,29 +377,19 @@ function handleMessage(msg) {
       break
 
     case 'cancelled':
-      // Flush any remaining buffered tool calls
-      while (pendingToolCalls.length > 0) {
-        const tc = pendingToolCalls.shift()
-        if (tc.toolName !== 'Read') {
-          renderToolCallLive(tc.toolName, tc.display)
-        }
-      }
+      // Flush any remaining buffered tool elements
+      pendingToolElements.clear()
       if (currentAssistantEl && !currentAssistantEl.textContent.trim()) {
         currentAssistantEl.remove()
       }
       isGenerating = false
       currentAssistantEl = null
-      pendingToolCalls = []
       currentToolContainer = null
       currentToolList = null
       sendBtn.disabled = false
 
       hideAgentStatus()
       addMessage('Generation cancelled.', 'assistant')
-      break
-
-    case 'permission_mode_changed':
-      // Server confirmed mode change
       break
 
     case 'error':
@@ -413,6 +408,15 @@ function handleMessage(msg) {
       sendBtn.disabled = false
 
       hideAgentStatus()
+      break
+
+    case 'session_started':
+      // Server has allocated/confirmed the sessionId for this round. Pin it
+      // immediately so subsequent UI state (retry, subscribe, etc.) targets
+      // the right session instead of waiting for `done`.
+      sessionId = msg.sessionId || sessionId
+      if (msg.cwd) currentProject = msg.cwd
+      if (msg.projectId) currentProjectId = msg.projectId
       break
 
     case 'config':
@@ -438,38 +442,21 @@ function handleMessage(msg) {
       showConfigStatus('error', msg.message || 'Validation failed')
       document.querySelector('.btn-save').disabled = false
       break
+
+    case 'subscribed':
+      // Server confirmed subscription. If a round is running, show agent status
+      // so the UI reflects the in-progress execution that was replayed.
+      if (msg.running) {
+        isGenerating = true
+        sendBtn.disabled = true
+        // Use server-provided round start time so late joiners see the true elapsed time
+        showAgentStatus('Working', true, msg.roundStartTime)
+      }
+      break
   }
   } catch (e) {
     console.error('[handleMessage] Error:', e, msg)
   }
-}
-
-function showPermissionDialog(prompt) {
-  const dialog = document.createElement('div')
-  dialog.className = 'permission-dialog'
-  dialog.id = `prompt-${prompt.promptId}`
-  dialog.innerHTML = `
-    <p>${escapeHtml(prompt.question)}</p>
-    <div class="permission-actions">
-      <button class="btn-approve" onclick="respondPermission('${prompt.promptId}', 'yes')">Approve</button>
-      <button class="btn-deny" onclick="respondPermission('${prompt.promptId}', 'no')">Deny</button>
-    </div>
-  `
-  chatContainer.appendChild(dialog)
-  scrollToBottom(true)
-}
-
-function respondPermission(promptId, reply) {
-  const dialog = document.getElementById(`prompt-${promptId}`)
-  if (dialog) {
-    dialog.remove()
-  }
-
-  ws.send(JSON.stringify({
-    type: 'input',
-    promptId,
-    reply,
-  }))
 }
 
 function renderMarkdown(text) {
@@ -520,15 +507,15 @@ function setConnectionStatus(connected) {
   agentStatusText.textContent = connected ? 'Connected' : 'Disconnected'
 }
 
-function showAgentStatus(text, resetTimer = true) {
+function showAgentStatus(text, resetTimer = true, startTime) {
   if (!agentStatusEl || !agentStatusDot || !agentStatusText) return
   agentStatusEl.classList.remove('connected', 'disconnected')
   agentStatusEl.classList.add('visible')
-  if (resetTimer) agentStatusStart = Date.now()
+  if (resetTimer) agentStatusStart = startTime || Date.now()
   agentStatusText.textContent = text || 'Working'
   if (agentStatusInterval) clearInterval(agentStatusInterval)
   agentStatusInterval = setInterval(() => {
-    const elapsed = Math.floor((Date.now() - agentStatusStart) / 1000)
+    const elapsed = Math.max(0, Math.floor((Date.now() - agentStatusStart) / 1000))
     const m = Math.floor(elapsed / 60)
     const s = elapsed % 60
     agentStatusText.textContent = `${text || 'Working'} (${m}m ${s}s)`
@@ -764,6 +751,13 @@ messageInput.addEventListener('input', () => {
   messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + 'px'
 })
 
+// Android Chrome keyboard: scroll chat to bottom when input gets focus
+messageInput.addEventListener('focus', () => {
+  setTimeout(() => {
+    chatContainer.scrollTop = chatContainer.scrollHeight
+  }, 300)
+})
+
 // Close modal when clicking outside
 document.getElementById('settingsModal').addEventListener('click', (e) => {
   if (e.target === document.getElementById('settingsModal')) {
@@ -774,7 +768,6 @@ document.getElementById('settingsModal').addEventListener('click', (e) => {
 // Close modal when clicking outside
 
 // Project list management
-let currentProject = null
 
 async function loadProjects() {
   try {
@@ -965,6 +958,18 @@ async function switchSession(projectId, newSessionId, cwd) {
   chatContainer.innerHTML = ''
   sessionId = newSessionId
   currentProject = cwd || projectId
+  currentProjectId = projectId
+
+  // Reset agent status from the previous session — whether it was running
+  // has nothing to do with the session we're switching to. The new session's
+  // subscribe response will tell us if it's running.
+  hideAgentStatus()
+  isGenerating = false
+  sendBtn.disabled = false
+  currentAssistantEl = null
+  currentToolContainer = null
+  currentToolList = null
+  pendingToolElements.clear()
 
   // Remember last session
   localStorage.setItem('lastSession', JSON.stringify({ projectId, sessionId: newSessionId, cwd: cwd || '' }))
@@ -989,7 +994,24 @@ async function switchSession(projectId, newSessionId, cwd) {
     addMessage('Failed to load session history. Start typing to continue...', 'assistant')
   }
 
+  // Subscribe to live updates for this session (catches in-progress rounds)
+  subscribeToSession()
+
   scrollToBottom(true)
+}
+
+// Tell the server we want to subscribe to this session's live event stream.
+// If an agent round is already running, the server will replay buffered events
+// so this client sees the in-progress execution.
+function subscribeToSession() {
+  if (!sessionId) return
+  if (!ws || ws.readyState !== WebSocket.OPEN) return
+  ws.send(JSON.stringify({
+    type: 'subscribe',
+    sessionId,
+    cwd: currentProject || undefined,
+    model: currentModel || undefined,
+  }))
 }
 
 // Auto-restore last session on page load
@@ -1010,6 +1032,7 @@ function autoRestoreLastSession() {
 
     sessionId = savedSessionId
     currentProject = cwd || projectId
+    currentProjectId = projectId
 
     // Fetch and display session messages via HTTP
     fetch(`/api/session-messages?project=${encodeURIComponent(projectId)}&session=${encodeURIComponent(savedSessionId)}&offset=0&limit=40`)
@@ -1026,6 +1049,8 @@ function autoRestoreLastSession() {
           totalMessages = data.total
           hasMoreMessages = data.hasMore
           scrollToBottom(true)
+          // Subscribe to live updates (catches in-progress rounds)
+          subscribeToSession()
         }
       })
       .catch(err => console.error('[autoRestore] Failed to load session:', err))
@@ -1119,6 +1144,11 @@ async function loadDirectory(dirPath) {
     }
 
     pathEl.textContent = data.currentPath
+    // Keep the custom path input in sync with the directory the user has
+    // navigated to. Otherwise "Start Chat" would use a stale/empty path even
+    // though the browser shows the intended folder.
+    document.getElementById('customPath').value = data.currentPath
+    selectedProjectPath = data.currentPath
 
     list.innerHTML = ''
 
@@ -1206,6 +1236,7 @@ async function createNewChat() {
 
   // Set the project
   currentProject = projectPath
+  currentProjectId = projectPath.replace(/[/\\:]/g, '-')
   sessionId = ''
 
   // Clear chat and show welcome message
@@ -1267,6 +1298,12 @@ if (window.visualViewport) {
     syncBodyHeight()
     if (window.innerWidth > 768) {
       window.scrollTo(0, 0)
+    }
+    // Android Chrome keyboard: scroll chat to bottom when viewport shrinks
+    if (window.innerWidth <= 768) {
+      requestAnimationFrame(() => {
+        chatContainer.scrollTop = chatContainer.scrollHeight
+      })
     }
   })
 }

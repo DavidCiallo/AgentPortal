@@ -99,7 +99,7 @@ body {
 }
 
 .show-tools-toggle {
-  margin-left: 16px;
+  margin-left: 0;
 }
 
 /* Tool calls toggle icon */
@@ -201,8 +201,11 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 12px 4px 14px;
+  padding: 6px 12px 6px 14px;
+  margin: 4px 6px 2px;
+  background: var(--surface);
   border-radius: 6px;
+  border: 1px solid var(--border);
 }
 
 .project-name {
@@ -218,7 +221,7 @@ body {
 .project-count {
   font-size: 11px;
   color: var(--text-muted);
-  background: var(--bg);
+  background: var(--surface2);
   padding: 2px 6px;
   border-radius: 4px;
 }
@@ -275,6 +278,7 @@ body {
   flex: 1;
   overflow-y: auto;
   padding: 20px;
+  padding-bottom: 80px; /* space for fixed input area */
   display: flex;
   flex-direction: column;
   gap: 16px;
