@@ -41,6 +41,7 @@ const featureFlags: Record<string, boolean> = {
   BUDDY: true,
   CHICAGO_MCP: false,
   COWORKER_TYPE_TELEMETRY: false,
+  REACTIVE_COMPACT: true,
 }
 
 const result = await Bun.build({
@@ -285,11 +286,11 @@ export const SeverityNumber = {};
                 const specifier = m[4]
                 const namedPart = m[1] || m[3] || ''
                 const names = namedPart.split(',')
-                  .map((s: string) => s.trim().replace(/^type\s+/, ''))
+                  .map((s: string) => s.trim().replace(/^type\s+/, '').replace(/\s+as\s+\w+/g, ''))
                   .filter((s: string) => s && !s.startsWith('type '))
 
-                // Check src/tasks/ non-relative imports
-                if (specifier.startsWith('src/tasks/')) {
+                // Check src/ non-relative imports (exclude existing files)
+                if (specifier.startsWith('src/')) {
                   const resolved = pathMod.resolve(__dirname, '..', specifier)
                   const candidates = [
                     resolved,
@@ -316,6 +317,18 @@ export const SeverityNumber = {};
                 if (names.length > 0) {
                   if (!missingModuleExports.has(specifier)) missingModuleExports.set(specifier, new Set())
                   for (const n of names) missingModuleExports.get(specifier)!.add(n)
+                }
+              }
+              // Also scan require() and dynamic import() calls for relative .js paths
+              for (const m of code.matchAll(/(?:require|import)\s*\(\s*['"](\.\.?\/[^'"]+\.js)['"]\s*\)/g)) {
+                const specifier = m[1]
+                if (!specifier.endsWith('.js') || !(specifier.startsWith('./') || specifier.startsWith('../'))) continue
+                const dir2 = pathMod.dirname(full)
+                const resolved = pathMod.resolve(dir2, specifier)
+                const tsVariant = resolved.replace(/\.js$/, '.ts')
+                const tsxVariant = resolved.replace(/\.js$/, '.tsx')
+                if (!fs.existsSync(resolved) && !fs.existsSync(tsVariant) && !fs.existsSync(tsxVariant)) {
+                  missingModules.add(specifier)
                 }
               }
             }

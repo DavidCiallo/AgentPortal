@@ -6,7 +6,6 @@ import memoize from 'lodash-es/memoize.js'
 import { createConnection } from 'net'
 import * as os from 'os'
 import { basename, join, sep as pathSeparator, resolve } from 'path'
-import { logEvent } from 'src/services/analytics/index.js'
 import { getIsScrollDraining, getOriginalCwd } from '../bootstrap/state.js'
 import { callIdeRpc } from '../services/mcp/client.js'
 import type {
@@ -594,7 +593,6 @@ export async function maybeInstallIDEExtension(
     // Install/update the extension
     const installedVersion = await installIDEExtension(ideType)
     // Only track successful installations
-    logEvent('tengu_ext_installed', {})
 
     // Set diff tool config to auto if it has not been set already
     const globalConfig = getGlobalConfig()
@@ -608,7 +606,7 @@ export async function maybeInstallIDEExtension(
       ideType: ideType,
     }
   } catch (error) {
-    logEvent('tengu_ext_install_error', {})
+
     // Handle installation errors
     const errorMessage = error instanceof Error ? error.message : String(error)
     logError(error as Error)
@@ -844,10 +842,7 @@ export function hasAccessToIDEExtensionDiffFeature(
   )
 }
 
-const EXTENSION_ID =
-  process.env.USER_TYPE === 'ant'
-    ? 'anthropic.claude-code-internal'
-    : 'anthropic.claude-code'
+const EXTENSION_ID = 'anthropic.claude-code'
 
 export async function isIDEExtensionInstalled(
   ideType: IdeType,
@@ -881,9 +876,6 @@ async function installIDEExtension(ideType: IdeType): Promise<string | null> {
     const command = await getVSCodeIDECommand(ideType)
 
     if (command) {
-      if (process.env.USER_TYPE === 'ant') {
-        return await installFromArtifactory(command)
-      }
       let version = await getInstalledVSCodeExtensionVersion(command)
       // If it's not installed or the version is older than the one we have bundled,
       if (!version || lt(version, getClaudeCodeVersion())) {

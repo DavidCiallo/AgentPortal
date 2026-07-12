@@ -15,11 +15,6 @@ import type {
 import { randomUUID, type UUID } from 'crypto'
 import isObject from 'lodash-es/isObject.js'
 import last from 'lodash-es/last.js'
-import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  logEvent,
-} from 'src/services/analytics/index.js'
-import { sanitizeToolNameForAnalytics } from 'src/services/analytics/metadata.js'
 import type { AgentId } from 'src/types/ids.js'
 import { NO_CONTENT_MESSAGE } from '../constants/messages.js'
 import { OUTPUT_STYLE_CONFIG } from '../constants/outputStyles.js'
@@ -196,7 +191,7 @@ export function withMemoryCorrectionHint(message: string): string {
  * Used for snip tool referencing — injected into API-bound messages as [id:...] tags.
  * Deterministic: same UUID always produces the same short ID.
  */
-export function deriveShortMessageId(uuid: string): string {
+function deriveShortMessageId(uuid: string): string {
   // Take first 10 hex chars from the UUID (skipping dashes)
   const hex = uuid.replace(/-/g, '').slice(0, 10)
   // Convert to base36 for shorter representation, take 6 chars
@@ -222,7 +217,7 @@ export const PLAN_REJECTION_PREFIX =
 /**
  * Shared guidance for permission denials, instructing the model on appropriate workarounds.
  */
-export const DENIAL_WORKAROUND_GUIDANCE =
+const DENIAL_WORKAROUND_GUIDANCE =
   `IMPORTANT: You *may* attempt to accomplish this action using other tools that might naturally be used to accomplish this goal, ` +
   `e.g. using head instead of cat. But you *should not* attempt to work around this denial in malicious ways, ` +
   `e.g. do not use your ability to run tests to execute non-test actions. ` +
@@ -242,7 +237,7 @@ export const NO_RESPONSE_REQUESTED = 'No response requested.'
 // tool_use block has no matching tool_result. Exported so HFI submission can
 // reject any payload containing it — placeholder satisfies pairing structurally
 // but the content is fake, which poisons training data if submitted.
-export const SYNTHETIC_TOOL_RESULT_PLACEHOLDER =
+const SYNTHETIC_TOOL_RESULT_PLACEHOLDER =
   '[Tool result missing due to internal error]'
 
 // Prefix used by UI to detect classifier denials and render them concisely
@@ -825,7 +820,7 @@ type ToolUseRequestMessage = NormalizedAssistantMessage & {
   message: { content: [ToolUseBlock] }
 }
 
-export function isToolUseRequestMessage(
+function isToolUseRequestMessage(
   message: Message,
 ): message is ToolUseRequestMessage {
   return (
@@ -1075,7 +1070,7 @@ function getResolvedHookCount(
   return uniqueHookNames.size
 }
 
-export function hasUnresolvedHooks(
+function hasUnresolvedHooks(
   messages: NormalizedMessage[],
   toolUseID: string,
   hookEvent: HookEvent,
@@ -1094,7 +1089,7 @@ export function hasUnresolvedHooks(
   return false
 }
 
-export function getToolResultIDs(normalizedMessages: NormalizedMessage[]): {
+function getToolResultIDs(normalizedMessages: NormalizedMessage[]): {
   [toolUseID: string]: boolean
 } {
   return Object.fromEntries(
@@ -1111,7 +1106,7 @@ export function getToolResultIDs(normalizedMessages: NormalizedMessage[]): {
   )
 }
 
-export function getSiblingToolUseIDs(
+function getSiblingToolUseIDs(
   message: NormalizedMessage,
   messages: Message[],
 ): Set<string> {
@@ -1142,7 +1137,7 @@ export function getSiblingToolUseIDs(
   )
 }
 
-export type MessageLookups = {
+type MessageLookups = {
   siblingToolUseIDs: Map<string, Set<string>>
   progressMessagesByToolUseID: Map<string, ProgressMessage[]>
   inProgressHookCounts: Map<string, Map<HookEvent, number>>
@@ -2369,7 +2364,7 @@ export function normalizeMessagesForAPI(
   return sanitized
 }
 
-export function mergeUserMessagesAndToolResults(
+function mergeUserMessagesAndToolResults(
   a: UserMessage,
   b: UserMessage,
 ): UserMessage {
@@ -2386,7 +2381,7 @@ export function mergeUserMessagesAndToolResults(
   }
 }
 
-export function mergeAssistantMessages(
+function mergeAssistantMessages(
   a: AssistantMessage,
   b: AssistantMessage,
 ): AssistantMessage {
@@ -2408,7 +2403,7 @@ function isToolResultMessage(msg: Message): boolean {
   return content.some(block => block.type === 'tool_result')
 }
 
-export function mergeUserMessages(a: UserMessage, b: UserMessage): UserMessage {
+function mergeUserMessages(a: UserMessage, b: UserMessage): UserMessage {
   const lastContent = normalizeUserTextContent(a.message.content)
   const currentContent = normalizeUserTextContent(b.message.content)
   if (feature('HISTORY_SNIP')) {
@@ -2597,7 +2592,7 @@ function smooshIntoToolResult(
   return { ...tr, content: merged }
 }
 
-export function mergeUserContentBlocks(
+function mergeUserContentBlocks(
   a: ContentBlockParam[],
   b: ContentBlockParam[],
 ): ContentBlockParam[] {
@@ -2680,16 +2675,6 @@ export function normalizeContentFromAPI(
             // parse. We fall back to {} which means downstream validation
             // sees empty input. The raw prefix goes to debug log only — no
             // PII-tagged proto column exists for it yet.
-            logEvent('tengu_tool_input_json_parse_fail', {
-              toolName: sanitizeToolNameForAnalytics(contentBlock.name),
-              inputLen: contentBlock.input.length,
-            })
-            if (process.env.USER_TYPE === 'ant') {
-              logForDebugging(
-                `tool input JSON parse fail: ${contentBlock.input.slice(0, 200)}`,
-                { level: 'warn' },
-              )
-            }
           }
           normalizedInput = parsed ?? {}
         } else {
@@ -2720,9 +2705,7 @@ export function normalizeContentFromAPI(
       }
       case 'text':
         if (contentBlock.text.trim().length === 0) {
-          logEvent('tengu_model_whitespace_response', {
-            length: contentBlock.text.length,
-          })
+
         }
         // Return the block as-is to preserve exact content for prompt caching.
         // Empty text blocks are handled at the display layer and must not be
@@ -2924,6 +2907,11 @@ export type StreamingThinking = {
   streamingEndedAt?: number
 }
 
+export type StreamingTextState = {
+  text: string
+  index: number
+}
+
 /**
  * Handles messages from a stream, updating response length for deltas and appending completed messages
  */
@@ -2945,7 +2933,9 @@ export function handleMessageFromStream(
     f: (current: StreamingThinking | null) => StreamingThinking | null,
   ) => void,
   onApiMetrics?: (metrics: { ttftMs: number }) => void,
-  onStreamingText?: (f: (current: string | null) => string | null) => void,
+  onStreamingText?: (
+    f: (current: StreamingTextState | null) => StreamingTextState | null,
+  ) => void,
 ): void {
   if (
     message.type !== 'stream_event' &&
@@ -3000,6 +2990,9 @@ export function handleMessageFromStream(
 
   switch (message.event.type) {
     case 'content_block_start':
+      // Reset streaming text for the new block, carrying its content
+      // block index so it can be interleaved with tool_use blocks by
+      // position during rendering.
       onStreamingText?.(() => null)
       if (
         feature('CONNECTOR_TEXT') &&
@@ -3015,6 +3008,10 @@ export function handleMessageFromStream(
           return
         case 'text':
           onSetStreamMode('responding')
+          onStreamingText?.(() => ({
+            text: '',
+            index: message.event.index,
+          }))
           return
         case 'tool_use': {
           onSetStreamMode('tool-input')
@@ -3049,8 +3046,12 @@ export function handleMessageFromStream(
       switch (message.event.delta.type) {
         case 'text_delta': {
           const deltaText = message.event.delta.text
+          const index = message.event.index
           onUpdateLength(deltaText)
-          onStreamingText?.(text => (text ?? '') + deltaText)
+          onStreamingText?.(current => ({
+            text: (current?.text ?? '') + deltaText,
+            index,
+          }))
           return
         }
         case 'input_json_delta': {
@@ -3153,7 +3154,7 @@ function getPlanModeInstructions(attachment: {
 // Each arm returns the full Phase 4 section so the surrounding template
 // stays a flat string interpolation with no conditionals inline.
 
-export const PLAN_PHASE4_CONTROL = `### Phase 4: Final Plan
+const PLAN_PHASE4_CONTROL = `### Phase 4: Final Plan
 Goal: Write your final plan to the plan file (the only file you can edit).
 - Begin with a **Context** section: explain why this change is being made — the problem or need it addresses, what prompted it, and the intended outcome
 - Include only your recommended approach, not all alternatives
@@ -3498,7 +3499,6 @@ Read the team config to discover your teammates' names. Check the task list peri
       ]
     }
   }
-
 
   // skill_discovery handled here (not in the switch) so the 'skill_discovery'
   // string literal lives inside a feature()-guarded block. A case label can't
@@ -4230,7 +4230,6 @@ You have exited auto mode. The user may now want to interact more directly. You 
       ])
     }
     case 'verify_plan_reminder': {
-      // Dead code elimination: CLAUDE_CODE_VERIFY_PLAN='false' in external builds, so === 'true' check allows Bun to eliminate the string
       /* eslint-disable-next-line custom-rules/no-process-env-top-level */
       const toolName =
         process.env.CLAUDE_CODE_VERIFY_PLAN === 'true'
@@ -4358,7 +4357,7 @@ export function createPermissionRetryMessage(
   }
 }
 
-export function createBridgeStatusMessage(
+function createBridgeStatusMessage(
   url: string,
   upgradeNudge?: string,
 ): SystemBridgeStatusMessage {
@@ -4795,13 +4794,6 @@ function filterTrailingThinkingFromLastAssistant(
     lastValidIndex--
   }
 
-  logEvent('tengu_filtered_trailing_thinking_block', {
-    messageUUID:
-      lastMessage.uuid as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    blocksRemoved: content.length - lastValidIndex - 1,
-    remainingBlocks: lastValidIndex + 1,
-  })
-
   // Insert placeholder if all blocks were thinking
   const filteredContent =
     lastValidIndex < 0
@@ -4882,10 +4874,7 @@ export function filterWhitespaceOnlyAssistantMessages(
 
     if (hasOnlyWhitespaceTextContent(content)) {
       hasChanges = true
-      logEvent('tengu_filtered_whitespace_only_assistant', {
-        messageUUID:
-          message.uuid as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      })
+
       return false
     }
 
@@ -4945,11 +4934,6 @@ function ensureNonEmptyAssistantContent(
     const content = message.message.content
     if (Array.isArray(content) && content.length === 0) {
       hasChanges = true
-      logEvent('tengu_fixed_empty_assistant_content', {
-        messageUUID:
-          message.uuid as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        messageIndex: index,
-      })
 
       return {
         ...message,
@@ -5036,13 +5020,7 @@ export function filterOrphanedThinkingOnlyMessages(
     }
 
     // Truly orphaned - no other message with same id has content to merge with
-    logEvent('tengu_filtered_orphaned_thinking_message', {
-      messageUUID:
-        msg.uuid as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      messageId: msg.message
-        .id as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      blockCount: content.length,
-    })
+
     return false
   })
 
@@ -5094,7 +5072,7 @@ export function stripSignatureBlocks(messages: Message[]): Message[] {
  * Creates a tool use summary message for SDK emission.
  * Tool use summaries provide human-readable progress updates after tool batches complete.
  */
-export function createToolUseSummaryMessage(
+function createToolUseSummaryMessage(
   summary: string,
   precedingToolUseIds: string[],
 ): ToolUseSummaryMessage {
@@ -5434,13 +5412,6 @@ export function ensureToolResultPairing(
       )
     }
 
-    logEvent('tengu_tool_result_pairing_repaired', {
-      messageCount: messages.length,
-      repairedMessageCount: result.length,
-      messageTypes: messageTypes.join(
-        '; ',
-      ) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    })
     logError(
       new Error(
         `ensureToolResultPairing: repaired missing tool_result blocks (${messages.length} -> ${result.length} messages). Message structure: ${messageTypes.join('; ')}`,
@@ -5485,7 +5456,7 @@ export function stripAdvisorBlocks(
   return changed ? result : messages
 }
 
-export function wrapCommandText(
+function wrapCommandText(
   raw: string,
   origin: MessageOrigin | undefined,
 ): string {

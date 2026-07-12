@@ -4,10 +4,6 @@ import { access, writeFile } from 'fs/promises'
 import { homedir } from 'os'
 import { join } from 'path'
 import { getDynamicConfig_BLOCKS_ON_INIT } from 'src/services/analytics/growthbook.js'
-import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  logEvent,
-} from 'src/services/analytics/index.js'
 import { type ReleaseChannel, saveGlobalConfig } from './config.js'
 import { logForDebugging } from './debug.js'
 import { env } from './env.js'
@@ -84,9 +80,6 @@ export async function assertMinVersion(): Promise<void> {
  */
 export async function getMaxVersion(): Promise<string | undefined> {
   const config = await getMaxVersionConfig()
-  if (process.env.USER_TYPE === 'ant') {
-    return config.ant || undefined
-  }
   return config.external || undefined
 }
 
@@ -96,9 +89,6 @@ export async function getMaxVersion(): Promise<string | undefined> {
  */
 export async function getMaxVersionMessage(): Promise<string | undefined> {
   const config = await getMaxVersionConfig()
-  if (process.env.USER_TYPE === 'ant') {
-    return config.ant_message || undefined
-  }
   return config.external_message || undefined
 }
 
@@ -396,9 +386,7 @@ export async function getGcsDistTags(): Promise<NpmDistTags> {
  * 3. This prevents rollback from listing versions that don't have native binaries
  */
 export async function getVersionHistory(limit: number): Promise<string[]> {
-  if (process.env.USER_TYPE !== 'ant') {
     return []
-  }
 
   // Use native package URL when available to ensure we only show versions
   // that have native binaries (not all JS package versions have native builds)
@@ -438,11 +426,7 @@ export async function installGlobalPackage(
       new AutoUpdaterError('Another process is currently installing an update'),
     )
     // Log the lock contention
-    logEvent('tengu_auto_updater_lock_contention', {
-      pid: process.pid,
-      currentVersion:
-        MACRO.VERSION as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    })
+
     return 'in_progress'
   }
 
@@ -451,10 +435,7 @@ export async function installGlobalPackage(
     // Check if we're using npm from Windows path in WSL
     if (!env.isRunningWithBun() && env.isNpmFromWindowsPath()) {
       logError(new Error('Windows NPM detected in WSL environment'))
-      logEvent('tengu_auto_updater_windows_npm_in_wsl', {
-        currentVersion:
-          MACRO.VERSION as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      })
+
       // biome-ignore lint/suspicious/noConsole:: intentional console output
       console.error(`
 Error: Windows NPM detected in WSL

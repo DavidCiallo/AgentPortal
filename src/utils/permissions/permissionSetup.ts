@@ -44,10 +44,6 @@ import {
   addDirHelpMessage,
   validateDirectoryForWorkspace,
 } from '../../commands/add-dir/validation.js'
-import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  logEvent,
-} from '../../services/analytics/index.js'
 import { AGENT_TOOL_NAME } from '../../tools/AgentTool/constants.js'
 import { BASH_TOOL_NAME } from '../../tools/BashTool/toolName.js'
 /* eslint-enable @typescript-eslint/no-require-imports */
@@ -273,10 +269,6 @@ function isDangerousClassifierPermission(
   toolName: string,
   ruleContent: string | undefined,
 ): boolean {
-  if (process.env.USER_TYPE === 'ant') {
-    // Tmux send-keys executes arbitrary shell, bypassing the classifier same as Bash(*)
-    if (toolName === 'Tmux') return true
-  }
   return (
     isDangerousBashPermission(toolName, ruleContent) ||
     isDangerousPowerShellPermission(toolName, ruleContent) ||
@@ -753,9 +745,7 @@ export function initialPermissionModeFromCLI({
         `settings defaultMode "${settingsMode}" is not supported in CLAUDE_CODE_REMOTE — only acceptEdits and plan are allowed`,
         { level: 'warn' },
       )
-      logEvent('tengu_ccr_unsupported_default_mode_ignored', {
-        mode: settingsMode as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      })
+
     }
     // auto from settings requires the same gate check as from CLI
     else if (feature('TRANSCRIPT_CLASSIFIER') && settingsMode === 'auto') {
@@ -950,19 +940,6 @@ export async function initializeToolPermissionContext({
   // Skip in CCR/BYOC where --allowed-tools is the intended pre-approval mechanism.
   // Variable name kept for return-field compat; contains both shells.
   let overlyBroadBashPermissions: DangerousPermissionInfo[] = []
-  if (
-    process.env.USER_TYPE === 'ant' &&
-    !isEnvTruthy(process.env.CLAUDE_CODE_REMOTE) &&
-    process.env.CLAUDE_CODE_ENTRYPOINT !== 'local-agent'
-  ) {
-    overlyBroadBashPermissions = [
-      ...findOverlyBroadBashPermissions(rulesFromDisk, parsedAllowedToolsCli),
-      ...findOverlyBroadPowerShellPermissions(
-        rulesFromDisk,
-        parsedAllowedToolsCli,
-      ),
-    ]
-  }
 
   // Ant-only: Detect dangerous shell permissions for auto mode
   // Dangerous permissions (like Bash(*), Bash(python:*), PowerShell(iex:*)) would auto-allow
@@ -1109,8 +1086,7 @@ export async function verifyAutoModeGateAccess(
   const disableFastModeBreakerFires =
     !!autoModeConfig?.disableFastMode &&
     (!!fastMode ||
-      (process.env.USER_TYPE === 'ant' &&
-        mainModel.toLowerCase().includes('-fast')))
+      false)
   const modelSupported =
     modelSupportsAutoMode(mainModel) && !disableFastModeBreakerFires
   let carouselAvailable = false

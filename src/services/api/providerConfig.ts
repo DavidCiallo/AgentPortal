@@ -163,10 +163,6 @@ export function resolveProviderRequest(options?: {
 export function getAdditionalModelOptionsCacheScope(): string | null {
   const request = resolveProviderRequest()
 
-  if (!isLocalProviderUrl(request.baseUrl)) {
-    return null
-  }
-
   return `openai:${request.baseUrl.toLowerCase()}`
 }
 

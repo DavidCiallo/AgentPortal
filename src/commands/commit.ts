@@ -10,9 +10,6 @@ const ALLOWED_TOOLS = [
 
 function getPromptContent(): string {
   let prefix = ''
-  if (process.env.USER_TYPE === 'ant' && isUndercover()) {
-    prefix = getUndercoverInstructions() + '\n'
-  }
 
   return `${prefix}## Context
 

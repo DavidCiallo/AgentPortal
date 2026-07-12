@@ -2,8 +2,6 @@ import { c as _c } from "react-compiler-runtime";
 // biome-ignore-all assist/source/organizeImports: internal-only import markers must not be reordered
 import { feature } from 'bun:bundle';
 import { spawnSync } from 'child_process';
-import { snapshotOutputTokensForTurn, getCurrentTurnTokenBudget, getTurnOutputTokens, getBudgetContinuationCount, getTotalInputTokens } from '../bootstrap/state.js';
-import { parseTokenBudget } from '../utils/tokenBudget.js';
 import { count } from '../utils/array.js';
 import { dirname, join } from 'path';
 import { tmpdir } from 'os';
@@ -19,7 +17,6 @@ import { openFileInExternalEditor } from '../utils/editor.js';
 import { writeFile } from 'fs/promises';
 import { Box, Text, useStdin, useTheme, useTerminalFocus, useTerminalTitle, useTabStatus } from '../ink.js';
 import type { TabStatusKind } from '../ink/hooks/use-tab-status.js';
-import { CostThresholdDialog } from '../components/CostThresholdDialog.js';
 import { IdleReturnDialog } from '../components/IdleReturnDialog.js';
 import * as React from 'react';
 import { useEffect, useMemo, useRef, useState, useCallback, useDeferredValue, useLayoutEffect, type RefObject } from 'react';
@@ -29,7 +26,7 @@ import { startPreventSleep, stopPreventSleep } from '../services/preventSleep.js
 import { useTerminalNotification } from '../ink/useTerminalNotification.js';
 import { hasCursorUpViewportYankBug } from '../ink/terminal.js';
 import { createFileStateCacheWithSizeLimit, mergeFileStateCaches, READ_FILE_STATE_CACHE_SIZE } from '../utils/fileStateCache.js';
-import { updateLastInteractionTime, getLastInteractionTime, getOriginalCwd, getProjectRoot, getSessionId, switchSession, setCostStateForRestore, getTurnHookDurationMs, getTurnHookCount, resetTurnHookDuration, getTurnToolDurationMs, getTurnToolCount, resetTurnToolDuration, getTurnClassifierDurationMs, getTurnClassifierCount, resetTurnClassifierDuration } from '../bootstrap/state.js';
+import { updateLastInteractionTime, getLastInteractionTime, getOriginalCwd, getProjectRoot, getSessionId, switchSession, getTurnHookDurationMs, getTurnHookCount, resetTurnHookDuration, getTurnToolDurationMs, getTurnToolCount, resetTurnToolDuration, getTurnClassifierDurationMs, getTurnClassifierCount, resetTurnClassifierDuration } from '../bootstrap/state.js';
 import { asSessionId, asAgentId } from '../types/ids.js';
 import { logForDebugging } from '../utils/debug.js';
 import { QueryGuard } from '../utils/QueryGuard.js';
@@ -38,7 +35,6 @@ import { formatTokens, truncateToWidth } from '../utils/format.js';
 import { consumeEarlyInput } from '../utils/earlyInput.js';
 import { setMemberActive } from '../utils/swarm/teamHelpers.js';
 import { isSwarmWorker, generateSandboxRequestId, sendSandboxPermissionRequestViaMailbox, sendSandboxPermissionResponseViaMailbox } from '../utils/swarm/permissionSync.js';
-import { registerSandboxPermissionCallback } from '../hooks/useSwarmPermissionPoller.js';
 import { getTeamName, getAgentName } from '../utils/teammate.js';
 import { WorkerPendingPermission } from '../components/permissions/WorkerPendingPermission.js';
 import { injectUserMessageToTeammate, getAllInProcessTeammateTasks } from '../tasks/InProcessTeammateTask/InProcessTeammateTask.js';
@@ -72,9 +68,6 @@ import { buildEffectiveSystemPrompt } from '../utils/systemPrompt.js';
 import { getSystemContext, getUserContext } from '../context.js';
 import { getMemoryFiles } from '../utils/claudemd.js';
 import { startBackgroundHousekeeping } from '../utils/backgroundHousekeeping.js';
-import { getTotalCost, saveCurrentSessionCosts, resetCostState, getStoredSessionCosts } from '../cost-tracker.js';
-import { useCostSummary } from '../costHook.js';
-import { useFpsMetrics } from '../context/fpsMetrics.js';
 import { useAfterFirstRender } from '../hooks/useAfterFirstRender.js';
 import { useDeferredHookMessages } from '../hooks/useDeferredHookMessages.js';
 import { addToHistory, removeLastFromHistory, expandPastedTextRefs, parseReferences } from '../history.js';
@@ -93,7 +86,6 @@ import { useTeammateViewAutoExit } from '../hooks/useTeammateViewAutoExit.js';
 import { errorMessage } from '../utils/errors.js';
 import { isHumanTurn } from '../utils/messagePredicates.js';
 import { logError } from '../utils/log.js';
-// Dead code elimination: conditional imports
 /* eslint-disable custom-rules/no-process-env-top-level, @typescript-eslint/no-require-imports */
 const useVoiceIntegration: typeof import('../hooks/useVoiceIntegration.js').useVoiceIntegration = feature('VOICE_MODE') ? require('../hooks/useVoiceIntegration.js').useVoiceIntegration : () => ({
   stripTrailing: () => 0,
@@ -111,7 +103,6 @@ const useFrustrationDetection: typeof import('../components/FeedbackSurvey/useFr
 // Ant-only org warning. Conditional require so the org UUID list is
 // eliminated from external builds (one UUID is on excluded-strings).
 const useAntOrgWarningNotification: typeof import('../hooks/notifs/useAntOrgWarningNotification.js').useAntOrgWarningNotification = "external" === 'ant' ? require('../hooks/notifs/useAntOrgWarningNotification.js').useAntOrgWarningNotification : () => { };
-// Dead code elimination: conditional import for coordinator mode
 const getCoordinatorUserContext: (mcpClients: ReadonlyArray<{
   name: string;
 }>, scratchpadDir?: string) => {
@@ -129,10 +120,8 @@ import { SLEEP_TOOL_NAME } from '../tools/SleepTool/prompt.js';
 import { clearSpeculativeChecks } from '../tools/BashTool/bashPermissions.js';
 import type { AutoUpdaterResult } from '../utils/autoUpdater.js';
 import { getGlobalConfig, saveGlobalConfig, getGlobalConfigWriteCount } from '../utils/config.js';
-import { hasConsoleBillingAccess } from '../utils/billing.js';
-import { logEvent, type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from 'src/services/analytics/index.js';
 import { getFeatureValue_CACHED_MAY_BE_STALE } from 'src/services/analytics/growthbook.js';
-import { textForResubmit, handleMessageFromStream, type StreamingToolUse, type StreamingThinking, isCompactBoundaryMessage, getMessagesAfterCompactBoundary, getContentText, createUserMessage, createAssistantMessage, createTurnDurationMessage, createAgentsKilledMessage, createApiMetricsMessage, createSystemMessage, createCommandInputMessage, formatCommandInputTags } from '../utils/messages.js';
+import { textForResubmit, handleMessageFromStream, type StreamingToolUse, type StreamingThinking, type StreamingTextState, isCompactBoundaryMessage, getMessagesAfterCompactBoundary, getContentText, createUserMessage, createAssistantMessage, createTurnDurationMessage, createAgentsKilledMessage, createApiMetricsMessage, createSystemMessage, createCommandInputMessage, formatCommandInputTags } from '../utils/messages.js';
 import { generateSessionTitle } from '../utils/sessionTitle.js';
 import { BASH_INPUT_TAG, COMMAND_MESSAGE_TAG, COMMAND_NAME_TAG, LOCAL_COMMAND_STDOUT_TAG } from '../constants/xml.js';
 import { escapeXml } from '../utils/xml.js';
@@ -189,7 +178,6 @@ import { isBgSession, updateSessionName, updateSessionActivity } from '../utils/
 import { isInProcessTeammateTask, type InProcessTeammateTaskState } from '../tasks/InProcessTeammateTask/types.js';
 import { restoreRemoteAgentTasks } from '../tasks/RemoteAgentTask/RemoteAgentTask.js';
 import { useInboxPoller } from '../hooks/useInboxPoller.js';
-// Dead code elimination: conditional import for loop mode
 /* eslint-disable @typescript-eslint/no-require-imports */
 const proactiveModule = feature('PROACTIVE') || feature('KAIROS') ? require('../proactive/index.js') : null;
 const PROACTIVE_NO_OP_SUBSCRIBE = (_cb: () => void) => () => { };
@@ -264,7 +252,6 @@ import { useDeprecationWarningNotification } from 'src/hooks/notifs/useDeprecati
 import { useNpmDeprecationNotification } from 'src/hooks/notifs/useNpmDeprecationNotification.js';
 import { useIDEStatusIndicator } from 'src/hooks/notifs/useIDEStatusIndicator.js';
 import { useModelMigrationNotifications } from 'src/hooks/notifs/useModelMigrationNotifications.js';
-import { useCanSwitchToExistingSubscription } from 'src/hooks/notifs/useCanSwitchToExistingSubscription.js';
 import { useTeammateLifecycleNotification } from 'src/hooks/notifs/useTeammateShutdownNotification.js';
 import { useFastModeNotification } from 'src/hooks/notifs/useFastModeNotification.js';
 import { AutoRunIssueNotification, shouldAutoRunIssue, getAutoRunIssueReasonText, getAutoRunCommand, type AutoRunIssueReason } from '../utils/autoRunIssue.js';
@@ -277,9 +264,7 @@ import { IssueFlagBanner } from '../components/PromptInput/IssueFlagBanner.js';
 import { useIssueFlagBanner } from '../hooks/useIssueFlagBanner.js';
 import { DevBar } from '../components/DevBar.js';
 // Session manager removed - using AppState now
-import type { RemoteSessionConfig } from '../remote/RemoteSessionManager.js';
 import { REMOTE_SAFE_COMMANDS } from '../commands.js';
-import type { RemoteMessageContent } from '../utils/teleport/api.js';
 import { FullscreenLayout, useUnseenDivider, computeUnseenDivider } from '../components/FullscreenLayout.js';
 import { isFullscreenEnvEnabled, maybeGetTmuxMouseHint, isMouseTrackingEnabled } from '../utils/fullscreen.js';
 import { AlternateScreen } from '../ink/components/AlternateScreen.js';
@@ -725,7 +710,6 @@ export function REPL({
   const [ideToInstallExtension, setIDEToInstallExtension] = useState<IdeType | null>(null);
   const [ideInstallationStatus, setIDEInstallationStatus] = useState<IDEExtensionInstallationStatus | null>(null);
   const [showIdeOnboarding, setShowIdeOnboarding] = useState(false);
-  // Dead code elimination: model switch callout state (internal-only)
   const [showModelSwitchCallout, setShowModelSwitchCallout] = useState(() => {
     if ("external" === 'ant') {
       return shouldShowAntModelSwitch();
@@ -737,7 +721,6 @@ export function REPL({
   const [showDesktopUpsellStartup, setShowDesktopUpsellStartup] = useState(() => shouldShowDesktopUpsellStartup());
   // notifications
   useModelMigrationNotifications();
-  useCanSwitchToExistingSubscription();
   useIDEStatusIndicator({
     ideSelection,
     mcpClients,
@@ -1475,10 +1458,10 @@ export function REPL({
   // Streaming text display: set state directly per delta (Ink's 16ms render
   // throttle batches rapid updates). Cleared on message arrival (messages.ts)
   // so displayedMessages switches from deferredMessages to messages atomically.
-  const [streamingText, setStreamingText] = useState<string | null>(null);
+  const [streamingText, setStreamingText] = useState<StreamingTextState | null>(null);
   const reducedMotion = useAppState(s => s.settings.prefersReducedMotion) ?? false;
   const showStreamingText = !reducedMotion && !hasCursorUpViewportYankBug();
-  const onStreamingText = useCallback((f: (current: string | null) => string | null) => {
+  const onStreamingText = useCallback((f: (current: StreamingTextState | null) => StreamingTextState | null) => {
     if (!showStreamingText) return;
     setStreamingText(f);
   }, [showStreamingText]);
@@ -1487,14 +1470,16 @@ export function REPL({
   // char-by-char. lastIndexOf returns -1 when no newline, giving '' → null.
   // Guard on showStreamingText so toggling reducedMotion mid-stream
   // immediately hides the streaming preview.
-  const visibleStreamingText = streamingText && showStreamingText ? streamingText.substring(0, streamingText.lastIndexOf('\n') + 1) || null : null;
+  const visibleStreamingText = streamingText && showStreamingText ? (() => {
+    const truncated = streamingText.text.substring(0, streamingText.text.lastIndexOf('\n') + 1);
+    return truncated ? { text: truncated, index: streamingText.index } : null;
+  })() : null;
   const [lastQueryCompletionTime, setLastQueryCompletionTime] = useState(0);
   const [spinnerMessage, setSpinnerMessage] = useState<string | null>(null);
   const [spinnerColor, setSpinnerColor] = useState<keyof Theme | null>(null);
   const [spinnerShimmerColor, setSpinnerShimmerColor] = useState<keyof Theme | null>(null);
   const [isMessageSelectorVisible, setIsMessageSelectorVisible] = useState(false);
   const [messageSelectorPreselect, setMessageSelectorPreselect] = useState<UserMessage | undefined>(undefined);
-  const [showCostDialog, setShowCostDialog] = useState(false);
   const [conversationId, setConversationId] = useState(randomUUID());
 
   // Idle-return dialog: shown when user submits after a long idle gap
@@ -1520,7 +1505,6 @@ export function REPL({
   const [contentReplacementStateRef] = useState(() => ({
     current: provisionContentReplacementState(initialMessages, initialContentReplacements)
   }));
-  const [haveShownCostDialog, setHaveShownCostDialog] = useState(getGlobalConfig().hasAcknowledgedCostThreshold);
   const [vimMode, setVimMode] = useState<VimMode>('INSERT');
   const [showBashesDialog, setShowBashesDialog] = useState<string | boolean>(false);
   const [isSearchingHistory, setIsSearchingHistory] = useState(false);
@@ -1847,16 +1831,6 @@ export function REPL({
       setAbortController(null);
       setConversationId(sessionId);
 
-      // Get target session's costs BEFORE saving current session
-      // (saveCurrentSessionCosts overwrites the config, so we need to read first)
-      const targetSessionCosts = getStoredSessionCosts(sessionId);
-
-      // Save current session's costs before switching to avoid losing accumulated costs
-      saveCurrentSessionCosts();
-
-      // Reset cost state for clean slate before restoring target session
-      resetCostState();
-
       // Switch session (id + project dir atomically). fullPath may point to
       // a different project (cross-worktree, /branch); null derives from
       // current originalCwd.
@@ -1921,11 +1895,6 @@ export function REPL({
         saveMode(isCoordinatorMode() ? 'coordinator' : 'normal');
       }
 
-      // Restore target session's costs from the data we read earlier
-      if (targetSessionCosts) {
-        setCostStateForRestore(targetSessionCosts);
-      }
-
       // Reconstruct replacement state for the resumed session. Runs after
       // setSessionId so any NEW replacements post-resume write to the
       // resumed session's tool-results dir. Gated on ref.current: the
@@ -1951,16 +1920,8 @@ export function REPL({
 
       // Clear input to ensure no residual state
       setInputValue('');
-      logEvent('tengu_session_resumed', {
-        entrypoint: entrypoint as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        success: true,
-        resume_duration_ms: Math.round(performance.now() - resumeStart)
-      });
     } catch (error) {
-      logEvent('tengu_session_resumed', {
-        entrypoint: entrypoint as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        success: false
-      });
+      ;
       throw error;
     }
   }, [resetLoadingState, setAppState]);
@@ -2025,14 +1986,11 @@ export function REPL({
   const [exitFlow, setExitFlow] = useState<React.ReactNode>(null);
   const [isExiting, setIsExiting] = useState(false);
 
-  // Calculate if cost dialog should be shown
-  const showingCostDialog = !isLoading && showCostDialog;
-
   // Determine which dialog should have focus (if any)
   // Permission and interactive dialogs can show even when toolJSX is set,
   // as long as shouldContinueAnimation is true. This prevents deadlocks when
   // agents set background hints while waiting for user interaction.
-  function getFocusedInputDialog(): 'message-selector' | 'sandbox-permission' | 'tool-permission' | 'prompt' | 'worker-sandbox-permission' | 'elicitation' | 'cost' | 'idle-return' | 'init-onboarding' | 'ide-onboarding' | 'model-switch' | 'undercover-callout' | 'effort-callout' | 'remote-callout' | 'lsp-recommendation' | 'plugin-hint' | 'desktop-upsell' | 'ultraplan-choice' | 'ultraplan-launch' | undefined {
+  function getFocusedInputDialog(): 'message-selector' | 'sandbox-permission' | 'tool-permission' | 'prompt' | 'worker-sandbox-permission' | 'elicitation' | 'idle-return' | 'init-onboarding' | 'ide-onboarding' | 'model-switch' | 'undercover-callout' | 'effort-callout' | 'remote-callout' | 'lsp-recommendation' | 'plugin-hint' | 'desktop-upsell' | 'ultraplan-choice' | 'ultraplan-launch' | undefined {
     // Exit states always take precedence
     if (isExiting || exitFlow) return undefined;
 
@@ -2050,7 +2008,6 @@ export function REPL({
     // Worker sandbox permission prompts (network access) from swarm workers
     if (allowDialogsWithAnimation && workerSandboxPermissions.queue[0]) return 'worker-sandbox-permission';
     if (allowDialogsWithAnimation && elicitation.queue[0]) return 'elicitation';
-    if (allowDialogsWithAnimation && showingCostDialog) return 'cost';
     if (allowDialogsWithAnimation && idleReturnPending) return 'idle-return';
     if (feature('ULTRAPLAN') && allowDialogsWithAnimation && !isLoading && ultraplanPendingChoice) return 'ultraplan-choice';
     if (feature('ULTRAPLAN') && allowDialogsWithAnimation && !isLoading && ultraplanLaunchPending) return 'ultraplan-launch';
@@ -2084,7 +2041,7 @@ export function REPL({
   const focusedInputDialog = getFocusedInputDialog();
 
   // True when permission prompts exist but are hidden because the user is typing
-  const hasSuppressedDialogs = promptTypingSuppressionActive && (sandboxPermissionRequestQueue[0] || toolUseConfirmQueue[0] || promptQueue[0] || workerSandboxPermissions.queue[0] || elicitation.queue[0] || showingCostDialog);
+  const hasSuppressedDialogs = promptTypingSuppressionActive && (sandboxPermissionRequestQueue[0] || toolUseConfirmQueue[0] || promptQueue[0] || workerSandboxPermissions.queue[0] || elicitation.queue[0]);
 
   // Keep ref in sync so timer callbacks can read the current value
   focusedInputDialogRef.current = focusedInputDialog;
@@ -2122,6 +2079,25 @@ export function REPL({
     if (was !== now) repinScroll();
     prevDialogRef.current = focusedInputDialog;
   }, [focusedInputDialog, repinScroll]);
+
+  // Re-pin scroll to bottom when the viewport shrinks (e.g. mobile
+  // soft-keyboard appearing). ScrollBox's stickyScroll auto-follow only
+  // fires when content grows — a viewport height decrease leaves the
+  // scroll offset past the new max, showing blank space at the bottom.
+  // useLayoutEffect so the re-pin commits in the same Ink frame as the
+  // height change (no 1-frame blank flash).
+  const { rows: terminalRows } = useTerminalSize();
+  const prevRowsRef = useRef(terminalRows);
+  useLayoutEffect(() => {
+    const prev = prevRowsRef.current;
+    prevRowsRef.current = terminalRows;
+    if (terminalRows < prev) {
+      // Viewport shrank. If the scroll was pinned before the resize,
+      // the new (shorter) viewport now clips the bottom — re-pin.
+      const s = scrollRef.current;
+      if (s?.isSticky()) s.scrollToBottom();
+    }
+  }, [terminalRows]);
   function onCancel() {
     if (focusedInputDialog === 'elicitation') {
       // Elicitation dialog handles its own Escape, and closing it shouldn't affect any loading state.
@@ -2141,18 +2117,13 @@ export function REPL({
     // generated before pressing Esc. Pushed before resetLoadingState clears
     // streamingText, and before query.ts yields the async interrupt marker,
     // giving final order [user, partial-assistant, [Request interrupted by user]].
-    if (streamingText?.trim()) {
+    if (streamingText?.text.trim()) {
       setMessages(prev => [...prev, createAssistantMessage({
-        content: streamingText
+        content: streamingText.text
       })]);
     }
     resetLoadingState();
 
-    // Clear any active token budget so the backstop doesn't fire on
-    // a stale budget if the query generator hasn't exited yet.
-    if (feature('TOKEN_BUDGET')) {
-      snapshotOutputTokensForTurn(null);
-    }
     if (focusedInputDialog === 'tool-permission') {
       // Tool use confirm handles the abort signal itself
       toolUseConfirmQueue[0]?.onAbort();
@@ -2219,19 +2190,6 @@ export function REPL({
     inputValue,
     streamMode
   };
-  useEffect(() => {
-    const totalCost = getTotalCost();
-    if (totalCost >= 5 /* $5 */ && !showCostDialog && !haveShownCostDialog) {
-      logEvent('tengu_cost_threshold_reached', {});
-      // Mark as shown even if the dialog won't render (no console billing
-      // access). Otherwise this effect re-fires on every message change for
-      // the rest of the session — 200k+ spurious events observed.
-      setHaveShownCostDialog(true);
-      if (hasConsoleBillingAccess()) {
-        setShowCostDialog(true);
-      }
-    }
-  }, [messages, showCostDialog, haveShownCostDialog]);
   const sandboxAskCallback: SandboxAskCallback = useCallback(async (hostPattern: NetworkHostPattern) => {
     // If running as a swarm worker, forward the request to the leader via mailbox
     if (isAgentSwarmsEnabled() && isSwarmWorker()) {
@@ -2248,13 +2206,6 @@ export function REPL({
           }]);
           return;
         }
-
-        // Register the callback for when the leader responds
-        registerSandboxPermissionCallback({
-          requestId,
-          host: hostPattern.host,
-          resolve: resolveShouldAllowHost
-        });
 
         // Update AppState to show pending indicator
         setAppState(prev => ({
@@ -2904,10 +2855,7 @@ export function REPL({
       resetTimingRefs();
       setMessages(oldMessages => [...oldMessages, ...newMessages]);
       responseLengthRef.current = 0;
-      if (feature('TOKEN_BUDGET')) {
-        const parsedBudget = input ? parseTokenBudget(input) : null;
-        snapshotOutputTokensForTurn(parsedBudget ?? getCurrentTurnTokenBudget());
-      }
+
       apiMetricsRef.current = [];
       setStreamingToolUses([]);
       setStreamingText(null);
@@ -2946,64 +2894,6 @@ export function REPL({
         // Notify bridge clients that the turn is complete so mobile apps
         // can stop the spark animation and show post-turn UI.
         sendBridgeResultRef.current();
-
-        // Auto-hide tungsten panel content at turn end (internal-only), but keep
-        // tungstenActiveSession set so the pill stays in the footer and the user
-        // can reopen the panel. Background tmux tasks (e.g. /hunter) run for
-        // minutes — wiping the session made the pill disappear entirely, forcing
-        // the user to re-invoke Tmux just to peek. Skip on abort so the panel
-        // stays open for inspection (matches the turn-duration guard below).
-        if ("external" === 'ant' && !abortController.signal.aborted) {
-          setAppState(prev => {
-            if (prev.tungstenActiveSession === undefined) return prev;
-            if (prev.tungstenPanelAutoHidden === true) return prev;
-            return {
-              ...prev,
-              tungstenPanelAutoHidden: true
-            };
-          });
-        }
-
-        // Capture budget info before clearing (internal-only)
-        let budgetInfo: {
-          tokens: number;
-          limit: number;
-          nudges: number;
-        } | undefined;
-        if (feature('TOKEN_BUDGET')) {
-          if (getCurrentTurnTokenBudget() !== null && getCurrentTurnTokenBudget()! > 0 && !abortController.signal.aborted) {
-            budgetInfo = {
-              tokens: getTurnOutputTokens(),
-              limit: getCurrentTurnTokenBudget()!,
-              nudges: getBudgetContinuationCount()
-            };
-          }
-          snapshotOutputTokensForTurn(null);
-        }
-
-        // Add turn duration message for turns longer than 30s or with a budget
-        // Skip if user aborted or if in loop mode (too noisy between ticks)
-        // Defer if swarm teammates are still running (show when they finish)
-        const turnDurationMs = Date.now() - loadingStartTimeRef.current - totalPausedMsRef.current;
-        if ((turnDurationMs > 30000 || budgetInfo !== undefined) && !abortController.signal.aborted && !proactiveActive) {
-          const hasRunningSwarmAgents = getAllInProcessTeammateTasks(store.getState().tasks).some(t => t.status === 'running');
-          if (hasRunningSwarmAgents) {
-            // Only record start time on the first deferred turn
-            if (swarmStartTimeRef.current === null) {
-              swarmStartTimeRef.current = loadingStartTimeRef.current;
-            }
-            // Always update budget — later turns may carry the actual budget
-            if (budgetInfo) {
-              swarmBudgetInfoRef.current = budgetInfo;
-            }
-          } else {
-            setMessages(prev => [...prev, createTurnDurationMessage(turnDurationMs, budgetInfo, count(prev, isLoggableMessage))]);
-          }
-        }
-        // Clear the controller so CancelRequestHandler's canCancelRunningTask
-        // reads false at the idle prompt. Without this, the stale non-aborted
-        // controller makes ctrl+c fire onCancel() (aborting nothing) instead of
-        // propagating to the double-press exit flow.
         setAbortController(null);
       }
 
@@ -3186,13 +3076,6 @@ export function REPL({
       // 2. Command was triggered via keybinding (fromKeybinding option)
       const matchingCommand = commands.find(cmd => isCommandEnabled(cmd) && (cmd.name === commandName || cmd.aliases?.includes(commandName) || getCommandName(cmd) === commandName));
       if (matchingCommand?.name === 'clear' && idleHintShownRef.current) {
-        logEvent('tengu_idle_return_action', {
-          action: 'hint_converted' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-          variant: idleHintShownRef.current as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-          idleMinutes: Math.round((Date.now() - lastQueryCompletionTimeRef.current) / 60_000),
-          messageCount: messagesRef.current.length,
-          totalInputTokens: getTotalInputTokens()
-        });
         idleHintShownRef.current = false;
       }
       const shouldTreatAsImmediate = queryGuard.isActive && (matchingCommand?.immediate || options?.fromKeybinding);
@@ -3209,14 +3092,8 @@ export function REPL({
         const pastedTextRefs = parseReferences(input).filter(r => pastedContents[r.id]?.type === 'text');
         const pastedTextCount = pastedTextRefs.length;
         const pastedTextBytes = pastedTextRefs.reduce((sum, r) => sum + (pastedContents[r.id]?.content.length ?? 0), 0);
-        logEvent('tengu_paste_text', {
-          pastedTextCount,
-          pastedTextBytes
-        });
-        logEvent('tengu_immediate_command_executed', {
-          commandName: matchingCommand.name as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-          fromKeybinding: options?.fromKeybinding ?? false
-        });
+        ;
+        ;
 
         // Execute the command directly
         const executeImmediateCommand = async (): Promise<void> => {
@@ -3298,29 +3175,6 @@ export function REPL({
     // Remote mode: skip empty input early before any state mutations
     if (activeRemote.isRemoteMode && !input.trim()) {
       return;
-    }
-
-    // Idle-return: prompt returning users to start fresh when the
-    // conversation is large and the cache is cold. tengu_willow_mode
-    // controls treatment: "dialog" (blocking), "hint" (notification), "off".
-    {
-      const willowMode = getFeatureValue_CACHED_MAY_BE_STALE('tengu_willow_mode', 'off');
-      const idleThresholdMin = Number(process.env.CLAUDE_CODE_IDLE_THRESHOLD_MINUTES ?? 75);
-      const tokenThreshold = Number(process.env.CLAUDE_CODE_IDLE_TOKEN_THRESHOLD ?? 100_000);
-      if (willowMode !== 'off' && !getGlobalConfig().idleReturnDismissed && !skipIdleCheckRef.current && !speculationAccept && !input.trim().startsWith('/') && lastQueryCompletionTimeRef.current > 0 && getTotalInputTokens() >= tokenThreshold) {
-        const idleMs = Date.now() - lastQueryCompletionTimeRef.current;
-        const idleMinutes = idleMs / 60_000;
-        if (idleMinutes >= idleThresholdMin && willowMode === 'dialog') {
-          setIdleReturnPending({
-            input,
-            idleMinutes
-          });
-          setInputValue('');
-          helpers.setCursorOffset(0);
-          helpers.clearBuffer();
-          return;
-        }
-      }
     }
 
     // Add to history for direct user submissions.
@@ -3676,12 +3530,7 @@ export function REPL({
     const prev = messagesRef.current;
     const messageIndex = prev.lastIndexOf(message);
     if (messageIndex === -1) return;
-    logEvent('tengu_conversation_rewind', {
-      preRewindMessageCount: prev.length,
-      postRewindMessageCount: messageIndex,
-      messagesRemoved: prev.length - messageIndex,
-      rewindToMessageIndex: messageIndex
-    });
+    ;
     setMessages(prev.slice(0, messageIndex));
     // Careful, this has to happen after setMessages
     setConversationId(randomUUID());
@@ -3833,9 +3682,6 @@ export function REPL({
     // Initial message handling is done via the initialMessage effect
   }
 
-  // Register cost summary tracker
-  useCostSummary(useFpsMetrics());
-
   // Record transcripts locally, for debugging and conversation recovery
   // Don't record conversation if we only have initial messages; optimizes
   // the case where user resumes a conversation then quites before doing
@@ -3964,39 +3810,12 @@ export function REPL({
     if (willowMode !== 'hint' && willowMode !== 'hint_v2') return;
     if (getGlobalConfig().idleReturnDismissed) return;
     const tokenThreshold = Number(process.env.CLAUDE_CODE_IDLE_TOKEN_THRESHOLD ?? 100_000);
-    if (getTotalInputTokens() < tokenThreshold) return;
     const idleThresholdMs = Number(process.env.CLAUDE_CODE_IDLE_THRESHOLD_MINUTES ?? 75) * 60_000;
     const elapsed = Date.now() - lastQueryCompletionTime;
     const remaining = idleThresholdMs - elapsed;
     const timer = setTimeout((lqct, addNotif, msgsRef, mode, hintRef) => {
       if (msgsRef.current.length === 0) return;
-      const totalTokens = getTotalInputTokens();
-      const formattedTokens = formatTokens(totalTokens);
-      const idleMinutes = (Date.now() - lqct) / 60_000;
-      addNotif({
-        key: 'idle-return-hint',
-        jsx: mode === 'hint_v2' ? <>
-          <Text dimColor>new task? </Text>
-          <Text color="suggestion">/clear</Text>
-          <Text dimColor> to save </Text>
-          <Text color="suggestion">{formattedTokens} tokens</Text>
-        </> : <Text color="warning">
-          new task? /clear to save {formattedTokens} tokens
-        </Text>,
-        priority: 'medium',
-        // Persist until submit — the hint fires at T+75min idle, user may
-        // not return for hours. removeNotification in useEffect cleanup
-        // handles dismissal. 0x7FFFFFFF = setTimeout max (~24.8 days).
-        timeoutMs: 0x7fffffff
-      });
       hintRef.current = mode;
-      logEvent('tengu_idle_return_action', {
-        action: 'hint_shown' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        variant: mode as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        idleMinutes: Math.round(idleMinutes),
-        messageCount: msgsRef.current.length,
-        totalInputTokens: totalTokens
-      });
     }, Math.max(0, remaining), lastQueryCompletionTime, addNotification, messagesRef, willowMode, idleHintShownRef);
     return () => {
       clearTimeout(timer);
@@ -4748,24 +4567,9 @@ export function REPL({
             }));
             currentRequest?.onWaitingDismiss?.(action);
           }} />}
-          {focusedInputDialog === 'cost' && <CostThresholdDialog onDone={() => {
-            setShowCostDialog(false);
-            setHaveShownCostDialog(true);
-            saveGlobalConfig(current => ({
-              ...current,
-              hasAcknowledgedCostThreshold: true
-            }));
-            logEvent('tengu_cost_threshold_acknowledged', {});
-          }} />}
-          {focusedInputDialog === 'idle-return' && idleReturnPending && <IdleReturnDialog idleMinutes={idleReturnPending.idleMinutes} totalInputTokens={getTotalInputTokens()} onDone={async action => {
+          {focusedInputDialog === 'idle-return' && idleReturnPending && <IdleReturnDialog idleMinutes={idleReturnPending.idleMinutes}  onDone={async action => {
             const pending = idleReturnPending;
             setIdleReturnPending(null);
-            logEvent('tengu_idle_return_action', {
-              action: action as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-              idleMinutes: Math.round(pending.idleMinutes),
-              messageCount: messagesRef.current.length,
-              totalInputTokens: getTotalInputTokens()
-            });
             if (action === 'dismiss') {
               setInputValue(pending.input);
               return;

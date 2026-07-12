@@ -1,7 +1,6 @@
 import { c as _c } from "react-compiler-runtime";
 // biome-ignore-all assist/source/organizeImports: internal-only import markers must not be reordered
-import { feature } from 'bun:bundle';
-// Dead code elimination: conditional import for COORDINATOR_MODE
+import { feature } from 'bun:bundle';
 /* eslint-disable @typescript-eslint/no-require-imports */
 const coordinatorModule = feature('COORDINATOR_MODE') ? require('../../coordinator/coordinatorMode.js') as typeof import('../../coordinator/coordinatorMode.js') : undefined;
 /* eslint-enable @typescript-eslint/no-require-imports */
@@ -40,9 +39,7 @@ import { isXtermJs } from '../../ink/terminal.js';
 import { useHasSelection, useSelection } from '../../ink/hooks/use-selection.js';
 import { getGlobalConfig, saveGlobalConfig } from '../../utils/config.js';
 import { getPlatform } from '../../utils/platform.js';
-import { PrBadge } from '../PrBadge.js';
-
-// Dead code elimination: conditional import for proactive mode
+import { PrBadge } from '../PrBadge.js';
 /* eslint-disable @typescript-eslint/no-require-imports */
 const proactiveModule = feature('PROACTIVE') || feature('KAIROS') ? require('../../proactive/index.js') : null;
 /* eslint-enable @typescript-eslint/no-require-imports */

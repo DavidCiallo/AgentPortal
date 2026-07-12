@@ -1,6 +1,6 @@
 import type {
   BetaContentBlock,
-  BetaContentBlockParam,
+
   BetaImageBlockParam,
   BetaJSONOutputFormat,
   BetaMessage,
@@ -52,7 +52,6 @@ import {
   splitSysPromptPrefix,
   toolToAPISchema,
 } from '../../utils/api.js'
-import { getOauthAccountInfo } from '../../utils/auth.js'
 import {
   getMergedBetas,
   getModelBetas,
@@ -119,7 +118,6 @@ import {
   getSessionId,
   getThinkingClearLatched,
   setAfkModeHeaderLatched,
-  setCacheEditingHeaderLatched,
   setFastModeHeaderLatched,
   setLastMainRequestId,
   setPromptCache1hAllowlist,
@@ -139,7 +137,6 @@ import {
 } from 'src/constants/betas.js'
 import type { QuerySource } from 'src/constants/querySource.js'
 import type { Notification } from 'src/context/notifications.js'
-import { addToTotalSessionCost } from 'src/cost-tracker.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from 'src/services/analytics/growthbook.js'
 import type { AgentId } from 'src/types/ids.js'
 import {
@@ -172,7 +169,6 @@ import {
 import { returnValue } from 'src/utils/generators.js'
 import { headlessProfilerCheckpoint } from 'src/utils/headlessProfiler.js'
 import { isMcpInstructionsDeltaEnabled } from 'src/utils/mcpInstructionsDelta.js'
-import { calculateUSDCost } from 'src/utils/modelCost.js'
 import { endQueryProfile, queryCheckpoint } from 'src/utils/queryProfiler.js'
 import {
   modelSupportsAdaptiveThinking,
@@ -206,7 +202,6 @@ import {
 import { jsonStringify } from '../../utils/slowOperations.js'
 import {
   isBetaTracingEnabled,
-  type LLMRequestNewContext,
   startLLMRequestSpan,
 } from '../../utils/telemetry/sessionTracing.js'
 /* eslint-enable @typescript-eslint/no-require-imports */
@@ -231,12 +226,9 @@ import {
   getErrorMessageIfRefusal,
 } from './errors.js'
 import {
-  EMPTY_USAGE,
   type GlobalCacheStrategy,
   logAPIError,
   logAPIQuery,
-  logAPISuccessAndDuration,
-  type NonNullableUsage,
 } from './logging.js'
 import {
   CACHE_TTL_1HOUR_MS,
@@ -373,8 +365,7 @@ function should1hCacheTTL(querySource?: QuerySource): boolean {
   let userEligible = getPromptCache1hEligible()
   if (userEligible === null) {
     userEligible =
-      process.env.USER_TYPE === 'ant' ||
-      (isClaudeAISubscriber() && !currentLimits.isUsingOverage)
+      isClaudeAISubscriber() && !currentLimits.isUsingOverage
     setPromptCache1hEligible(userEligible)
   }
   if (!userEligible) return false
@@ -421,7 +412,6 @@ function configureEffortParams(
     // Send string effort level as is
     outputConfig.effort = effortValue
     betas.push(EFFORT_BETA_HEADER)
-  } else if (process.env.USER_TYPE === 'ant') {
     // Numeric effort override - internal-only (uses anthropic_internal)
     const existingInternal =
       (extraBodyParams.anthropic_internal as Record<string, unknown>) || {}
@@ -487,8 +477,6 @@ export function getAPIMetadata() {
     user_id: jsonStringify({
       ...extra,
       device_id: getOrCreateUserID(),
-      // Only include OAuth account UUID when actively using OAuth authentication
-      account_uuid: getOauthAccountInfo()?.accountUuid ?? '',
       session_id: getSessionId(),
     }),
   }
@@ -690,7 +678,6 @@ export async function queryModelWithoutStreaming({
   options: Options
 }): Promise<AssistantMessage> {
   // Store the assistant message but continue consuming the generator to ensure
-  // logAPISuccessAndDuration gets called (which happens after all yields)
   let assistantMessage: AssistantMessage | undefined
   for await (const message of withStreamingVCR(messages, async function* () {
     yield* queryModel(
@@ -908,13 +895,13 @@ function getPreviousRequestIdFromMessages(
 }
 
 function isMedia(
-  block: BetaContentBlockParam,
+  block: { type?: string },
 ): block is BetaImageBlockParam | BetaRequestDocumentBlock {
   return block.type === 'image' || block.type === 'document'
 }
 
 function isToolResult(
-  block: BetaContentBlockParam,
+  block: { type?: string; content?: unknown },
 ): block is BetaToolResultBlockParam {
   return block.type === 'tool_result'
 }
@@ -1155,17 +1142,12 @@ async function* queryModel(
     const {
       isCachedMicrocompactEnabled,
       isModelSupportedForCacheEditing,
-      getCachedMCConfig,
     } = await import('../compact/cachedMicrocompact.js')
     const betas = await import('src/constants/betas.js')
     cacheEditingBetaHeader = betas.CACHE_EDITING_BETA_HEADER
     const featureEnabled = isCachedMicrocompactEnabled()
     const modelSupported = isModelSupportedForCacheEditing(options.model)
     cachedMCEnabled = featureEnabled && modelSupported
-    const config = getCachedMCConfig()
-    logForDebugging(
-      `Cached MC gate: enabled=${featureEnabled} modelSupported=${modelSupported} model=${options.model} supportedModels=${jsonStringify(config.supportedModels)}`,
-    )
   }
 
   const useGlobalCacheFeature = shouldUseGlobalCacheScope()
@@ -1442,7 +1424,7 @@ async function* queryModel(
     })
   }
 
-  const newContext: LLMRequestNewContext | undefined = isBetaTracingEnabled()
+  const newContext= isBetaTracingEnabled()
     ? {
         systemPrompt: systemPrompt.join('\n\n'),
         querySource: options.querySource,
@@ -1700,7 +1682,6 @@ async function* queryModel(
   let ttftMs = 0
   let partialMessage: BetaMessage | undefined = undefined
   const contentBlocks: (BetaContentBlock | ConnectorTextBlock)[] = []
-  let usage: NonNullableUsage = EMPTY_USAGE
   let costUSD = 0
   let stopReason: BetaStopReason | null = null
   let didFallBackToNonStreaming = false
@@ -1759,9 +1740,9 @@ async function* queryModel(
             { ...params, stream: true },
             {
               signal,
-              ...(clientRequestId && {
-                headers: { [CLIENT_REQUEST_ID_HEADER]: clientRequestId },
-              }),
+              ...(clientRequestId
+                ? { headers: { [CLIENT_REQUEST_ID_HEADER]: clientRequestId } }
+                : {}),
             },
           )
           .withResponse()
@@ -1796,7 +1777,6 @@ async function* queryModel(
     ttftMs = 0
     partialMessage = undefined
     contentBlocks.length = 0
-    usage = EMPTY_USAGE
     stopReason = null
     isAdvisorInProgress = false
 
@@ -1915,16 +1895,6 @@ async function* queryModel(
           case 'message_start': {
             partialMessage = part.message
             ttftMs = Date.now() - start
-            usage = updateUsage(usage, part.message?.usage)
-            // Capture research from message_start if available (internal only).
-            // Always overwrite with the latest value.
-            if (
-              process.env.USER_TYPE === 'ant' &&
-              'research' in (part.message as unknown as Record<string, unknown>)
-            ) {
-              research = (part.message as unknown as Record<string, unknown>)
-                .research
-            }
             break
           }
           case 'content_block_start':
@@ -2098,9 +2068,6 @@ async function* queryModel(
             }
             // Capture research from content_block_delta if available (internal only).
             // Always overwrite with the latest value.
-            if (process.env.USER_TYPE === 'ant' && 'research' in part) {
-              research = (part as { research: unknown }).research
-            }
             break
           }
           case 'content_block_stop': {
@@ -2137,8 +2104,6 @@ async function* queryModel(
               type: 'assistant',
               uuid: randomUUID(),
               timestamp: new Date().toISOString(),
-              ...(process.env.USER_TYPE === 'ant' &&
-                research !== undefined && { research }),
               ...(advisorModel && { advisorModel }),
             }
             newMessages.push(m)
@@ -2146,50 +2111,10 @@ async function* queryModel(
             break
           }
           case 'message_delta': {
-            usage = updateUsage(usage, part.usage)
-            // Capture research from message_delta if available (internal only).
-            // Always overwrite with the latest value. Also write back to
-            // already-yielded messages since message_delta arrives after
-            // content_block_stop.
-            if (
-              process.env.USER_TYPE === 'ant' &&
-              'research' in (part as unknown as Record<string, unknown>)
-            ) {
-              research = (part as unknown as Record<string, unknown>).research
-              for (const msg of newMessages) {
-                msg.research = research
-              }
-            }
-
-            // Write final usage and stop_reason back to the last yielded
-            // message. Messages are created at content_block_stop from
-            // partialMessage, which was set at message_start before any tokens
-            // were generated (output_tokens: 0, stop_reason: null).
-            // message_delta arrives after content_block_stop with the real
-            // values.
-            //
-            // IMPORTANT: Use direct property mutation, not object replacement.
-            // The transcript write queue holds a reference to message.message
-            // and serializes it lazily (100ms flush interval). Object
-            // replacement ({ ...lastMsg.message, usage }) would disconnect
-            // the queued reference; direct mutation ensures the transcript
-            // captures the final values.
-            stopReason = part.delta.stop_reason
-
             const lastMsg = newMessages.at(-1)
             if (lastMsg) {
-              lastMsg.message.usage = usage
               lastMsg.message.stop_reason = stopReason
             }
-
-            // Update cost
-            const costUSDForPart = calculateUSDCost(resolvedModel, usage)
-            costUSD += addToTotalSessionCost(
-              costUSDForPart,
-              usage,
-              options.model,
-            )
-
             const refusalMessage = getErrorMessageIfRefusal(
               part.delta.stop_reason,
               options.model,
@@ -2212,13 +2137,6 @@ async function* queryModel(
             }
 
             if (stopReason === 'model_context_window_exceeded') {
-              logEvent('tengu_context_window_exceeded', {
-                max_tokens: maxOutputTokens,
-                output_tokens: usage.output_tokens,
-              })
-              // Reuse the max_output_tokens recovery path — from the model's
-              // perspective, both mean "response was cut off, continue from
-              // where you left off."
               yield createAssistantAPIErrorMessage({
                 content: `${API_ERROR_MESSAGE_PREFIX}: The model has reached its context window limit.`,
                 apiError: 'max_output_tokens',
@@ -2318,8 +2236,8 @@ async function* queryModel(
       if (feature('PROMPT_CACHE_BREAK_DETECTION')) {
         void checkResponseForCacheBreak(
           options.querySource,
-          usage.cache_read_input_tokens,
-          usage.cache_creation_input_tokens,
+          0,
+          0,
           messages,
           options.agentId,
           streamRequestId,
@@ -2516,10 +2434,6 @@ async function* queryModel(
         type: 'assistant',
         uuid: randomUUID(),
         timestamp: new Date().toISOString(),
-        ...(process.env.USER_TYPE === 'ant' &&
-          research !== undefined && {
-            research,
-          }),
         ...(advisorModel && {
           advisorModel,
         }),
@@ -2613,8 +2527,6 @@ async function* queryModel(
           type: 'assistant',
           uuid: randomUUID(),
           timestamp: new Date().toISOString(),
-          ...(process.env.USER_TYPE === 'ant' &&
-            research !== undefined && { research }),
           ...(advisorModel && { advisorModel }),
         }
         newMessages.push(m)
@@ -2749,19 +2661,8 @@ async function* queryModel(
     // until the generator itself is GC'd (see GH #32920).
     releaseStreamResources()
 
-    // Non-streaming fallback cost: the streaming path tracks cost in the
-    // message_delta handler before any yield. Fallback pushes to newMessages
-    // then yields, so tracking must be here to survive .return() at the yield.
     if (fallbackMessage) {
-      const fallbackUsage = fallbackMessage.message.usage
-      usage = updateUsage(EMPTY_USAGE, fallbackUsage)
       stopReason = fallbackMessage.message.stop_reason
-      const fallbackCost = calculateUSDCost(resolvedModel, fallbackUsage)
-      costUSD += addToTotalSessionCost(
-        fallbackCost,
-        fallbackUsage,
-        options.model,
-      )
     }
   }
 
@@ -2783,46 +2684,6 @@ async function* queryModel(
   ) {
     setLastMainRequestId(streamRequestId)
   }
-
-  // Precompute scalars so the fire-and-forget .then() closure doesn't pin the
-  // full messagesForAPI array (the entire conversation up to the context window
-  // limit) until getToolPermissionContext() resolves.
-  const logMessageCount = messagesForAPI.length
-  const logMessageTokens = tokenCountFromLastAPIResponse(messagesForAPI)
-  void options.getToolPermissionContext().then(permissionContext => {
-    logAPISuccessAndDuration({
-      model:
-        newMessages[0]?.message.model ?? partialMessage?.model ?? options.model,
-      preNormalizedModel: options.model,
-      usage,
-      start,
-      startIncludingRetries,
-      attempt: attemptNumber,
-      messageCount: logMessageCount,
-      messageTokens: logMessageTokens,
-      requestId: streamRequestId ?? null,
-      stopReason,
-      ttftMs,
-      didFallBackToNonStreaming,
-      querySource: options.querySource,
-      headers: responseHeaders,
-      costUSD,
-      queryTracking: options.queryTracking,
-      permissionMode: permissionContext.mode,
-      // Pass newMessages for beta tracing - extraction happens in logging.ts
-      // only when beta tracing is enabled
-      newMessages,
-      llmSpan,
-      globalCacheStrategy,
-      requestSetupMs: start - startIncludingRetries,
-      attemptStartTimes,
-      fastMode: isFastModeRequest,
-      previousRequestId,
-      betas: lastRequestBetas,
-    })
-  })
-
-  // Defensive: also release on normal completion (no-op if finally already ran).
   releaseStreamResources()
 }
 
@@ -2843,132 +2704,6 @@ export function cleanupStream(
     }
   } catch {
     // Ignore - stream may already be closed
-  }
-}
-
-/**
- * Updates usage statistics with new values from streaming API events.
- * Note: Anthropic's streaming API provides cumulative usage totals, not incremental deltas.
- * Each event contains the complete usage up to that point in the stream.
- *
- * Input-related tokens (input_tokens, cache_creation_input_tokens, cache_read_input_tokens)
- * are typically set in message_start and remain constant. message_delta events may send
- * explicit 0 values for these fields, which should not overwrite the values from message_start.
- * We only update these fields if they have a non-null, non-zero value.
- */
-export function updateUsage(
-  usage: Readonly<NonNullableUsage>,
-  partUsage: BetaMessageDeltaUsage | undefined,
-): NonNullableUsage {
-  if (!partUsage) {
-    return { ...usage }
-  }
-  return {
-    input_tokens:
-      partUsage.input_tokens !== null && partUsage.input_tokens > 0
-        ? partUsage.input_tokens
-        : usage.input_tokens,
-    cache_creation_input_tokens:
-      partUsage.cache_creation_input_tokens !== null &&
-      partUsage.cache_creation_input_tokens > 0
-        ? partUsage.cache_creation_input_tokens
-        : usage.cache_creation_input_tokens,
-    cache_read_input_tokens:
-      partUsage.cache_read_input_tokens !== null &&
-      partUsage.cache_read_input_tokens > 0
-        ? partUsage.cache_read_input_tokens
-        : usage.cache_read_input_tokens,
-    output_tokens: partUsage.output_tokens ?? usage.output_tokens,
-    server_tool_use: {
-      web_search_requests:
-        partUsage.server_tool_use?.web_search_requests ??
-        usage.server_tool_use.web_search_requests,
-      web_fetch_requests:
-        partUsage.server_tool_use?.web_fetch_requests ??
-        usage.server_tool_use.web_fetch_requests,
-    },
-    service_tier: usage.service_tier,
-    cache_creation: {
-      // SDK type BetaMessageDeltaUsage is missing cache_creation, but it's real!
-      ephemeral_1h_input_tokens:
-        (partUsage as BetaUsage).cache_creation?.ephemeral_1h_input_tokens ??
-        usage.cache_creation.ephemeral_1h_input_tokens,
-      ephemeral_5m_input_tokens:
-        (partUsage as BetaUsage).cache_creation?.ephemeral_5m_input_tokens ??
-        usage.cache_creation.ephemeral_5m_input_tokens,
-    },
-    // cache_deleted_input_tokens: returned by the API when cache editing
-    // deletes KV cache content, but not in SDK types. Kept off NonNullableUsage
-    // so the string is eliminated from external builds by dead code elimination.
-    // Uses the same > 0 guard as other token fields to prevent message_delta
-    // from overwriting the real value with 0.
-    ...(feature('CACHED_MICROCOMPACT')
-      ? {
-          cache_deleted_input_tokens:
-            (partUsage as unknown as { cache_deleted_input_tokens?: number })
-              .cache_deleted_input_tokens != null &&
-            (partUsage as unknown as { cache_deleted_input_tokens: number })
-              .cache_deleted_input_tokens > 0
-              ? (partUsage as unknown as { cache_deleted_input_tokens: number })
-                  .cache_deleted_input_tokens
-              : ((usage as unknown as { cache_deleted_input_tokens?: number })
-                  .cache_deleted_input_tokens ?? 0),
-        }
-      : {}),
-    inference_geo: usage.inference_geo,
-    iterations: partUsage.iterations ?? usage.iterations,
-    speed: (partUsage as BetaUsage).speed ?? usage.speed,
-  }
-}
-
-/**
- * Accumulates usage from one message into a total usage object.
- * Used to track cumulative usage across multiple assistant turns.
- */
-export function accumulateUsage(
-  totalUsage: Readonly<NonNullableUsage>,
-  messageUsage: Readonly<NonNullableUsage>,
-): NonNullableUsage {
-  return {
-    input_tokens: totalUsage.input_tokens + messageUsage.input_tokens,
-    cache_creation_input_tokens:
-      totalUsage.cache_creation_input_tokens +
-      messageUsage.cache_creation_input_tokens,
-    cache_read_input_tokens:
-      totalUsage.cache_read_input_tokens + messageUsage.cache_read_input_tokens,
-    output_tokens: totalUsage.output_tokens + messageUsage.output_tokens,
-    server_tool_use: {
-      web_search_requests:
-        totalUsage.server_tool_use.web_search_requests +
-        messageUsage.server_tool_use.web_search_requests,
-      web_fetch_requests:
-        totalUsage.server_tool_use.web_fetch_requests +
-        messageUsage.server_tool_use.web_fetch_requests,
-    },
-    service_tier: messageUsage.service_tier, // Use the most recent service tier
-    cache_creation: {
-      ephemeral_1h_input_tokens:
-        totalUsage.cache_creation.ephemeral_1h_input_tokens +
-        messageUsage.cache_creation.ephemeral_1h_input_tokens,
-      ephemeral_5m_input_tokens:
-        totalUsage.cache_creation.ephemeral_5m_input_tokens +
-        messageUsage.cache_creation.ephemeral_5m_input_tokens,
-    },
-    // See comment in updateUsage — field is not on NonNullableUsage to keep
-    // the string out of external builds.
-    ...(feature('CACHED_MICROCOMPACT')
-      ? {
-          cache_deleted_input_tokens:
-            ((totalUsage as unknown as { cache_deleted_input_tokens?: number })
-              .cache_deleted_input_tokens ?? 0) +
-            ((
-              messageUsage as unknown as { cache_deleted_input_tokens?: number }
-            ).cache_deleted_input_tokens ?? 0),
-        }
-      : {}),
-    inference_geo: messageUsage.inference_geo, // Use the most recent
-    iterations: messageUsage.iterations, // Use the most recent
-    speed: messageUsage.speed, // Use the most recent
   }
 }
 

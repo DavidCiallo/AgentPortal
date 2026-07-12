@@ -184,14 +184,6 @@ export async function getGcsDistTags() { return { latest: null, stable: null }; 
 export async function getVersionHistory() { return []; }
 export async function installGlobalPackage() { return 'success'; }
 `,
-
-	// ─── Plugin fetch telemetry (not the marketplace itself) ───────
-
-	'utils/plugins/fetchTelemetry': `
-export function logPluginFetch() {}
-export function classifyFetchError() { return 'disabled'; }
-`,
-
 	// ─── Transcript / feedback sharing ─────────────────────────────
 
 	'components/FeedbackSurvey/submitTranscriptShare': `

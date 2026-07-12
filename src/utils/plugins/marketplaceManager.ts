@@ -53,7 +53,6 @@ import {
   getAddDirExtraMarketplaces,
 } from './addDirPluginSettings.js'
 import { markPluginVersionOrphaned } from './cacheUtils.js'
-import { classifyFetchError, logPluginFetch } from './fetchTelemetry.js'
 import { removeAllPluginsForMarketplace } from './installedPluginsManager.js'
 import {
   extractHostFromSource,
@@ -1110,13 +1109,6 @@ async function cacheMarketplaceFromGit(
       disableCredentialHelper: options?.disableCredentialHelper,
       sparsePaths,
     })
-    logPluginFetch(
-      'marketplace_pull',
-      gitUrl,
-      pullResult.code === 0 ? 'success' : 'failure',
-      performance.now() - pullStarted,
-      pullResult.code === 0 ? undefined : classifyFetchError(pullResult.stderr),
-    )
     if (pullResult.code === 0) return
     logForDebugging(`git pull failed, will re-clone: ${pullResult.stderr}`, {
       level: 'warn',
@@ -1156,13 +1148,6 @@ async function cacheMarketplaceFromGit(
   )
   const cloneStarted = performance.now()
   const result = await gitClone(gitUrl, cachePath, ref, sparsePaths)
-  logPluginFetch(
-    'marketplace_clone',
-    gitUrl,
-    result.code === 0 ? 'success' : 'failure',
-    performance.now() - cloneStarted,
-    result.code === 0 ? undefined : classifyFetchError(result.stderr),
-  )
   if (result.code !== 0) {
     // Clean up any partial directory created by the failed clone so the next
     // attempt starts fresh. Best-effort: if this fails, the stale dir will be
@@ -1284,13 +1269,6 @@ async function cacheMarketplaceFromUrl(
       headers,
     })
   } catch (error) {
-    logPluginFetch(
-      'marketplace_url',
-      url,
-      'failure',
-      performance.now() - fetchStarted,
-      classifyFetchError(error),
-    )
     if (axios.isAxiosError(error)) {
       if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
         throw new Error(
@@ -1317,26 +1295,12 @@ async function cacheMarketplaceFromUrl(
   // Validate the response is a valid marketplace
   const result = PluginMarketplaceSchema().safeParse(response.data)
   if (!result.success) {
-    logPluginFetch(
-      'marketplace_url',
-      url,
-      'failure',
-      performance.now() - fetchStarted,
-      'invalid_schema',
-    )
     throw new ConfigParseError(
       `Invalid marketplace schema from URL: ${result.error.issues.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`,
       redactedUrl,
       response.data,
     )
   }
-  logPluginFetch(
-    'marketplace_url',
-    url,
-    'success',
-    performance.now() - fetchStarted,
-  )
-
   safeCallProgress(onProgress, 'Saving marketplace to cache')
   // Ensure cache directory exists
   const cacheDir = join(cachePath, '..')

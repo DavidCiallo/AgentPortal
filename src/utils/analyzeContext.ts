@@ -412,27 +412,6 @@ async function countBuiltInToolTokens(
   // split of the bulk count based on rough schema size estimation). Excludes
   // SkillTool since its tokens are shown in the separate Skills category.
   let systemToolDetails: SystemToolDetail[] = []
-  if (process.env.USER_TYPE === 'ant') {
-    const toolsForBreakdown = alwaysLoadedTools.filter(
-      t => !toolMatchesName(t, SKILL_TOOL_NAME),
-    )
-    if (toolsForBreakdown.length > 0) {
-      const estimates = toolsForBreakdown.map(t =>
-        roughTokenCountEstimation(jsonStringify(t.inputSchema ?? {})),
-      )
-      const estimateTotal = estimates.reduce((s, e) => s + e, 0) || 1
-      const distributable = Math.max(
-        0,
-        alwaysLoadedTokens - TOOL_TOKEN_COUNT_OVERHEAD,
-      )
-      systemToolDetails = toolsForBreakdown
-        .map((t, i) => ({
-          name: t.name,
-          tokens: Math.round((estimates[i]! / estimateTotal) * distributable),
-        }))
-        .sort((a, b) => b.tokens - a.tokens)
-    }
-  }
 
   // Count deferred builtin tools individually for details
   const deferredBuiltinDetails: DeferredBuiltinTool[] = []
@@ -1021,10 +1000,7 @@ export async function analyzeContextUsage(
   const systemToolsTokens = builtInToolTokens - skillFrontmatterTokens
   if (systemToolsTokens > 0) {
     cats.push({
-      name:
-        process.env.USER_TYPE === 'ant'
-          ? '[internal] System tools'
-          : 'System tools',
+      name: 'System tools',
       tokens: systemToolsTokens,
       color: 'inactive',
     })
@@ -1351,11 +1327,11 @@ export async function analyzeContextUsage(
     memoryFiles: memoryFileDetails,
     mcpTools: mcpToolDetails,
     deferredBuiltinTools:
-      process.env.USER_TYPE === 'ant' ? deferredBuiltinDetails : undefined,
+      undefined,
     systemTools:
-      process.env.USER_TYPE === 'ant' ? systemToolDetails : undefined,
+      undefined,
     systemPromptSections:
-      process.env.USER_TYPE === 'ant' ? systemPromptSections : undefined,
+      undefined,
     agents: agentDetails,
     slashCommands:
       slashCommandTokens > 0

@@ -372,11 +372,6 @@ export async function* runAgent({
   }
 
   // Log API calls path for subagents (internal-only)
-  if (process.env.USER_TYPE === 'ant') {
-    logForDebugging(
-      `[Subagent ${agentDefinition.agentType}] API calls: ${getDisplayPath(getDumpPromptsPath(agentId))}`,
-    )
-  }
 
   // Handle message forking for context sharing
   // Filter out incomplete tool calls from parent messages to avoid API errors

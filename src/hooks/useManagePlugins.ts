@@ -1,10 +1,6 @@
 import { useCallback, useEffect, useSyncExternalStore } from 'react'
 import type { Command } from '../commands.js'
 import { useNotifications } from '../context/notifications.js'
-import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  logEvent,
-} from '../services/analytics/index.js'
 import { reinitializeLspServerManager } from '../services/lsp/manager.js'
 import { useAppState, useSetAppState } from '../state/AppState.js'
 import {
@@ -222,15 +218,7 @@ export function useManagePlugins({
         // Ant-only: which plugins are enabled, to correlate with RSS/FPS.
         // Kept separate from base metrics so it doesn't flow into
         // logForDiagnosticsNoPII.
-        ant_enabled_names:
-          process.env.USER_TYPE === 'ant' && enabled.length > 0
-            ? (enabled
-                .map(p => p.name)
-                .sort()
-                .join(
-                  ',',
-                ) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS)
-            : undefined,
+        ant_enabled_names: undefined,
       }
     } catch (error) {
       // Only plugin loading errors should reach here - log for monitoring
@@ -287,12 +275,6 @@ export function useManagePlugins({
         ...baseMetrics,
         has_custom_plugin_cache_dir: !!process.env.CLAUDE_CODE_PLUGIN_CACHE_DIR,
       }
-      logEvent('tengu_plugins_loaded', {
-        ...allMetrics,
-        ...(ant_enabled_names !== undefined && {
-          enabled_names: ant_enabled_names,
-        }),
-      })
       logForDiagnosticsNoPII('info', 'tengu_plugins_loaded', allMetrics)
     })
   }, [initialPluginLoad, enabled])

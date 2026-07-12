@@ -26,10 +26,9 @@ import mapValues from 'lodash-es/mapValues.js';
 import pickBy from 'lodash-es/pickBy.js';
 import uniqBy from 'lodash-es/uniqBy.js';
 import React from 'react';
-import { getOauthConfig } from './constants/oauth.js';
 import { getRemoteSessionUrl } from './constants/product.js';
 import { getSystemContext, getUserContext } from './context.js';
-import { init, initializeTelemetryAfterTrust } from './entrypoints/init.js';
+import { init } from './entrypoints/init.js';
 import { addToHistory } from './history.js';
 import type { Root } from './ink.js';
 import { launchRepl } from './replLauncher.js';
@@ -37,11 +36,8 @@ import { hasGrowthBookEnvOverride, initializeGrowthBook, refreshGrowthBookAfterA
 import { fetchBootstrapData } from './services/api/bootstrap.js';
 import { prefetchOllamaModels } from './utils/model/ollamaModels.js';
 import { type DownloadResult, downloadSessionFiles, type FilesApiConfig, parseFileSpecs } from './services/api/filesApi.js';
-import { prefetchPassesEligibility } from './services/api/referral.js';
 import { prefetchOfficialMcpUrls } from './services/mcp/officialRegistry.js';
 import type { McpSdkServerConfig, McpServerConfig, ScopedMcpServerConfig } from './services/mcp/types.js';
-import { isPolicyAllowed, loadPolicyLimits, refreshPolicyLimits, waitForPolicyLimitsToLoad } from './services/policyLimits/index.js';
-import { loadRemoteManagedSettings, refreshRemoteManagedSettings } from './services/remoteManagedSettings/index.js';
 import type { ToolInputJSONSchema } from './Tool.js';
 import { createSyntheticOutputTool, isSyntheticOutputToolEnabled } from './tools/SyntheticOutputTool/SyntheticOutputTool.js';
 import { getTools } from './tools.js';
@@ -62,28 +58,17 @@ import { getSessionIngressAuthToken } from './utils/sessionIngressAuth.js';
 import { settingsChangeDetector } from './utils/settings/changeDetector.js';
 import { skillChangeDetector } from './utils/skills/skillChangeDetector.js';
 import { jsonParse, writeFileSync_DEPRECATED } from './utils/slowOperations.js';
-import { computeInitialTeamContext } from './utils/swarm/reconnection.js';
 import { initializeWarningHandler } from './utils/warningHandler.js';
 import { isWorktreeModeEnabled } from './utils/worktreeModeEnabled.js';
-
-// Lazy require to avoid circular dependency: teammate.ts -> AppState.tsx -> ... -> main.tsx
-/* eslint-disable @typescript-eslint/no-require-imports */
-const getTeammateUtils = () => require('./utils/teammate.js') as typeof import('./utils/teammate.js');
-const getTeammatePromptAddendum = () => require('./utils/swarm/teammatePromptAddendum.js') as typeof import('./utils/swarm/teammatePromptAddendum.js');
-const getTeammateModeSnapshot = () => require('./utils/swarm/backends/teammateModeSnapshot.js') as typeof import('./utils/swarm/backends/teammateModeSnapshot.js');
-/* eslint-enable @typescript-eslint/no-require-imports */
-// Dead code elimination: conditional import for COORDINATOR_MODE
 /* eslint-disable @typescript-eslint/no-require-imports */
 const coordinatorModeModule = feature('COORDINATOR_MODE') ? require('./coordinator/coordinatorMode.js') as typeof import('./coordinator/coordinatorMode.js') : null;
 /* eslint-enable @typescript-eslint/no-require-imports */
-// Dead code elimination: conditional import for KAIROS (assistant mode)
 /* eslint-disable @typescript-eslint/no-require-imports */
 const assistantModule = feature('KAIROS') ? require('./assistant/index.js') as typeof import('./assistant/index.js') : null;
 const kairosGate = feature('KAIROS') ? require('./assistant/gate.js') as typeof import('./assistant/gate.js') : null;
 import { relative, resolve } from 'path';
 import { isAnalyticsDisabled } from 'src/services/analytics/config.js';
 import { getFeatureValue_CACHED_MAY_BE_STALE } from 'src/services/analytics/growthbook.js';
-import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS, logEvent } from 'src/services/analytics/index.js';
 import { initializeAnalyticsGates } from 'src/services/analytics/sink.js';
 import { getOriginalCwd, setAdditionalDirectoriesForClaudeMd, setIsRemoteMode, setMainLoopModelOverride, setMainThreadAgentType, setTeleportedSessionInfo } from './bootstrap/state.js';
 import { filterCommandsForRemoteMode, getCommands } from './commands.js';
@@ -93,7 +78,7 @@ import { SHOW_CURSOR } from './ink/termio/dec.js';
 import { exitWithError, exitWithMessage, getRenderContext, renderAndRun, showSetupScreens } from './interactiveHelpers.js';
 import { initBuiltinPlugins } from './plugins/bundled/index.js';
 /* eslint-enable @typescript-eslint/no-require-imports */
-import { checkQuotaStatus } from './services/claudeAiLimits.js';
+
 import { getMcpToolsCommandsAndResources, prefetchAllMcpResources } from './services/mcp/client.js';
 import { VALID_INSTALLABLE_SCOPES, VALID_UPDATE_SCOPES } from './services/plugins/pluginCliCommands.js';
 import { initBundledSkills } from './skills/bundled/index.js';
@@ -102,12 +87,11 @@ import { getActiveAgentsFromList, getAgentDefinitionsWithOverrides, isBuiltInAge
 import type { LogOption } from './types/logs.js';
 import type { Message as MessageType } from './types/message.js';
 import { assertMinVersion } from './utils/autoUpdater.js';
-import { CLAUDE_IN_CHROME_SKILL_HINT, CLAUDE_IN_CHROME_SKILL_HINT_WITH_WEBBROWSER } from './utils/claudeInChrome/prompt.js';
-import { setupClaudeInChrome, shouldAutoEnableClaudeInChrome, shouldEnableClaudeInChrome } from './utils/claudeInChrome/setup.js';
+
 import { getContextWindowForModel } from './utils/context.js';
 import { loadConversationForResume } from './utils/conversationRecovery.js';
 import { buildDeepLinkBanner } from './utils/deepLink/banner.js';
-import { hasNodeOption, isBareMode, isEnvTruthy, isInProtectedNamespace } from './utils/envUtils.js';
+import { hasNodeOption, isBareMode, isEnvTruthy } from './utils/envUtils.js';
 import { refreshExampleCommands } from './utils/exampleCommands.js';
 import type { FpsMetrics } from './utils/fpsTracker.js';
 import { getWorktreePaths } from './utils/getWorktreePaths.js';
@@ -133,8 +117,7 @@ import { getInitialSettings, getManagedSettingsKeysForLogging, getSettingsForSou
 import { resetSettingsCache } from './utils/settings/settingsCache.js';
 import type { ValidationError } from './utils/settings/validation.js';
 import { DEFAULT_TASKS_MODE_TASK_LIST_ID, TASK_STATUSES } from './utils/tasks.js';
-import { logPluginLoadErrors, logPluginsEnabledForSession } from './utils/telemetry/pluginTelemetry.js';
-import { logSkillsLoaded } from './utils/telemetry/skillLoadedEvent.js';
+
 import { generateTempFilePath } from './utils/tempfile.js';
 import { validateUuid } from './utils/uuid.js';
 // Plugin startup checks are now handled non-blockingly in REPL.tsx
@@ -142,14 +125,13 @@ import { validateUuid } from './utils/uuid.js';
 import { registerMcpAddCommand } from 'src/commands/mcp/addCommand.js';
 import { registerMcpDoctorCommand } from 'src/commands/mcp/doctorCommand.js';
 import { registerMcpXaaIdpCommand } from 'src/commands/mcp/xaaIdpCommand.js';
-import { fetchClaudeAIMcpConfigsIfEligible } from 'src/services/mcp/claudeai.js';
+
 import { clearServerCache } from 'src/services/mcp/client.js';
 import { areMcpConfigsAllowedWithEnterpriseMcpConfig, dedupClaudeAiMcpServers, doesEnterpriseMcpConfigExist, filterMcpServersByPolicy, getClaudeCodeMcpConfigs, getMcpServerSignature, parseMcpConfig, parseMcpConfigFromFilePath } from 'src/services/mcp/config.js';
 import { excludeCommandsByServer, excludeResourcesByServer } from 'src/services/mcp/utils.js';
 import { isXaaEnabled } from 'src/services/mcp/xaaIdpLogin.js';
 import { getRelevantTips } from 'src/services/tips/tipRegistry.js';
 import { logContextMetrics } from 'src/utils/api.js';
-import { CLAUDE_IN_CHROME_MCP_SERVER_NAME, isClaudeInChromeMCPServer } from 'src/utils/claudeInChrome/common.js';
 import { registerCleanup } from 'src/utils/cleanupRegistry.js';
 import { eagerParseCliFlag } from 'src/utils/cliArgs.js';
 import { createEmptyAttributionState } from 'src/utils/commitAttribution.js';
@@ -166,16 +148,12 @@ import { setCwd } from 'src/utils/Shell.js';
 import { type ProcessedResume, processResumedConversation } from 'src/utils/sessionRestore.js';
 import { parseSettingSourcesFlag } from 'src/utils/settings/constants.js';
 import { plural } from 'src/utils/stringUtils.js';
-import { type ChannelEntry, getInitialMainLoopModel, getIsNonInteractiveSession, getSdkBetas, getSessionId, getUserMsgOptIn, setAllowedChannels, setAllowedSettingSources, setChromeFlagOverride, setClientType, setCwdState, setDirectConnectServerUrl, setFlagSettingsPath, setInitialMainLoopModel, setInlinePlugins, setIsInteractive, setKairosActive, setOriginalCwd, setQuestionPreviewFormat, setSdkBetas, setSessionBypassPermissionsMode, setSessionPersistenceDisabled, setSessionSource, setUserMsgOptIn, switchSession } from './bootstrap/state.js';
+import { type ChannelEntry, getInitialMainLoopModel, getIsNonInteractiveSession, getSdkBetas, getSessionId, getUserMsgOptIn, setAllowedChannels, setAllowedSettingSources, setClientType, setCwdState, setDirectConnectServerUrl, setFlagSettingsPath, setInitialMainLoopModel, setInlinePlugins, setIsInteractive, setKairosActive, setOriginalCwd, setQuestionPreviewFormat, setSdkBetas, setSessionBypassPermissionsMode, setSessionPersistenceDisabled, setSessionSource, setUserMsgOptIn, switchSession } from './bootstrap/state.js';
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const autoModeStateModule = feature('TRANSCRIPT_CLASSIFIER') ? require('./utils/permissions/autoModeState.js') as typeof import('./utils/permissions/autoModeState.js') : null;
 
-// TeleportRepoMismatchDialog, TeleportResumeWrapper dynamically imported at call sites
-import { createRemoteSessionConfig } from './remote/RemoteSessionManager.js';
 /* eslint-enable @typescript-eslint/no-require-imports */
-// teleportWithProgress dynamically imported at call site
-import { createDirectConnectSession, DirectConnectError } from './server/createDirectConnectSession.js';
 import { initializeLspServerManager } from './services/lsp/manager.js';
 import { shouldEnablePromptSuggestion } from './services/PromptSuggestion/promptSuggestion.js';
 import { type AppState, getDefaultAppState, IDLE_SPECULATION_STATE } from './state/AppStateStore.js';
@@ -199,23 +177,11 @@ import { getTmuxInstallInstructions, isTmuxAvailable, parsePRReference } from '.
 profileCheckpoint('main_tsx_imports_loaded');
 
 /**
- * Log managed settings keys to Statsig for analytics.
- * This is called after init() completes to ensure settings are loaded
- * and environment variables are applied before model resolution.
+ * Log managed settings keys - no-op in Portal fork.
+ * This function was used for analytics in the original OpenClaude.
  */
 function logManagedSettings(): void {
-  try {
-    const policySettings = getSettingsForSource('policySettings');
-    if (policySettings) {
-      const allKeys = getManagedSettingsKeysForLogging(policySettings);
-      logEvent('tengu_managed_settings_loaded', {
-        keyCount: allKeys.length,
-        keys: allKeys.join(',') as unknown as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-      });
-    }
-  } catch {
-    // Silently ignore errors - this is just for analytics
-  }
+  // no-op
 }
 
 // Check if running in debug/inspection mode
@@ -259,25 +225,6 @@ if ("external" !== 'ant' && isBeingDebugged()) {
   // eslint-disable-next-line custom-rules/no-top-level-side-effects
   process.exit(1);
 }
-
-/**
- * Per-session skill/plugin telemetry. Called from both the interactive path
- * and the headless -p path (before runHeadless) — both go through
- * main.tsx but branch before the interactive startup path, so it needs two
- * call sites here rather than one here + one in QueryEngine.
- */
-function logSessionTelemetry(): void {
-  const model = parseUserSpecifiedModel(getInitialMainLoopModel() ?? getDefaultMainLoopModel());
-  void logSkillsLoaded(getCwd(), getContextWindowForModel(model, getSdkBetas()));
-  void loadAllPluginsCacheOnly().then(({
-    enabled,
-    errors
-  }) => {
-    const managedNames = getManagedPluginNames();
-    logPluginsEnabledForSession(enabled, managedNames, getPluginSeedDirs());
-    logPluginLoadErrors(errors, managedNames);
-  }).catch(err => logError(err));
-}
 function getCertEnvVarTelemetry(): Record<string, boolean> {
   const result: Record<string, boolean> = {};
   if (process.env.NODE_EXTRA_CA_CERTS) {
@@ -295,19 +242,7 @@ function getCertEnvVarTelemetry(): Record<string, boolean> {
   return result;
 }
 async function logStartupTelemetry(): Promise<void> {
-  if (isAnalyticsDisabled()) return;
-  const [isGit, worktreeCount, ghAuthStatus] = await Promise.all([getIsGit(), getWorktreeCount(), getGhAuthStatus()]);
-  logEvent('tengu_startup_telemetry', {
-    is_git: isGit,
-    worktree_count: worktreeCount,
-    gh_auth_status: ghAuthStatus as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    sandbox_enabled: SandboxManager.isSandboxingEnabled(),
-    are_unsandboxed_commands_allowed: SandboxManager.areUnsandboxedCommandsAllowed(),
-    is_auto_bash_allowed_if_sandbox_enabled: SandboxManager.isAutoAllowBashIfSandboxedEnabled(),
-    auto_updater_disabled: isAutoUpdaterDisabled(),
-    prefers_reduced_motion: getInitialSettings().prefersReducedMotion ?? false,
-    ...getCertEnvVarTelemetry()
-  });
+  // no-op - analytics removed in Portal fork
 }
 
 function runMigrations(): void {
@@ -499,18 +434,6 @@ function initializeEntrypoint(isNonInteractive: boolean): void {
   process.env.CLAUDE_CODE_ENTRYPOINT = isNonInteractive ? 'sdk-cli' : 'cli';
 }
 
-// Set by early argv processing when `claude open <url>` is detected (interactive mode only)
-type PendingConnect = {
-  url: string | undefined;
-  authToken: string | undefined;
-  dangerouslySkipPermissions: boolean;
-};
-const _pendingConnect: PendingConnect | undefined = feature('DIRECT_CONNECT') ? {
-  url: undefined,
-  authToken: undefined,
-  dangerouslySkipPermissions: false
-} : undefined;
-
 // Set by early argv processing when `claude assistant [sessionId]` is detected
 type PendingAssistantChat = {
   sessionId?: string;
@@ -565,41 +488,6 @@ export async function main() {
     process.exit(0);
   });
   profileCheckpoint('main_warning_handler_initialized');
-
-  // Check for cc:// or cc+unix:// URL in argv — rewrite so the main command
-  // handles it, giving the full interactive TUI instead of a stripped-down subcommand.
-  // For headless (-p), we rewrite to the internal `open` subcommand.
-  if (feature('DIRECT_CONNECT')) {
-    const rawCliArgs = process.argv.slice(2);
-    const ccIdx = rawCliArgs.findIndex(a => a.startsWith('cc://') || a.startsWith('cc+unix://'));
-    if (ccIdx !== -1 && _pendingConnect) {
-      const ccUrl = rawCliArgs[ccIdx]!;
-      const {
-        parseConnectUrl
-      } = await import('./server/parseConnectUrl.js');
-      const parsed = parseConnectUrl(ccUrl);
-      _pendingConnect.dangerouslySkipPermissions = rawCliArgs.includes('--dangerously-skip-permissions');
-      if (rawCliArgs.includes('-p') || rawCliArgs.includes('--print')) {
-        // Headless: rewrite to internal `open` subcommand
-        const stripped = rawCliArgs.filter((_, i) => i !== ccIdx);
-        const dspIdx = stripped.indexOf('--dangerously-skip-permissions');
-        if (dspIdx !== -1) {
-          stripped.splice(dspIdx, 1);
-        }
-        process.argv = [process.argv[0]!, process.argv[1]!, 'open', ccUrl, ...stripped];
-      } else {
-        // Interactive: strip cc:// URL and flags, run main command
-        _pendingConnect.url = parsed.serverUrl;
-        _pendingConnect.authToken = parsed.authToken;
-        const stripped = rawCliArgs.filter((_, i) => i !== ccIdx);
-        const dspIdx = stripped.indexOf('--dangerously-skip-permissions');
-        if (dspIdx !== -1) {
-          stripped.splice(dspIdx, 1);
-        }
-        process.argv = [process.argv[0]!, process.argv[1]!, ...stripped];
-      }
-    }
-  }
 
   // Handle deep link URIs early — this is invoked by the OS protocol handler
   // and should bail out before full init since it only needs to parse the URI
@@ -977,9 +865,7 @@ async function run(): Promise<CommanderCommand> {
 
     // Log event for any single-word prompt
     if (prompt && typeof prompt === 'string' && !/\s/.test(prompt) && prompt.length > 0) {
-      logEvent('tengu_single_word_prompt', {
-        length: prompt.length
-      });
+      ;
     }
 
     // Assistant mode: when .portal/settings.json has assistant: true AND
@@ -1424,9 +1310,7 @@ async function run(): Promise<CommanderCommand> {
         // built-in names — skip reserved-name checks for type:'sdk'.
         const nonSdkConfigNames = Object.entries(allConfigs).filter(([, config]) => config.type !== 'sdk').map(([name]) => name);
         let reservedNameError: string | null = null;
-        if (nonSdkConfigNames.some(isClaudeInChromeMCPServer)) {
-          reservedNameError = `Invalid MCP configuration: "${CLAUDE_IN_CHROME_MCP_SERVER_NAME}" is a reserved MCP name.`;
-        } else if (feature('CHICAGO_MCP')) {
+        if (feature('CHICAGO_MCP')) {
           const {
             isComputerUseMCPServer,
             COMPUTER_USE_MCP_SERVER_NAME
@@ -1474,59 +1358,7 @@ async function run(): Promise<CommanderCommand> {
       }
     }
 
-    // Extract Claude in Chrome option and enforce claude.ai subscriber check (unless user is ant)
-    const chromeOpts = options as {
-      chrome?: boolean;
-    };
-    // Store the explicit CLI flag so teammates can inherit it
-    setChromeFlagOverride(chromeOpts.chrome);
-    const enableClaudeInChrome = shouldEnableClaudeInChrome(chromeOpts.chrome) && ("external" === 'ant' || isClaudeAISubscriber());
-    const autoEnableClaudeInChrome = !enableClaudeInChrome && shouldAutoEnableClaudeInChrome();
-    if (enableClaudeInChrome) {
-      const platform = getPlatform();
-      try {
-        logEvent('tengu_claude_in_chrome_setup', {
-          platform: platform as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-        });
-        const {
-          mcpConfig: chromeMcpConfig,
-          allowedTools: chromeMcpTools,
-          systemPrompt: chromeSystemPrompt
-        } = setupClaudeInChrome();
-        dynamicMcpConfig = {
-          ...dynamicMcpConfig,
-          ...chromeMcpConfig
-        };
-        allowedTools.push(...chromeMcpTools);
-        if (chromeSystemPrompt) {
-          appendSystemPrompt = appendSystemPrompt ? `${chromeSystemPrompt}\n\n${appendSystemPrompt}` : chromeSystemPrompt;
-        }
-      } catch (error) {
-        logEvent('tengu_claude_in_chrome_setup_failed', {
-          platform: platform as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-        });
-        logForDebugging(`[Claude in Chrome] Error: ${error}`);
-        logError(error);
-        // biome-ignore lint/suspicious/noConsole:: intentional console output
-        console.error(`Error: Failed to run with Claude in Chrome.`);
-        process.exit(1);
-      }
-    } else if (autoEnableClaudeInChrome) {
-      try {
-        const {
-          mcpConfig: chromeMcpConfig
-        } = setupClaudeInChrome();
-        dynamicMcpConfig = {
-          ...dynamicMcpConfig,
-          ...chromeMcpConfig
-        };
-        const hint = feature('WEB_BROWSER_TOOL') && typeof Bun !== 'undefined' && 'WebView' in Bun ? CLAUDE_IN_CHROME_SKILL_HINT_WITH_WEBBROWSER : CLAUDE_IN_CHROME_SKILL_HINT;
-        appendSystemPrompt = appendSystemPrompt ? `${appendSystemPrompt}\n\n${hint}` : hint;
-      } catch (error) {
-        // Silently skip any errors for the auto-enable
-        logForDebugging(`[Claude in Chrome] Error (auto-enable): ${error}`);
-      }
-    }
+    const enableClaudeInChrome = false;
 
     // Extract strict MCP config flag
     const strictMcpConfig = options.strictMcpConfig || false;
@@ -1651,24 +1483,7 @@ async function run(): Promise<CommanderCommand> {
           devChannels = parseChannelEntries(rawDev, '--dangerously-load-development-channels');
         }
       }
-      // Flag-usage telemetry. Plugin identifiers are logged (same tier as
-      // tengu_plugin_installed — public-registry-style names); server-kind
-      // names are not (MCP-server-name tier, opt-in-only elsewhere).
-      // Per-server gate outcomes land in tengu_mcp_channel_gate once
-      // servers connect. Dev entries go through a confirmation dialog after
-      // this — dev_plugins captures what was typed, not what was accepted.
-      if (channelEntries.length > 0 || (devChannels?.length ?? 0) > 0) {
-        const joinPluginIds = (entries: ChannelEntry[]) => {
-          const ids = entries.flatMap(e => e.kind === 'plugin' ? [`${e.name}@${e.marketplace}`] : []);
-          return ids.length > 0 ? ids.sort().join(',') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS : undefined;
-        };
-        logEvent('tengu_mcp_channel_flags', {
-          channels_count: channelEntries.length,
-          dev_count: devChannels?.length ?? 0,
-          plugins: joinPluginIds(channelEntries),
-          dev_plugins: joinPluginIds(devChannels ?? [])
-        });
-      }
+      // Analytics removed - no telemetry for plugin identifiers
     }
 
     // SDK opt-in for SendUserMessage via --tools. All sessions require
@@ -1729,24 +1544,7 @@ async function run(): Promise<CommanderCommand> {
     });
     void assertMinVersion();
 
-    // claude.ai config fetch: -p mode only (interactive uses useManageMCPConnections
-    // two-phase loading). Kicked off here to overlap with setup(); awaited
-    // before runHeadless so single-turn -p sees connectors. Skipped under
-    // enterprise/strict MCP to preserve policy boundaries.
-    const claudeaiConfigPromise: Promise<Record<string, ScopedMcpServerConfig>> = isNonInteractiveSession && !strictMcpConfig && !doesEnterpriseMcpConfigExist() &&
-    // --bare / SIMPLE: skip claude.ai proxy servers (datadog, Gmail,
-    // Slack, BigQuery, PubMed — 6-14s each to connect). Scripted calls
-    // that need MCP pass --mcp-config explicitly.
-    !isBareMode() ? fetchClaudeAIMcpConfigsIfEligible().then(configs => {
-      const {
-        allowed,
-        blocked
-      } = filterMcpServersByPolicy(configs);
-      if (blocked.length > 0) {
-        process.stderr.write(`Warning: claude.ai MCP ${plural(blocked.length, 'server')} blocked by enterprise policy: ${blocked.join(', ')}\n`);
-      }
-      return allowed;
-    }) : Promise.resolve({});
+    const claudeaiConfigPromise: Promise<Record<string, ScopedMcpServerConfig>> = Promise.resolve({});
 
     // Kick off MCP config loading early (safe - just reads files, no execution).
     // Both interactive and -p use getClaudeCodeMcpConfigs (local file reads only).
@@ -1841,14 +1639,8 @@ async function run(): Promise<CommanderCommand> {
         // This tool is excluded from normal filtering (see tools.ts) because it's
         // an implementation detail for structured output, not a user-controlled tool.
         tools = [...tools, syntheticOutputResult.tool];
-        logEvent('tengu_structured_output_enabled', {
-          schema_property_count: Object.keys(jsonSchema.properties as Record<string, unknown> || {}).length as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-          has_required_fields: Boolean(jsonSchema.required) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-        });
       } else {
-        logEvent('tengu_structured_output_failure', {
-          error: 'Invalid JSON schema' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-        });
+        ;
       }
     }
 
@@ -2016,15 +1808,7 @@ async function run(): Promise<CommanderCommand> {
     // Store the main thread agent type in bootstrap state so hooks can access it
     setMainThreadAgentType(mainThreadAgentDefinition?.agentType);
 
-    // Log agent flag usage — only log agent name for built-in agents to avoid leaking custom agent names
-    if (mainThreadAgentDefinition) {
-      logEvent('tengu_agent_flag', {
-        agentType: isBuiltInAgent(mainThreadAgentDefinition) ? mainThreadAgentDefinition.agentType as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS : 'custom' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        ...(agentCli && {
-          source: 'cli' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-        })
-      });
-    }
+    // Analytics removed - no telemetry for agent flag usage
 
     // Persist agent setting to session transcript for resume view display and restoration
     if (mainThreadAgentDefinition?.agentType) {
@@ -2105,16 +1889,7 @@ async function run(): Promise<CommanderCommand> {
           customPrompt = customAgent.getSystemPrompt();
         }
 
-        // Log agent memory loaded event for tmux teammates
-        if (customAgent.memory) {
-          logEvent('tengu_agent_memory_loaded', {
-            ...("external" === 'ant' && {
-              agent_type: customAgent.agentType as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-            }),
-            scope: customAgent.memory as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-            source: 'teammate' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-          });
-        }
+        // Analytics removed - no telemetry for agent memory
         if (customPrompt) {
           const customInstructions = `\n# Custom Agent Instructions\n${customPrompt}`;
           appendSystemPrompt = appendSystemPrompt ? `${appendSystemPrompt}\n\n${customInstructions}` : customInstructions;
@@ -2184,10 +1959,6 @@ async function run(): Promise<CommanderCommand> {
       // from REPL's first render (the old location) included however long
       // the user sat on trust/OAuth/onboarding/resume-picker — p99 was ~70s
       // dominated by dialog-wait time, not code-path startup.
-      logEvent('tengu_timer', {
-        event: 'startup' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        durationMs: Math.round(process.uptime() * 1000)
-      });
       const setupScreensStart = Date.now();
       const onboardingShown = await showSetupScreens(root, permissionMode, allowDangerouslySkipPermissions, commands, enableClaudeInChrome, devChannels);
 
@@ -2235,15 +2006,8 @@ async function run(): Promise<CommanderCommand> {
         resetUserCache();
         // Refresh GrowthBook after login to get updated feature flags (e.g., for claude.ai MCPs)
         refreshGrowthBookAfterAuthChange();
-        // Clear any stale trusted device token then enroll for Remote Control.
-        // Both self-gate on tengu_sessions_elevated_auth_enforcement internally
-        // — enrollTrustedDevice() via checkGate_CACHED_OR_BLOCKING (awaits
-        // the GrowthBook reinit above), clearTrustedDeviceToken() via the
-        // sync cached check (acceptable since clear is idempotent).
-        void import('./bridge/trustedDevice.js').then(m => {
-          m.clearTrustedDeviceToken();
-          return m.enrollTrustedDevice();
-        });
+        // Trusted device enrollment removed — bridge/remote-control features
+        // are not available in the open build.
       }
 
       const orgValidation = await validateForceLoginOrg();
@@ -2296,13 +2060,10 @@ async function run(): Promise<CommanderCommand> {
     if (!skipStartupPrefetches) {
       const lastPrefetchedInfo = lastPrefetched > 0 ? ` last ran ${Math.round((Date.now() - lastPrefetched) / 1000)}s ago` : '';
       logForDebugging(`Starting background startup prefetches${lastPrefetchedInfo}`);
-      checkQuotaStatus().catch(error => logError(error));
 
       // Fetch bootstrap data from the server and update all cache values.
       void fetchBootstrapData();
 
-      // TODO: Consolidate other prefetches into a single bootstrap request.
-      void prefetchPassesEligibility();
       if (!getFeatureValue_CACHED_MAY_BE_STALE('tengu_miraculo_the_bard', false)) {
         void prefetchFastModeStatus();
       } else {
@@ -2480,9 +2241,7 @@ async function run(): Promise<CommanderCommand> {
       }
       void countConcurrentSessions().then(count => {
         if (count >= 2) {
-          logEvent('tengu_concurrent_sessions', {
-            num_sessions: count
-          });
+          ;
         }
       });
     });
@@ -2537,10 +2296,6 @@ async function run(): Promise<CommanderCommand> {
       // This includes potentially dangerous environment variables from untrusted sources
       // but print mode is considered trusted (as documented in help text)
       applyConfigEnvironmentVariables();
-
-      // Initialize telemetry after env vars are applied so OTEL endpoint env vars and
-      // otelHeadersHelper (which requires trust to execute) are available.
-      initializeTelemetryAfterTrust();
 
       // Kick SessionStart hooks now so the subprocess spawn overlaps with
       // MCP connect + plugin init + print.ts import below. loadInitialMessages
@@ -2674,85 +2429,6 @@ async function run(): Promise<CommanderCommand> {
       profileCheckpoint('before_connectMcp');
       await connectMcpBatch(regularMcpConfigs, 'regular');
       profileCheckpoint('after_connectMcp');
-      // Dedup: suppress plugin MCP servers that duplicate a claude.ai
-      // connector (connector wins), then connect claude.ai servers.
-      // Bounded wait — #23725 made this blocking so single-turn -p sees
-      // connectors, but with 40+ slow connectors tengu_startup_perf p99
-      // climbed to 76s. If fetch+connect doesn't finish in time, proceed;
-      // the promise keeps running and updates headlessStore in the
-      // background so turn 2+ still sees connectors.
-      const CLAUDE_AI_MCP_TIMEOUT_MS = 5_000;
-      const claudeaiConnect = claudeaiConfigPromise.then(claudeaiConfigs => {
-        if (Object.keys(claudeaiConfigs).length > 0) {
-          const claudeaiSigs = new Set<string>();
-          for (const config of Object.values(claudeaiConfigs)) {
-            const sig = getMcpServerSignature(config);
-            if (sig) claudeaiSigs.add(sig);
-          }
-          const suppressed = new Set<string>();
-          for (const [name, config] of Object.entries(regularMcpConfigs)) {
-            if (!name.startsWith('plugin:')) continue;
-            const sig = getMcpServerSignature(config);
-            if (sig && claudeaiSigs.has(sig)) suppressed.add(name);
-          }
-          if (suppressed.size > 0) {
-            logForDebugging(`[MCP] Lazy dedup: suppressing ${suppressed.size} plugin server(s) that duplicate claude.ai connectors: ${[...suppressed].join(', ')}`);
-            // Disconnect before filtering from state. Only connected
-            // servers need cleanup — clearServerCache on a never-connected
-            // server triggers a real connect just to kill it (memoize
-            // cache-miss path, see useManageMCPConnections.ts:870).
-            for (const c of headlessStore.getState().mcp.clients) {
-              if (!suppressed.has(c.name) || c.type !== 'connected') continue;
-              c.client.onclose = undefined;
-              void clearServerCache(c.name, c.config).catch(() => {});
-            }
-            headlessStore.setState(prev => {
-              let {
-                clients,
-                tools,
-                commands,
-                resources
-              } = prev.mcp;
-              clients = clients.filter(c => !suppressed.has(c.name));
-              tools = tools.filter(t => !t.mcpInfo || !suppressed.has(t.mcpInfo.serverName));
-              for (const name of suppressed) {
-                commands = excludeCommandsByServer(commands, name);
-                resources = excludeResourcesByServer(resources, name);
-              }
-              return {
-                ...prev,
-                mcp: {
-                  ...prev.mcp,
-                  clients,
-                  tools,
-                  commands,
-                  resources
-                }
-              };
-            });
-          }
-        }
-        // Suppress claude.ai connectors that duplicate an enabled
-        // manual server (URL-signature match). Plugin dedup above only
-        // handles `plugin:*` keys; this catches manual `.mcp.json` entries.
-        // plugin:* must be excluded here — step 1 already suppressed
-        // those (claude.ai wins); leaving them in suppresses the
-        // connector too, and neither survives (gh-39974).
-        const nonPluginConfigs = pickBy(regularMcpConfigs, (_, n) => !n.startsWith('plugin:'));
-        const {
-          servers: dedupedClaudeAi
-        } = dedupClaudeAiMcpServers(claudeaiConfigs, nonPluginConfigs);
-        return connectMcpBatch(dedupedClaudeAi, 'claudeai');
-      });
-      let claudeaiTimer: ReturnType<typeof setTimeout> | undefined;
-      const claudeaiTimedOut = await Promise.race([claudeaiConnect.then(() => false), new Promise<boolean>(resolve => {
-        claudeaiTimer = setTimeout(r => r(true), CLAUDE_AI_MCP_TIMEOUT_MS, resolve);
-      })]);
-      if (claudeaiTimer) clearTimeout(claudeaiTimer);
-      if (claudeaiTimedOut) {
-        logForDebugging(`[MCP] claude.ai connectors not ready after ${CLAUDE_AI_MCP_TIMEOUT_MS}ms — proceeding; background connection continues`);
-      }
-      profileCheckpoint('after_connectMcp_claudeai');
 
       // In headless mode, start deferred prefetches immediately (no user typing delay)
       // --bare / SIMPLE: startDeferredPrefetches early-returns internally.
@@ -2766,7 +2442,6 @@ async function run(): Promise<CommanderCommand> {
           void import('./utils/sdkHeapDumpMonitor.js').then(m => m.startSdkMemoryMonitor());
         }
       }
-      logSessionTelemetry();
       profileCheckpoint('before_print_import');
       const {
         runHeadless
@@ -2782,7 +2457,6 @@ async function run(): Promise<CommanderCommand> {
         allowedTools,
         thinkingConfig,
         maxTurns: options.maxTurns,
-        maxBudgetUsd: options.maxBudgetUsd,
         taskBudget: options.taskBudget ? {
           total: options.taskBudget
         } : undefined,
@@ -2806,14 +2480,7 @@ async function run(): Promise<CommanderCommand> {
       return;
     }
 
-    // Log model config at startup
-    logEvent('tengu_startup_manual_model_config', {
-      cli_flag: options.model as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      env_var: process.env.OPENAI_MODEL as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      settings_file: (getInitialSettings() || {}).model as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      subscriptionType: getSubscriptionType() as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      agent: agentSetting as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-    });
+    // Analytics removed - no telemetry for model config
 
     // Get deprecation warning for the initial model (resolvedInitialModel computed earlier for hooks parallelization)
     const deprecationWarning = getModelDeprecationWarning(resolvedInitialModel);
@@ -2995,7 +2662,6 @@ async function run(): Promise<CommanderCommand> {
     }));
     setImmediate(() => {
       void logStartupTelemetry();
-      logSessionTelemetry();
     });
 
     // Set up per-turn session environment data uploader (internal-only build).
@@ -3056,9 +2722,7 @@ async function run(): Promise<CommanderCommand> {
         clearSessionCaches();
         const result = await loadConversationForResume(undefined /* sessionId */, undefined /* sourceFile */);
         if (!result) {
-          logEvent('tengu_continue', {
-            success: false
-          });
+          ;
           return await exitWithError(root, 'No conversation found to continue');
         }
         const loaded = await processResumedConversation(result, {
@@ -3071,10 +2735,6 @@ async function run(): Promise<CommanderCommand> {
         }
         maybeActivateProactive(options);
         maybeActivateBrief(options);
-        logEvent('tengu_continue', {
-          success: true,
-          resume_duration_ms: Math.round(performance.now() - resumeStart)
-        });
         resumeSucceeded = true;
         await launchRepl(root, {
           getFpsMetrics,
@@ -3090,51 +2750,9 @@ async function run(): Promise<CommanderCommand> {
           initialAgentColor: loaded.agentColor
         }, renderAndRun);
       } catch (error) {
-        if (!resumeSucceeded) {
-          logEvent('tengu_continue', {
-            success: false
-          });
-        }
         logError(error);
         return await exitWithError(root, errorMessage(error), () => gracefulShutdown(1));
       }
-    } else if (feature('DIRECT_CONNECT') && _pendingConnect?.url) {
-      // `claude connect <url>` — full interactive TUI connected to a remote server
-      let directConnectConfig;
-      try {
-        const session = await createDirectConnectSession({
-          serverUrl: _pendingConnect.url,
-          authToken: _pendingConnect.authToken,
-          cwd: getOriginalCwd(),
-          dangerouslySkipPermissions: _pendingConnect.dangerouslySkipPermissions
-        });
-        if (session.workDir) {
-          setOriginalCwd(session.workDir);
-          setCwdState(session.workDir);
-        }
-        setDirectConnectServerUrl(_pendingConnect.url);
-        directConnectConfig = session.config;
-      } catch (err) {
-        return await exitWithError(root, err instanceof DirectConnectError ? err.message : String(err), () => gracefulShutdown(1));
-      }
-      const connectInfoMessage = createSystemMessage(`Connected to server at ${_pendingConnect.url}\nSession: ${directConnectConfig.sessionId}`, 'info');
-      await launchRepl(root, {
-        getFpsMetrics,
-        stats,
-        initialState
-      }, {
-        debug: debug || debugToStderr,
-        commands,
-        initialTools: [],
-        initialMessages: [connectInfoMessage],
-        mcpClients: [],
-        autoConnectIdeFlag: ide,
-        mainThreadAgentDefinition,
-        disableSlashCommands,
-        directConnectConfig,
-        thinkingConfig
-      }, renderAndRun);
-      return;
     } else if (feature('SSH_REMOTE') && _pendingSSH?.host) {
       // `claude ssh <host> [dir]` — probe remote, deploy binary if needed,
       // spawn ssh with unix-socket -R forward to a local auth proxy, hand
@@ -3360,22 +2978,13 @@ async function run(): Promise<CommanderCommand> {
         if (!isRemoteTuiEnabled && !hasInitialPrompt) {
           return await exitWithError(root, 'Error: --remote requires a description.\nUsage: claude --remote "your task description"', () => gracefulShutdown(1));
         }
-        logEvent('tengu_remote_create_session', {
-          has_initial_prompt: String(hasInitialPrompt) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-        });
 
         // Pass current branch so CCR clones the repo at the right revision
         const currentBranch = await getBranch();
         const createdSession = await teleportToRemoteWithErrorHandling(root, hasInitialPrompt ? remote : null, new AbortController().signal, currentBranch || undefined);
         if (!createdSession) {
-          logEvent('tengu_remote_create_session_error', {
-            error: 'unable_to_create_session' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-          });
           return await exitWithError(root, 'Error: Unable to create remote session', () => gracefulShutdown(1));
         }
-        logEvent('tengu_remote_create_session_success', {
-          session_id: createdSession.id as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-        });
 
         // Check if new remote TUI mode is enabled via feature gate
         if (!isRemoteTuiEnabled) {
@@ -3462,9 +3071,7 @@ async function run(): Promise<CommanderCommand> {
           } = await checkOutTeleportedSessionBranch(teleportResult.branch);
           messages = processMessagesForTeleportResume(teleportResult.log, branchError);
         } else if (typeof teleport === 'string') {
-          logEvent('tengu_teleport_resume_session', {
-            mode: 'direct' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-          });
+          ;
           try {
             // First, fetch session and validate repository before checking git state
             const sessionData = await fetchSession(teleport);
@@ -3544,22 +3151,9 @@ async function run(): Promise<CommanderCommand> {
                 if (processedResume.restoredAgentDef) {
                   mainThreadAgentDefinition = processedResume.restoredAgentDef;
                 }
-                logEvent('tengu_session_resumed', {
-                  entrypoint: 'ccshare' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-                  success: true,
-                  resume_duration_ms: Math.round(performance.now() - resumeStart)
-                });
               } else {
-                logEvent('tengu_session_resumed', {
-                  entrypoint: 'ccshare' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-                  success: false
-                });
               }
             } catch (error) {
-              logEvent('tengu_session_resumed', {
-                entrypoint: 'ccshare' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-                success: false
-              });
               logError(error);
               await exitWithError(root, `Unable to resume from ccshare: ${errorMessage(error)}`, () => gracefulShutdown(1));
             }
@@ -3585,23 +3179,10 @@ async function run(): Promise<CommanderCommand> {
                   if (processedResume.restoredAgentDef) {
                     mainThreadAgentDefinition = processedResume.restoredAgentDef;
                   }
-                  logEvent('tengu_session_resumed', {
-                    entrypoint: 'file' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-                    success: true,
-                    resume_duration_ms: Math.round(performance.now() - resumeStart)
-                  });
                 } else {
-                  logEvent('tengu_session_resumed', {
-                    entrypoint: 'file' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-                    success: false
-                  });
                 }
               }
             } catch (error) {
-              logEvent('tengu_session_resumed', {
-                entrypoint: 'file' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-                success: false
-              });
               logError(error);
               await exitWithError(root, errorMessage(error), () => gracefulShutdown(1));
             }
@@ -3619,10 +3200,6 @@ async function run(): Promise<CommanderCommand> {
           // Otherwise fall back to sessionId string (for direct UUID resume)
           const result = await loadConversationForResume(matchedLog ?? sessionId, undefined);
           if (!result) {
-            logEvent('tengu_session_resumed', {
-              entrypoint: 'cli_flag' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-              success: false
-            });
             return await exitWithError(root, `No conversation found with session ID: ${sessionId}`);
           }
           const fullPath = matchedLog?.fullPath ?? result.fullPath;
@@ -3634,16 +3211,7 @@ async function run(): Promise<CommanderCommand> {
           if (processedResume.restoredAgentDef) {
             mainThreadAgentDefinition = processedResume.restoredAgentDef;
           }
-          logEvent('tengu_session_resumed', {
-            entrypoint: 'cli_flag' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-            success: true,
-            resume_duration_ms: Math.round(performance.now() - resumeStart)
-          });
         } catch (error) {
-          logEvent('tengu_session_resumed', {
-            entrypoint: 'cli_flag' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-            success: false
-          });
           logError(error);
           await exitWithError(root, errorMessage(error));
         }
@@ -3721,10 +3289,6 @@ async function run(): Promise<CommanderCommand> {
       let deepLinkBanner: ReturnType<typeof createSystemMessage> | null = null;
       if (feature('LODESTONE')) {
         if (options.deepLinkOrigin) {
-          logEvent('tengu_deep_link_opened', {
-            has_prefill: Boolean(options.prefill),
-            has_repo: Boolean(options.deepLinkRepo)
-          });
           deepLinkBanner = createSystemMessage(buildDeepLinkBanner({
             cwd: getCwd(),
             prefillLength: options.prefill?.length,
@@ -3819,11 +3383,9 @@ async function run(): Promise<CommanderCommand> {
   // default action. The subcommand registration path was measured at ~65ms
   // on baseline — mostly the isBridgeEnabled() call (25ms settings Zod parse
   // + 40ms sync keychain subprocess), both hidden by the try/catch that
-  // always returns false before enableConfigs(). cc:// URLs are rewritten to
-  // `open` at main() line ~851 BEFORE this runs, so argv check is safe here.
+  // always returns false before enableConfigs().
   const isPrintMode = process.argv.includes('-p') || process.argv.includes('--print');
-  const isCcUrl = process.argv.some(a => a.startsWith('cc://') || a.startsWith('cc+unix://'));
-  if (isPrintMode && !isCcUrl) {
+  if (isPrintMode) {
     profileCheckpoint('run_before_parse');
     await program.parseAsync(process.argv);
     profileCheckpoint('run_after_parse');
@@ -3994,73 +3556,9 @@ async function run(): Promise<CommanderCommand> {
     });
   }
 
-  // claude connect — subcommand only handles -p (headless) mode.
-  // Interactive mode (without -p) is handled by early argv rewriting in main()
-  // which redirects to the main command with full TUI support.
-  if (feature('DIRECT_CONNECT')) {
-    program.command('open <cc-url>').description('Connect to a Claude Code server (internal — use cc:// URLs)').option('-p, --print [prompt]', 'Print mode (headless)').option('--output-format <format>', 'Output format: text, json, stream-json', 'text').action(async (ccUrl: string, opts: {
-      print?: string | boolean;
-      outputFormat: string;
-    }) => {
-      const {
-        parseConnectUrl
-      } = await import('./server/parseConnectUrl.js');
-      const {
-        serverUrl,
-        authToken
-      } = parseConnectUrl(ccUrl);
-      let connectConfig;
-      try {
-        const session = await createDirectConnectSession({
-          serverUrl,
-          authToken,
-          cwd: getOriginalCwd(),
-          dangerouslySkipPermissions: _pendingConnect?.dangerouslySkipPermissions
-        });
-        if (session.workDir) {
-          setOriginalCwd(session.workDir);
-          setCwdState(session.workDir);
-        }
-        setDirectConnectServerUrl(serverUrl);
-        connectConfig = session.config;
-      } catch (err) {
-        // biome-ignore lint/suspicious/noConsole: intentional error output
-        console.error(err instanceof DirectConnectError ? err.message : String(err));
-        process.exit(1);
-      }
-      const {
-        runConnectHeadless
-      } = await import('./server/connectHeadless.js');
-      const prompt = typeof opts.print === 'string' ? opts.print : '';
-      const interactive = opts.print === true;
-      await runConnectHeadless(connectConfig, prompt, opts.outputFormat, interactive);
-    });
-  }
-
   // claude auth
 
   const auth = program.command('auth').description('Manage authentication').configureHelp(createSortedHelpConfig());
-  auth.command('login').description('Sign in to your Anthropic account').option('--email <email>', 'Pre-populate email address on the login page').option('--sso', 'Force SSO login flow').option('--console', 'Use Anthropic Console (API usage billing) instead of Claude subscription').option('--claudeai', 'Use Claude subscription (default)').action(async ({
-    email,
-    sso,
-    console: useConsole,
-    claudeai
-  }: {
-    email?: string;
-    sso?: boolean;
-    console?: boolean;
-    claudeai?: boolean;
-  }) => {
-    const {
-      authLogin
-    } = await import('./cli/handlers/auth.js');
-    await authLogin({
-      email,
-      sso,
-      console: useConsole,
-      claudeai
-    });
-  });
   auth.command('status').description('Show authentication status').option('--json', 'Output as JSON (default)').option('--text', 'Output as human-readable text').action(async (opts: {
     json?: boolean;
     text?: boolean;
@@ -4501,51 +3999,6 @@ async function logTenguInit({
   assistantActivationPath: string | undefined;
 }): Promise<void> {
   try {
-    logEvent('tengu_init', {
-      entrypoint: 'claude' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      hasInitialPrompt,
-      hasStdin,
-      verbose,
-      debug,
-      debugToStderr,
-      print,
-      outputFormat: outputFormat as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      inputFormat: inputFormat as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      numAllowedTools,
-      numDisallowedTools,
-      mcpClientCount,
-      worktree: worktreeEnabled,
-      skipWebFetchPreflight,
-      ...(githubActionInputs && {
-        githubActionInputs: githubActionInputs as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-      }),
-      dangerouslySkipPermissionsPassed,
-      permissionMode: permissionMode as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      modeIsBypass,
-      inProtectedNamespace: isInProtectedNamespace(),
-      allowDangerouslySkipPermissionsPassed,
-      thinkingType: thinkingConfig.type as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      ...(systemPromptFlag && {
-        systemPromptFlag: systemPromptFlag as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-      }),
-      ...(appendSystemPromptFlag && {
-        appendSystemPromptFlag: appendSystemPromptFlag as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-      }),
-      is_simple: isBareMode() || undefined,
-      is_coordinator: feature('COORDINATOR_MODE') && coordinatorModeModule?.isCoordinatorMode() ? true : undefined,
-      ...(assistantActivationPath && {
-        assistantActivationPath: assistantActivationPath as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-      }),
-      autoUpdatesChannel: (getInitialSettings().autoUpdatesChannel ?? 'latest') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      ...("external" === 'ant' ? (() => {
-        const cwd = getCwd();
-        const gitRoot = findGitRoot(cwd);
-        const rp = gitRoot ? relative(gitRoot, cwd) || '.' : undefined;
-        return rp ? {
-          relativeProjectPath: rp as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-        } : {};
-      })() : {})
-    });
   } catch (error) {
     logError(error);
   }
@@ -4586,11 +4039,6 @@ function maybeActivateBrief(options: unknown): void {
   }
   // Fire unconditionally once intent is seen: enabled=false captures the
   // "user tried but was gated" failure mode in Datadog.
-  logEvent('tengu_brief_mode_enabled', {
-    enabled: entitled,
-    gated: !entitled,
-    source: (briefEnv ? 'env' : 'flag') as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-  });
 }
 function resetCursor() {
   const terminal = process.stderr.isTTY ? process.stderr : process.stdout.isTTY ? process.stdout : undefined;

@@ -1,10 +1,6 @@
 import axios from 'axios'
 import memoize from 'lodash-es/memoize.js'
-import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  logEvent,
-} from 'src/services/analytics/index.js'
-import { getOauthAccountInfo, isConsumerSubscriber } from 'src/utils/auth.js'
+import { isConsumerSubscriber } from 'src/utils/auth.js'
 import { logForDebugging } from 'src/utils/debug.js'
 import { gracefulShutdown } from 'src/utils/gracefulShutdown.js'
 import { isEssentialTrafficOnly } from 'src/utils/privacyLevel.js'
@@ -159,13 +155,8 @@ export async function isQualifiedForGrove(): Promise<boolean> {
     return false
   }
 
-  const accountId = getOauthAccountInfo()?.accountUuid
-  if (!accountId) {
-    return false
-  }
-
   const globalConfig = getGlobalConfig()
-  const cachedEntry = globalConfig.groveConfigCache?.[accountId]
+  const cachedEntry = globalConfig.groveConfigCache
   const now = Date.now()
 
   // No cache - trigger background fetch and return false (non-blocking)
@@ -174,7 +165,7 @@ export async function isQualifiedForGrove(): Promise<boolean> {
     logForDebugging(
       'Grove: No cache, fetching config in background (dialog skipped this session)',
     )
-    void fetchAndStoreGroveConfig(accountId)
+    void fetchAndStoreGroveConfig()
     return false
   }
 
@@ -183,7 +174,7 @@ export async function isQualifiedForGrove(): Promise<boolean> {
     logForDebugging(
       'Grove: Cache stale, returning cached data and refreshing in background',
     )
-    void fetchAndStoreGroveConfig(accountId)
+    void fetchAndStoreGroveConfig()
     return cachedEntry.grove_enabled
   }
 
@@ -195,14 +186,14 @@ export async function isQualifiedForGrove(): Promise<boolean> {
 /**
  * Fetch Grove config from API and store in cache
  */
-async function fetchAndStoreGroveConfig(accountId: string): Promise<void> {
+async function fetchAndStoreGroveConfig(): Promise<void> {
   try {
     const result = await getGroveNoticeConfig()
     if (!result.success) {
       return
     }
     const groveEnabled = result.data.grove_enabled
-    const cachedEntry = getGlobalConfig().groveConfigCache?.[accountId]
+    const cachedEntry = getGlobalConfig().groveConfigCache
     if (
       cachedEntry?.grove_enabled === groveEnabled &&
       Date.now() - cachedEntry.timestamp <= GROVE_CACHE_EXPIRATION_MS
@@ -212,11 +203,8 @@ async function fetchAndStoreGroveConfig(accountId: string): Promise<void> {
     saveGlobalConfig(current => ({
       ...current,
       groveConfigCache: {
-        ...current.groveConfigCache,
-        [accountId]: {
-          grove_enabled: groveEnabled,
-          timestamp: Date.now(),
-        },
+        grove_enabled: groveEnabled,
+        timestamp: Date.now(),
       },
     }))
   } catch (err) {
@@ -336,10 +324,7 @@ export async function checkGroveForNonInteractive(): Promise<void> {
   if (shouldShowGrove) {
     // shouldShowGrove is only true if both API calls succeeded
     const config = configResult.success ? configResult.data : null
-    logEvent('tengu_grove_print_viewed', {
-      dismissable:
-        config?.notice_is_grace_period as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    })
+
     if (config === null || config.notice_is_grace_period) {
       // Grace period is still active - show informational message and continue
       writeToStderr(

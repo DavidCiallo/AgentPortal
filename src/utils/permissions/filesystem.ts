@@ -13,7 +13,6 @@ import {
 } from 'src/tools/FileEditTool/constants.js'
 import type { z } from 'zod/v4'
 import { getOriginalCwd, getSessionId } from '../../bootstrap/state.js'
-import { checkStatsigFeatureGate_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
 import type { AnyObject, Tool, ToolPermissionContext } from '../../Tool.js'
 import { FILE_READ_TOOL_NAME } from '../../tools/FileReadTool/prompt.js'
 import { getCwd } from '../cwd.js'
@@ -156,6 +155,15 @@ export function getClaudeSkillScope(
   return null
 }
 
+/**
+ * Checks if the scratchpad directory feature is enabled.
+ * The scratchpad is a per-session directory for writing temporary files.
+ * Always returns true since Statsig feature gates have been removed.
+ */
+export function isScratchpadEnabled(): boolean {
+  return true
+}
+
 // Always use / as the path separator per gitignore spec
 // https://git-scm.com/docs/gitignore
 const DIR_SEP = posix.sep
@@ -290,15 +298,6 @@ function isProjectDirPath(absolutePath: string): boolean {
 }
 
 /**
- * Checks if the scratchpad directory feature is enabled.
- * The scratchpad is a per-session directory for Claude to write temporary files.
- * Controlled by the tengu_scratch Statsig gate.
- */
-export function isScratchpadEnabled(): boolean {
-  return checkStatsigFeatureGate_CACHED_MAY_BE_STALE('tengu_scratch')
-}
-
-/**
  * Returns the user-specific Claude temp directory name.
  * On Unix: 'claude-{uid}' to prevent multi-user permission conflicts
  * On Windows: 'claude' (tmpdir() is already per-user)
@@ -391,10 +390,6 @@ export function getScratchpadDir(): string {
  * @throws If scratchpad feature is not enabled
  */
 export async function ensureScratchpadDir(): Promise<string> {
-  if (!isScratchpadEnabled()) {
-    throw new Error('Scratchpad directory feature is not enabled')
-  }
-
   const fs = getFsImplementation()
   const scratchpadDir = getScratchpadDir()
 
@@ -407,9 +402,6 @@ export async function ensureScratchpadDir(): Promise<string> {
 
 // Check if file is within the scratchpad directory
 function isScratchpadPath(absolutePath: string): boolean {
-  if (!isScratchpadEnabled()) {
-    return false
-  }
   const scratchpadDir = getScratchpadDir()
   // SECURITY: Normalize the path to resolve .. segments before checking
   // This prevents path traversal bypasses like:

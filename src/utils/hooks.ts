@@ -51,17 +51,7 @@ import {
   getSettings_DEPRECATED,
   getSettingsForSource,
 } from './settings/settings.js'
-import {
-  logEvent,
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-} from 'src/services/analytics/index.js'
-import { logOTelEvent } from './telemetry/events.js'
 import { ALLOWED_OFFICIAL_MARKETPLACE_NAMES } from './plugins/schemas.js'
-import {
-  startHookSpan,
-  endHookSpan,
-  isBetaTracingEnabled,
-} from './telemetry/sessionTracing.js'
 import {
   hookJSONOutputSchema,
   promptRequestSchema,
@@ -73,40 +63,6 @@ import {
   isSyncHookJSONOutput,
   type PermissionRequestResult,
 } from '../types/hooks.js'
-import type {
-  HookEvent,
-  HookInput,
-  HookJSONOutput,
-  NotificationHookInput,
-  PostToolUseHookInput,
-  PostToolUseFailureHookInput,
-  PermissionDeniedHookInput,
-  PreCompactHookInput,
-  PostCompactHookInput,
-  PreToolUseHookInput,
-  SessionStartHookInput,
-  SessionEndHookInput,
-  SetupHookInput,
-  StopHookInput,
-  StopFailureHookInput,
-  SubagentStartHookInput,
-  SubagentStopHookInput,
-  TeammateIdleHookInput,
-  TaskCreatedHookInput,
-  TaskCompletedHookInput,
-  ConfigChangeHookInput,
-  CwdChangedHookInput,
-  FileChangedHookInput,
-  InstructionsLoadedHookInput,
-  UserPromptSubmitHookInput,
-  PermissionRequestHookInput,
-  ElicitationHookInput,
-  ElicitationResultHookInput,
-  PermissionUpdate,
-  ExitReason,
-  SyncHookJSONOutput,
-  AsyncHookJSONOutput,
-} from 'src/entrypoints/agentSdkTypes.js'
 import type { StatusLineCommandInput } from '../types/statusLine.js'
 import type { ElicitResult } from '@modelcontextprotocol/sdk/types.js'
 import type { FileSuggestionCommandInput } from '../types/fileSuggestion.js'
@@ -162,6 +118,7 @@ import type { AppState } from '../state/AppState.js'
 import { jsonStringify, jsonParse } from './slowOperations.js'
 import { isEnvTruthy } from './envUtils.js'
 import { errorMessage, getErrnoCode } from './errors.js'
+import { HookEvent } from '@commander-js/extra-typings'
 
 const TOOL_HOOK_EXECUTION_TIMEOUT_MS = 10 * 60 * 1000
 
@@ -195,7 +152,7 @@ function executeInBackground({
   processId: string
   hookId: string
   shellCommand: ShellCommand
-  asyncResponse: AsyncHookJSONOutput
+  asyncResponse: any
   hookEvent: HookEvent | 'StatusLine' | 'FileSuggestion'
   hookName: string
   command: string
@@ -1477,7 +1434,6 @@ function getPluginHookCounts(
   return counts
 }
 
-
 /**
  * Build a map of {hookType: count} from matched hooks.
  */
@@ -2018,21 +1974,7 @@ async function* executeHooks({
 
   const userHooks = matchingHooks.filter(h => !isInternalHook(h))
   if (userHooks.length > 0) {
-    const pluginHookCounts = getPluginHookCounts(userHooks)
-    const hookTypeCounts = getHookTypeCounts(userHooks)
-    logEvent(`tengu_run_hook`, {
-      hookName:
-        hookName as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      numCommands: userHooks.length,
-      hookTypeCounts: jsonStringify(
-        hookTypeCounts,
-      ) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      ...(pluginHookCounts && {
-        pluginHookCounts: jsonStringify(
-          pluginHookCounts,
-        ) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      }),
-    })
+    // Analytics removed - just process hooks without logging
   } else {
     // Fast-path: all hooks are internal callbacks (sessionFileAccessHooks,
     // attributionHooks). These return {} and don't use the abort signal, so we
@@ -2053,16 +1995,7 @@ async function* executeHooks({
     const totalDurationMs = Date.now() - batchStartTime
     getStatsStore()?.observe('hook_duration_ms', totalDurationMs)
     addToTurnHookDuration(totalDurationMs)
-    logEvent(`tengu_repl_hook_finished`, {
-      hookName:
-        hookName as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      numCommands: matchingHooks.length,
-      numSuccess: matchingHooks.length,
-      numBlocking: 0,
-      numNonBlockingError: 0,
-      numCancelled: 0,
-      totalDurationMs,
-    })
+
     return
   }
 
@@ -2932,17 +2865,6 @@ async function* executeHooks({
   getStatsStore()?.observe('hook_duration_ms', totalDurationMs)
   addToTurnHookDuration(totalDurationMs)
 
-  logEvent(`tengu_repl_hook_finished`, {
-    hookName:
-      hookName as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-    numCommands: matchingHooks.length,
-    numSuccess: outcomes.success,
-    numBlocking: outcomes.blocking,
-    numNonBlockingError: outcomes.non_blocking_error,
-    numCancelled: outcomes.cancelled,
-    totalDurationMs,
-  })
-
   // Log hook execution completion to OTEL (only for beta tracing)
   if (isBetaTracingEnabled()) {
     const hookDefinitionsComplete =
@@ -3054,21 +2976,7 @@ async function executeHooksOutsideREPL({
 
   const userHooks = matchingHooks.filter(h => !isInternalHook(h))
   if (userHooks.length > 0) {
-    const pluginHookCounts = getPluginHookCounts(userHooks)
-    const hookTypeCounts = getHookTypeCounts(userHooks)
-    logEvent(`tengu_run_hook`, {
-      hookName:
-        hookName as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      numCommands: userHooks.length,
-      hookTypeCounts: jsonStringify(
-        hookTypeCounts,
-      ) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      ...(pluginHookCounts && {
-        pluginHookCounts: jsonStringify(
-          pluginHookCounts,
-        ) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      }),
-    })
+    // Analytics removed - just process hooks without logging
   }
 
   // Validate and stringify the hook input

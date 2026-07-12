@@ -138,12 +138,6 @@ export function modelSupportsAutoMode(model: string): boolean {
     ) {
       return true
     }
-    if (process.env.USER_TYPE === 'ant') {
-      // Denylist: block known-unsupported claude models, allow everything else
-      if (m.includes('claude-3-')) return false
-      if (/claude-(opus|sonnet|haiku)-4(?!-[6-9])/.test(m)) return false
-      return true
-    }
     // External allowlist
     return /^claude-(opus|sonnet)-4-6/.test(m)
   }
@@ -180,14 +174,6 @@ export const getAllModelBetas = memoize((model: string): string[] => {
 
   if (!isHaiku) {
     betaHeaders.push(CLAUDE_CODE_20250219_BETA_HEADER)
-    if (
-      process.env.USER_TYPE === 'ant' &&
-      process.env.CLAUDE_CODE_ENTRYPOINT === 'cli'
-    ) {
-      if (CLI_INTERNAL_BETA_HEADER) {
-        betaHeaders.push(CLI_INTERNAL_BETA_HEADER)
-      }
-    }
   }
   if (isClaudeAISubscriber()) {
     betaHeaders.push(OAUTH_BETA_HEADER)
@@ -212,22 +198,9 @@ export const getAllModelBetas = memoize((model: string): string[] => {
     betaHeaders.push(REDACT_THINKING_BETA_HEADER)
   }
 
-  // Server-side connector-text summarization (ant-only)
-  if (
-    SUMMARIZE_CONNECTOR_TEXT_BETA_HEADER &&
-    process.env.USER_TYPE === 'ant' &&
-    includeFirstPartyOnlyBetas &&
-    !isEnvDefinedFalsy(process.env.USE_CONNECTOR_TEXT_SUMMARIZATION) &&
-    (isEnvTruthy(process.env.USE_CONNECTOR_TEXT_SUMMARIZATION) ||
-      getFeatureValue_CACHED_MAY_BE_STALE('tengu_slate_prism', false))
-  ) {
-    betaHeaders.push(SUMMARIZE_CONNECTOR_TEXT_BETA_HEADER)
-  }
 
   // Context management beta for tool clearing or thinking preservation
-  const antOptedIntoToolClearing =
-    isEnvTruthy(process.env.USE_API_CONTEXT_MANAGEMENT) &&
-    process.env.USER_TYPE === 'ant'
+  const antOptedIntoToolClearing = false
 
   const thinkingPreservationEnabled = modelSupportsContextManagement(model)
 
@@ -250,15 +223,6 @@ export const getAllModelBetas = memoize((model: string): string[] => {
     strictToolsEnabled
   ) {
     betaHeaders.push(STRUCTURED_OUTPUTS_BETA_HEADER)
-  }
-
-  // JSON tool_use format (FC v3)
-  if (
-    process.env.USER_TYPE === 'ant' &&
-    includeFirstPartyOnlyBetas &&
-    tokenEfficientToolsEnabled
-  ) {
-    betaHeaders.push(TOKEN_EFFICIENT_TOOLS_BETA_HEADER)
   }
 
   // Web search beta

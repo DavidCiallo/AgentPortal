@@ -7,7 +7,7 @@
  * perf/extract-interactive-helpers and perf/launch-repl.
  */
 import React from 'react';
-import type { AssistantSession } from './assistant/sessionDiscovery.js';
+// AssistantSessionChooser removed (bridge feature deleted)
 import type { StatsStore } from './context/stats.js';
 import type { Root } from './ink.js';
 import { renderAndRun, showSetupDialog } from './interactiveHelpers.js';
@@ -49,19 +49,6 @@ export async function launchInvalidSettingsDialog(root: Root, props: {
     InvalidSettingsDialog
   } = await import('./components/InvalidSettingsDialog.js');
   return showSetupDialog(root, done => <InvalidSettingsDialog settingsErrors={props.settingsErrors} onContinue={done} onExit={props.onExit} />);
-}
-
-/**
- * Site ~4229: AssistantSessionChooser (pick a bridge session to attach to).
- * Original callback wiring: onSelect={id => done(id)}, onCancel={() => done(null)}.
- */
-export async function launchAssistantSessionChooser(root: Root, props: {
-  sessions: AssistantSession[];
-}): Promise<string | null> {
-  const {
-    AssistantSessionChooser
-  } = await import('./assistant/AssistantSessionChooser.js');
-  return showSetupDialog<string | null>(root, done => <AssistantSessionChooser sessions={props.sessions} onSelect={id => done(id)} onCancel={() => done(null)} />);
 }
 
 /**

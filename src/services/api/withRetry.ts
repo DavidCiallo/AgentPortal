@@ -204,15 +204,6 @@ export async function* withRetry<T>(
 
     try {
       // Check for mock rate limits (used by /mock-limits command for Ant employees)
-      if (process.env.USER_TYPE === 'ant') {
-        const mockError = checkMockRateLimitError(
-          retryContext.model,
-          wasFastModeActive,
-        )
-        if (mockError) {
-          throw mockError
-        }
-      }
 
       // Get a fresh client instance on first attempt or after authentication errors
       // - 401 for API authentication failures
@@ -675,9 +666,7 @@ function shouldRetry(error: APIError): boolean {
   // For other status codes (401, 403, 400, 429, etc.), respect the header.
   if (shouldRetryHeader === 'false') {
     const is5xxError = error.status !== undefined && error.status >= 500
-    if (!(process.env.USER_TYPE === 'ant' && is5xxError)) {
-      return false
-    }
+    return false
   }
 
   if (error instanceof APIConnectionError) {

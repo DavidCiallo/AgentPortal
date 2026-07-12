@@ -18,10 +18,6 @@ import {
 import memoize from 'lodash-es/memoize.js'
 import { basename, dirname, join } from 'path'
 import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  logEvent,
-} from 'src/services/analytics/index.js'
-import {
   getOriginalCwd,
   getPlanSlugCache,
   getPromptId,
@@ -1078,6 +1074,16 @@ class Project {
           this.currentSessionLastPrompt =
             flat.length > 200 ? flat.slice(0, 200).trim() + '…' : flat
         }
+        // Re-append metadata at EOF so customTitle / lastPrompt never
+        // fall out of the 64 KB tail window read by the web server and
+        // --resume picker. Without this, enough messages after a /rename
+        // push the custom-title entry into the gap between head and tail
+        // reads, causing the sidebar title to revert to lastPrompt.
+        try {
+          this.reAppendSessionMetadata()
+        } catch {
+          // Best-effort — don't let a metadata write failure abort the turn
+        }
       }
     })
   }
@@ -1316,7 +1322,7 @@ class Project {
           },
         )
       } catch {
-        logEvent('tengu_session_persistence_failed', {})
+
         logForDebugging('Failed to write transcript as internal event')
       }
       return
@@ -1337,7 +1343,7 @@ class Project {
     )
 
     if (!success) {
-      logEvent('tengu_session_persistence_failed', {})
+
       gracefulShutdownSync(1, 'other')
     }
   }
@@ -1928,23 +1934,6 @@ function applyPreservedSegmentRelinks(
       // loading the full pre-compact history on resume.
       relinkFailed = true
       preservedUuids.clear()
-      logEvent('tengu_relink_walk_broken', {
-        failureKind:
-          failureKind as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        tailInTranscript,
-        headInTranscript,
-        anchorInTranscript,
-        walkSteps: walkSeen.size,
-        transcriptSize: messages.size,
-        tailIndex: entryIndex.get(lastSeg.tailUuid),
-        headIndex: entryIndex.get(lastSeg.headUuid),
-        anchorIndex: entryIndex.get(lastSeg.anchorUuid),
-        lastSeenType,
-        breakParentInTranscript: Boolean(
-          breakParentUuid && messages.has(breakParentUuid),
-        ),
-        breakParentIsNull: breakParentUuid === null,
-      })
       logForDiagnosticsNoPII('warn', 'relink_walk_broken', {
         failureKind,
         tailInTranscript,
@@ -2283,10 +2272,6 @@ function applySnipRemovals(messages: Map<UUID, TranscriptMessage>): void {
     relinkedCount++
   }
 
-  logEvent('tengu_snip_resume_filtered', {
-    removed_count: removedCount,
-    relinked_count: relinkedCount,
-  })
 }
 
 /**
@@ -2331,7 +2316,7 @@ export function buildConversationChain(
           `Cycle detected in parentUuid chain at message ${currentMsg.uuid}. Returning partial transcript.`,
         ),
       )
-      logEvent('tengu_chain_parent_cycle', {})
+
       break
     }
     seen.add(currentMsg.uuid)
@@ -2443,9 +2428,6 @@ function recoverOrphanedParallelToolResults(
   }
 
   if (recoveredCount === 0) return chain
-  logEvent('tengu_chain_parallel_tr_recovered', {
-    recovered_count: recoveredCount,
-  })
 
   const result: TranscriptMessage[] = []
   for (const m of chain) {
@@ -2482,13 +2464,7 @@ export function checkResumeConsistency(chain: Message[]): void {
     // The checkpoint was appended AFTER messageCount messages, so its own
     // position should be messageCount (i.e., i === expected).
     const actual = i
-    logEvent('tengu_resume_consistency_delta', {
-      expected,
-      actual,
-      delta: actual - expected,
-      chain_length: chain.length,
-      checkpoint_age_entries: chain.length - 1 - i,
-    })
+
     return
   }
 }
@@ -2797,14 +2773,6 @@ async function trackSessionBranchingAnalytics(
   const branchCounts = Array.from(sessionIdCounts.values()).filter(c => c > 1)
   const sessionsWithBranches = branchCounts.length
   const totalBranches = branchCounts.reduce((sum, count) => sum + count, 0)
-
-  logEvent('tengu_session_forked_branches_fetched', {
-    total_sessions: sessionIdCounts.size,
-    sessions_with_branches: sessionsWithBranches,
-    max_branches_per_session: Math.max(...branchCounts),
-    avg_branches_per_session: Math.round(totalBranches / sessionsWithBranches),
-    total_transcript_count: logs.length,
-  })
 }
 
 export async function fetchLogs(limit?: number): Promise<LogOption[]> {
@@ -2882,10 +2850,7 @@ export async function saveCustomTitle(
   if (sessionId === getSessionId()) {
     getProject().currentSessionTitle = customTitle
   }
-  logEvent('tengu_session_renamed', {
-    source:
-      source as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  })
+
 }
 
 /**
@@ -2946,7 +2911,7 @@ export async function saveTag(sessionId: UUID, tag: string, fullPath?: string) {
   if (sessionId === getSessionId()) {
     getProject().currentSessionTag = tag
   }
-  logEvent('tengu_session_tagged', {})
+
 }
 
 /**
@@ -2976,7 +2941,7 @@ export async function linkSessionToPR(
     project.currentSessionPrUrl = prUrl
     project.currentSessionPrRepository = prRepository
   }
-  logEvent('tengu_session_linked_to_pr', { prNumber })
+
 }
 
 export function getCurrentSessionTag(sessionId: UUID): string | undefined {
@@ -3080,10 +3045,7 @@ export async function saveAgentName(
     getProject().currentSessionAgentName = agentName
     void updateSessionName(agentName)
   }
-  logEvent('tengu_agent_name_set', {
-    source:
-      source as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  })
+
 }
 
 export async function saveAgentColor(
@@ -3101,7 +3063,7 @@ export async function saveAgentColor(
   if (sessionId === getSessionId()) {
     getProject().currentSessionAgentColor = agentColor
   }
-  logEvent('tengu_agent_color_set', {})
+
 }
 
 /**
@@ -4042,7 +4004,7 @@ export async function loadTranscriptFile(
   }
 
   if (hasCycle) {
-    logEvent('tengu_transcript_parent_cycle', {})
+
   }
 
   return {

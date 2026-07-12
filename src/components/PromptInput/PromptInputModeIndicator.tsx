@@ -32,8 +32,7 @@ function getTeammateThemeColor(): keyof Theme | undefined {
   return undefined;
 }
 type PromptCharProps = {
-  isLoading: boolean;
-  // Dead code elimination: parameter named themeColor to avoid "teammate" string in external builds
+  isLoading: boolean;
   themeColor?: keyof Theme;
 };
 

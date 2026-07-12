@@ -1,46 +1,7 @@
-/**
- * Main entrypoint for Claude Code Agent SDK types.
- *
- * This file re-exports the public SDK API from:
- * - sdk/coreTypes.ts - Common serializable types (messages, configs)
- * - sdk/runtimeTypes.ts - Non-serializable types (callbacks, interfaces)
- *
- * SDK builders who need control protocol types should import from
- * sdk/controlTypes.ts directly.
- */
-
 import type {
   CallToolResult,
   ToolAnnotations,
 } from '@modelcontextprotocol/sdk/types.js'
-
-// Control protocol types for SDK builders (bridge subpath consumers)
-/** @alpha */
-export type {
-  SDKControlRequest,
-  SDKControlResponse,
-} from './sdk/controlTypes.js'
-// Re-export core types (common serializable types)
-export * from './sdk/coreTypes.js'
-// Re-export runtime types (callbacks, interfaces with methods)
-export * from './sdk/runtimeTypes.js'
-
-// Re-export settings types (generated from settings JSON schema)
-export type { Settings } from './sdk/settingsTypes.generated.js'
-// Re-export tool types (all marked @internal until SDK API stabilizes)
-export * from './sdk/toolTypes.js'
-
-// ============================================================================
-// Functions
-// ============================================================================
-
-import type {
-  SDKMessage,
-  SDKResultMessage,
-  SDKSessionInfo,
-  SDKUserMessage,
-} from './sdk/coreTypes.js'
-// Import types needed for function signatures
 import type {
   AnyZodRawShape,
   ForkSessionOptions,
@@ -54,21 +15,27 @@ import type {
   McpSdkServerConfigWithInstance,
   Options,
   Query,
+  SDKMessage,
+  SDKResultMessage,
   SDKSession,
+  SDKSessionInfo,
   SDKSessionOptions,
+  SDKUserMessage,
   SdkMcpToolDefinition,
   SessionMessage,
   SessionMutationOptions,
 } from './sdk/runtimeTypes.js'
 
-export type {
-  ListSessionsOptions,
-  GetSessionInfoOptions,
-  SessionMutationOptions,
-  ForkSessionOptions,
-  ForkSessionResult,
-  SDKSessionInfo,
-}
+// Re-export core types (common serializable types)
+export * from './sdk/coreTypes.js'
+// Re-export runtime types (callbacks, interfaces with methods)
+export * from './sdk/runtimeTypes.js'
+// Re-export tool types (all marked @internal until SDK API stabilizes)
+export * from './sdk/toolTypes.js'
+
+// ============================================================================
+// Functions
+// ============================================================================
 
 export function tool<Schema extends AnyZodRawShape>(
   _name: string,
@@ -442,7 +409,7 @@ export async function connectRemoteControl(
   throw new Error('not implemented')
 }
 
-// add exit reason types for removing the error within gracefulShutdown file 
+// add exit reason types for removing the error within gracefulShutdown file
 export type ExitReason = {
-  
+
 }

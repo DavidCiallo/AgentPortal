@@ -1,8 +1,4 @@
 import { useState } from 'react'
-import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  logEvent,
-} from '../../services/analytics/index.js'
 import { sanitizeToolNameForAnalytics } from '../../services/analytics/metadata.js'
 import { useSetAppState } from '../../state/AppState.js'
 import type { ToolUseConfirm } from './PermissionRequest.js'
@@ -61,20 +57,20 @@ export function useShellPermissionFeedback({
     if (option === 'yes') {
       if (yesInputMode) {
         setYesInputMode(false)
-        logEvent('tengu_accept_feedback_mode_collapsed', analyticsProps)
+
       } else {
         setYesInputMode(true)
         setYesFeedbackModeEntered(true)
-        logEvent('tengu_accept_feedback_mode_entered', analyticsProps)
+
       }
     } else if (option === 'no') {
       if (noInputMode) {
         setNoInputMode(false)
-        logEvent('tengu_reject_feedback_mode_collapsed', analyticsProps)
+
       } else {
         setNoInputMode(true)
         setNoFeedbackModeEntered(true)
-        logEvent('tengu_reject_feedback_mode_entered', analyticsProps)
+
       }
     }
   }
@@ -85,9 +81,7 @@ export function useShellPermissionFeedback({
 
     // Log escape if no feedback was provided (user pressed ESC)
     if (!hasFeedback) {
-      logEvent('tengu_permission_request_escape', {
-        explainer_visible: explainerVisible,
-      })
+
       // Increment escape count for attribution tracking
       setAppState(prev => ({
         ...prev,

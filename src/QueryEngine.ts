@@ -1,22 +1,9 @@
 import { feature } from 'bun:bundle'
 import type { ContentBlockParam } from '@anthropic-ai/sdk/resources/messages.mjs'
+import type { SDKMessage, SDKStatus } from './entrypoints/agentSdkTypes.js'
 import { randomUUID } from 'crypto'
 import last from 'lodash-es/last.js'
-import {
-  getSessionId,
-  isSessionPersistenceDisabled,
-} from 'src/bootstrap/state.js'
-import type {
-  PermissionMode,
-  SDKCompactBoundaryMessage,
-  SDKMessage,
-  SDKPermissionDenial,
-  SDKStatus,
-  SDKUserMessageReplay,
-} from 'src/entrypoints/agentSdkTypes.js'
-import { accumulateUsage, updateUsage } from 'src/services/api/claude.js'
-import type { NonNullableUsage } from 'src/services/api/logging.js'
-import { EMPTY_USAGE } from 'src/services/api/logging.js'
+import { getSessionId, isSessionPersistenceDisabled, } from 'src/bootstrap/state.js'
 import stripAnsi from 'strip-ansi'
 import type { Command } from './commands.js'
 import { getSlashCommandToolSkills } from './commands.js'
@@ -25,10 +12,8 @@ import {
   LOCAL_COMMAND_STDOUT_TAG,
 } from './constants/xml.js'
 import {
-  getModelUsage,
   getTotalAPIDuration,
-  getTotalCost,
-} from './cost-tracker.js'
+} from './bootstrap/state.js'
 import type { CanUseToolFn } from './hooks/useCanUseTool.js'
 import { loadMemoryPrompt } from './memdir/memdir.js'
 import { hasAutoMemPathOverride } from './memdir/paths.js'
@@ -53,29 +38,17 @@ import {
   fileHistoryEnabled,
   fileHistoryMakeSnapshot,
 } from './utils/fileHistory.js'
-import {
-  cloneFileStateCache,
-  type FileStateCache,
-} from './utils/fileStateCache.js'
+import { cloneFileStateCache, type FileStateCache, } from './utils/fileStateCache.js'
 import { headlessProfilerCheckpoint } from './utils/headlessProfiler.js'
 import { registerStructuredOutputEnforcement } from './utils/hooks/hookHelpers.js'
 import { getInMemoryErrors } from './utils/log.js'
 import { countToolCalls, SYNTHETIC_MESSAGES } from './utils/messages.js'
-import {
-  getMainLoopModel,
-  parseUserSpecifiedModel,
-} from './utils/model/model.js'
+import { getMainLoopModel, parseUserSpecifiedModel, } from './utils/model/model.js'
 import { loadAllPluginsCacheOnly } from './utils/plugins/pluginLoader.js'
-import {
-  type ProcessUserInputContext,
-  processUserInput,
-} from './utils/processUserInput/processUserInput.js'
+import { type ProcessUserInputContext, processUserInput, } from './utils/processUserInput/processUserInput.js'
 import { fetchSystemPromptParts } from './utils/queryContext.js'
 import { setCwd } from './utils/Shell.js'
-import {
-  flushSessionStorage,
-  recordTranscript,
-} from './utils/sessionStorage.js'
+import { flushSessionStorage, recordTranscript, } from './utils/sessionStorage.js'
 import { asSystemPrompt } from './utils/systemPromptType.js'
 import { resolveThemeSetting } from './utils/systemTheme.js'
 import {
@@ -95,7 +68,6 @@ import {
 } from './utils/messages/mappers.js'
 import {
   buildSystemInitMessage,
-  sdkCompatToolName,
 } from './utils/messages/systemInit.js'
 import {
   getScratchpadDir,
@@ -108,17 +80,15 @@ import {
   normalizeMessage,
 } from './utils/queryHelpers.js'
 
-// Dead code elimination: conditional import for coordinator mode
 /* eslint-disable @typescript-eslint/no-require-imports */
 const getCoordinatorUserContext: (
   mcpClients: ReadonlyArray<{ name: string }>,
   scratchpadDir?: string,
 ) => { [k: string]: string } = feature('COORDINATOR_MODE')
-  ? require('./coordinator/coordinatorMode.js').getCoordinatorUserContext
-  : () => ({})
+    ? require('./coordinator/coordinatorMode.js').getCoordinatorUserContext
+    : () => ({})
 /* eslint-enable @typescript-eslint/no-require-imports */
 
-// Dead code elimination: conditional import for snip compaction
 /* eslint-disable @typescript-eslint/no-require-imports */
 const snipModule = feature('HISTORY_SNIP')
   ? (require('./services/compact/snipCompact.js') as typeof import('./services/compact/snipCompact.js'))
@@ -145,7 +115,6 @@ export type QueryEngineConfig = {
   fallbackModel?: string
   thinkingConfig?: ThinkingConfig
   maxTurns?: number
-  maxBudgetUsd?: number
   taskBudget?: { total: number }
   jsonSchema?: Record<string, unknown>
   verbose?: boolean
@@ -186,8 +155,6 @@ export class QueryEngine {
   private config: QueryEngineConfig
   private mutableMessages: Message[]
   private abortController: AbortController
-  private permissionDenials: SDKPermissionDenial[]
-  private totalUsage: NonNullableUsage
   private hasHandledOrphanedPermission = false
   private readFileState: FileStateCache
   // Turn-scoped skill discovery tracking (feeds was_discovered on
@@ -202,9 +169,7 @@ export class QueryEngine {
     this.config = config
     this.mutableMessages = config.initialMessages ?? []
     this.abortController = config.abortController ?? createAbortController()
-    this.permissionDenials = []
     this.readFileState = config.readFileCache
-    this.totalUsage = EMPTY_USAGE
   }
 
   async *submitMessage(
@@ -219,7 +184,6 @@ export class QueryEngine {
       verbose = false,
       thinkingConfig,
       maxTurns,
-      maxBudgetUsd,
       taskBudget,
       canUseTool,
       customSystemPrompt,
@@ -258,15 +222,6 @@ export class QueryEngine {
         toolUseID,
         forceDecision,
       )
-
-      // Track denials for SDK reporting
-      if (result.behavior !== 'allow') {
-        this.permissionDenials.push({
-          tool_name: sdkCompatToolName(tool.name),
-          tool_use_id: toolUseID,
-          tool_input: input,
-        })
-      }
 
       return result
     }
@@ -345,7 +300,7 @@ export class QueryEngine {
       setMessages: fn => {
         this.mutableMessages = fn(this.mutableMessages)
       },
-      onChangeAPIKey: () => {},
+      onChangeAPIKey: () => { },
       handleElicitation: this.config.handleElicitation,
       options: {
         commands,
@@ -362,7 +317,6 @@ export class QueryEngine {
         appendSystemPrompt,
         agentDefinitions: { activeAgents: agents, allAgents: [] },
         theme: resolveThemeSetting(getGlobalConfig().theme),
-        maxBudgetUsd,
       },
       getAppState,
       setAppState,
@@ -372,8 +326,8 @@ export class QueryEngine {
       loadedNestedMemoryPaths: this.loadedNestedMemoryPaths,
       dynamicSkillDirTriggers: new Set<string>(),
       discoveredSkillNames: this.discoveredSkillNames,
-      setInProgressToolUseIDs: () => {},
-      setResponseLength: () => {},
+      setInProgressToolUseIDs: () => { },
+      setResponseLength: () => { },
       updateFileHistoryState: (
         updater: (prev: FileHistoryState) => FileHistoryState,
       ) => {
@@ -417,7 +371,7 @@ export class QueryEngine {
     } = await processUserInput({
       input: prompt,
       mode: 'prompt',
-      setToolJSX: () => {},
+      setToolJSX: () => { },
       context: {
         ...processUserInputContext,
         messages: this.mutableMessages,
@@ -492,8 +446,8 @@ export class QueryEngine {
     // model (from slash commands).
     processUserInputContext = {
       messages,
-      setMessages: () => {},
-      onChangeAPIKey: () => {},
+      setMessages: () => { },
+      onChangeAPIKey: () => { },
       handleElicitation: this.config.handleElicitation,
       options: {
         commands,
@@ -510,7 +464,6 @@ export class QueryEngine {
         appendSystemPrompt,
         theme: resolveThemeSetting(getGlobalConfig().theme),
         agentDefinitions: { activeAgents: agents, allAgents: [] },
-        maxBudgetUsd,
       },
       getAppState,
       setAppState,
@@ -520,8 +473,8 @@ export class QueryEngine {
       loadedNestedMemoryPaths: this.loadedNestedMemoryPaths,
       dynamicSkillDirTriggers: new Set<string>(),
       discoveredSkillNames: this.discoveredSkillNames,
-      setInProgressToolUseIDs: () => {},
-      setResponseLength: () => {},
+      setInProgressToolUseIDs: () => { },
+      setResponseLength: () => { },
       updateFileHistoryState: processUserInputContext.updateFileHistoryState,
       updateAttributionState: processUserInputContext.updateAttributionState,
       setSDKStatus,
@@ -542,8 +495,7 @@ export class QueryEngine {
       tools,
       mcpClients,
       model: mainLoopModel,
-      permissionMode: initialAppState.toolPermissionContext
-        .mode as PermissionMode, // TODO: avoid the cast
+      permissionMode: initialAppState.toolPermissionContext.mode,
       commands,
       agents,
       skills,
@@ -576,9 +528,9 @@ export class QueryEngine {
             parent_tool_use_id: null,
             uuid: msg.uuid,
             timestamp: msg.timestamp,
-            isReplay: !msg.isCompactSummary,
+            isReplay: true,
             isSynthetic: msg.isMeta || msg.isVisibleInTranscriptOnly,
-          } as SDKUserMessageReplay
+          }
         }
 
         // Local command output — yield as a synthetic assistant message so
@@ -602,7 +554,7 @@ export class QueryEngine {
             session_id: getSessionId(),
             uuid: msg.uuid,
             compact_metadata: toSDKCompactMetadata(msg.compactMetadata),
-          } as SDKCompactBoundaryMessage
+          }
         }
       }
 
@@ -626,10 +578,7 @@ export class QueryEngine {
         result: resultText ?? '',
         stop_reason: null,
         session_id: getSessionId(),
-        total_cost_usd: getTotalCost(),
-        usage: this.totalUsage,
-        modelUsage: getModelUsage(),
-        permission_denials: this.permissionDenials,
+        total_cost_usd: 0,
         fast_mode_state: getFastModeState(
           mainLoopModel,
           initialAppState.fastMode,
@@ -655,8 +604,6 @@ export class QueryEngine {
         })
     }
 
-    // Track current message usage (reset on each message_start)
-    let currentMessageUsage: NonNullableUsage = EMPTY_USAGE
     let turnCount = 1
     let hasAcknowledgedInitialMessages = false
     // Track structured output from StructuredOutput tool calls
@@ -758,7 +705,7 @@ export class QueryEngine {
                 uuid: msgToAck.uuid,
                 timestamp: msgToAck.timestamp,
                 isReplay: true,
-              } as SDKUserMessageReplay
+              }
             }
           }
         }
@@ -800,33 +747,10 @@ export class QueryEngine {
           yield* normalizeMessage(message)
           break
         case 'stream_event':
-          if (message.event.type === 'message_start') {
-            // Reset current message usage for new message
-            currentMessageUsage = EMPTY_USAGE
-            currentMessageUsage = updateUsage(
-              currentMessageUsage,
-              message.event.message.usage,
-            )
-          }
           if (message.event.type === 'message_delta') {
-            currentMessageUsage = updateUsage(
-              currentMessageUsage,
-              message.event.usage,
-            )
-            // Capture stop_reason from message_delta. The assistant message
-            // is yielded at content_block_stop with stop_reason=null; the
-            // real value only arrives here (see claude.ts message_delta
-            // handler). Without this, result.stop_reason is always null.
             if (message.event.delta.stop_reason != null) {
               lastStopReason = message.event.delta.stop_reason
             }
-          }
-          if (message.event.type === 'message_stop') {
-            // Accumulate current message usage into total
-            this.totalUsage = accumulateUsage(
-              this.totalUsage,
-              currentMessageUsage,
-            )
           }
 
           if (includePartialMessages) {
@@ -871,11 +795,8 @@ export class QueryEngine {
               num_turns: message.attachment.turnCount,
               stop_reason: lastStopReason,
               session_id: getSessionId(),
-              total_cost_usd: getTotalCost(),
-              usage: this.totalUsage,
-              modelUsage: getModelUsage(),
-              permission_denials: this.permissionDenials,
-              fast_mode_state: getFastModeState(
+              total_cost_usd: 0,
+                    fast_mode_state: getFastModeState(
                 mainLoopModel,
                 initialAppState.fastMode,
               ),
@@ -902,7 +823,7 @@ export class QueryEngine {
               uuid: message.attachment.source_uuid || message.uuid,
               timestamp: message.timestamp,
               isReplay: true,
-            } as SDKUserMessageReplay
+            }
           }
           break
         case 'stream_request_start':
@@ -982,39 +903,6 @@ export class QueryEngine {
           break
       }
 
-      // Check if USD budget has been exceeded
-      if (maxBudgetUsd !== undefined && getTotalCost() >= maxBudgetUsd) {
-        if (persistSession) {
-          if (
-            isEnvTruthy(process.env.CLAUDE_CODE_EAGER_FLUSH) ||
-            isEnvTruthy(process.env.CLAUDE_CODE_IS_COWORK)
-          ) {
-            await flushSessionStorage()
-          }
-        }
-        yield {
-          type: 'result',
-          subtype: 'error_max_budget_usd',
-          duration_ms: Date.now() - startTime,
-          duration_api_ms: getTotalAPIDuration(),
-          is_error: true,
-          num_turns: turnCount,
-          stop_reason: lastStopReason,
-          session_id: getSessionId(),
-          total_cost_usd: getTotalCost(),
-          usage: this.totalUsage,
-          modelUsage: getModelUsage(),
-          permission_denials: this.permissionDenials,
-          fast_mode_state: getFastModeState(
-            mainLoopModel,
-            initialAppState.fastMode,
-          ),
-          uuid: randomUUID(),
-          errors: [`Reached maximum budget ($${maxBudgetUsd})`],
-        }
-        return
-      }
-
       // Check if structured output retry limit exceeded (only on user messages)
       if (message.type === 'user' && jsonSchema) {
         const currentCalls = countToolCalls(
@@ -1044,11 +932,8 @@ export class QueryEngine {
             num_turns: turnCount,
             stop_reason: lastStopReason,
             session_id: getSessionId(),
-            total_cost_usd: getTotalCost(),
-            usage: this.totalUsage,
-            modelUsage: getModelUsage(),
-            permission_denials: this.permissionDenials,
-            fast_mode_state: getFastModeState(
+            total_cost_usd: 0,
+                fast_mode_state: getFastModeState(
               mainLoopModel,
               initialAppState.fastMode,
             ),
@@ -1103,10 +988,7 @@ export class QueryEngine {
         num_turns: turnCount,
         stop_reason: lastStopReason,
         session_id: getSessionId(),
-        total_cost_usd: getTotalCost(),
-        usage: this.totalUsage,
-        modelUsage: getModelUsage(),
-        permission_denials: this.permissionDenials,
+        total_cost_usd: 0,
         fast_mode_state: getFastModeState(
           mainLoopModel,
           initialAppState.fastMode,
@@ -1156,10 +1038,7 @@ export class QueryEngine {
       result: textResult,
       stop_reason: lastStopReason,
       session_id: getSessionId(),
-      total_cost_usd: getTotalCost(),
-      usage: this.totalUsage,
-      modelUsage: getModelUsage(),
-      permission_denials: this.permissionDenials,
+      total_cost_usd: 0,
       structured_output: structuredOutputFromTool,
       fast_mode_state: getFastModeState(
         mainLoopModel,
@@ -1208,7 +1087,6 @@ export async function* ask({
   verbose = false,
   thinkingConfig,
   maxTurns,
-  maxBudgetUsd,
   taskBudget,
   canUseTool,
   mutableMessages = [],
@@ -1239,7 +1117,6 @@ export async function* ask({
   mcpClients: MCPServerConnection[]
   thinkingConfig?: ThinkingConfig
   maxTurns?: number
-  maxBudgetUsd?: number
   taskBudget?: { total: number }
   canUseTool: CanUseToolFn
   mutableMessages?: Message[]
@@ -1277,7 +1154,6 @@ export async function* ask({
     fallbackModel,
     thinkingConfig,
     maxTurns,
-    maxBudgetUsd,
     taskBudget,
     jsonSchema,
     verbose,
@@ -1289,12 +1165,12 @@ export async function* ask({
     orphanedPermission,
     ...(feature('HISTORY_SNIP')
       ? {
-          snipReplay: (yielded: Message, store: Message[]) => {
-            if (!snipProjection!.isSnipBoundaryMessage(yielded))
-              return undefined
-            return snipModule!.snipCompactIfNeeded(store, { force: true })
-          },
-        }
+        snipReplay: (yielded: Message, store: Message[]) => {
+          if (!snipProjection!.isSnipBoundaryMessage(yielded))
+            return undefined
+          return snipModule!.snipCompactIfNeeded(store, { force: true })
+        },
+      }
       : {}),
   })
 

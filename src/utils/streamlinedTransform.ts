@@ -8,8 +8,13 @@
  * - Strips tool list and model info from init messages
  */
 
-import type { SDKAssistantMessage } from 'src/entrypoints/agentSdkTypes.js'
-import type { StdoutMessage } from 'src/entrypoints/sdk/controlTypes.js'
+type SDKAssistantMessage = {
+  type: 'assistant'
+  message: { role: 'assistant'; content: unknown[] }
+  session_id: string
+  uuid: string
+}
+type StdoutMessage = any
 import { FILE_EDIT_TOOL_NAME } from 'src/tools/FileEditTool/constants.js'
 import { FILE_READ_TOOL_NAME } from 'src/tools/FileReadTool/prompt.js'
 import { FILE_WRITE_TOOL_NAME } from 'src/tools/FileWriteTool/prompt.js'
@@ -110,7 +115,7 @@ function accumulateToolUses(
   message: SDKAssistantMessage,
   counts: ToolCounts,
 ): void {
-  const content = message.message.content
+  const content: Array<any> = message.message.content
   if (!Array.isArray(content)) {
     return
   }
@@ -171,7 +176,6 @@ export function createStreamlinedTransformer(): (
       }
 
       case 'result':
-        // Keep result messages as-is (they have structured_output, permission_denials)
         return message
 
       case 'system':

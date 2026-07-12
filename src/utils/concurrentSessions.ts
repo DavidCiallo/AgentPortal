@@ -13,7 +13,6 @@ import { errorMessage, isFsInaccessible } from './errors.js'
 import { isProcessRunning } from './genericProcessUtils.js'
 import { getPlatform } from './platform.js'
 import { jsonParse, jsonStringify } from './slowOperations.js'
-import { getAgentId } from './teammate.js'
 
 export type SessionKind = 'interactive' | 'bg' | 'daemon' | 'daemon-worker'
 export type SessionStatus = 'busy' | 'idle' | 'waiting'
@@ -57,8 +56,6 @@ export function isBgSession(): boolean {
  * Errors logged to debug, never thrown.
  */
 export async function registerSession(): Promise<boolean> {
-  if (getAgentId() != null) return false
-
   const kind: SessionKind = envSessionKind() ?? 'interactive'
   const dir = getSessionsDir()
   const pidFile = join(dir, `${process.pid}.json`)

@@ -1,7 +1,6 @@
 import * as fs from 'fs/promises'
 import { homedir } from 'os'
 import { join } from 'path'
-import { logEvent } from '../services/analytics/index.js'
 import { CACHE_PATHS } from './cachePaths.js'
 import { logForDebugging } from './debug.js'
 import { getClaudeConfigHomeDir } from './envUtils.js'
@@ -518,17 +517,9 @@ export async function cleanupNpmCacheForAnthropicPackages(): Promise<void> {
     } else {
       logForDebugging(`npm cache cleanup: completed in ${durationMs}ms`)
     }
-    logEvent('tengu_npm_cache_cleanup', {
-      success: true,
-      durationMs,
-      entriesRemoved: keysToRemove.length,
-    })
+
   } catch (error) {
     logError(error as Error)
-    logEvent('tengu_npm_cache_cleanup', {
-      success: false,
-      durationMs: Date.now() - startTime,
-    })
   } finally {
     await lockfile.unlock(markerPath, { realpath: false }).catch(() => {})
   }
@@ -594,9 +585,6 @@ export async function cleanupOldMessageFilesInBackground(): Promise<void> {
   await cleanupOldPastes(getCutoffDate())
   const removedWorktrees = await cleanupStaleAgentWorktrees(getCutoffDate())
   if (removedWorktrees > 0) {
-    logEvent('tengu_worktree_cleanup', { removed: removedWorktrees })
-  }
-  if (process.env.USER_TYPE === 'ant') {
-    await cleanupNpmCacheForAnthropicPackages()
+
   }
 }

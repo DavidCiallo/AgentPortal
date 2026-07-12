@@ -13,10 +13,6 @@ import {
   getAdditionalDirectoriesForClaudeMd,
   getSessionId,
 } from '../bootstrap/state.js'
-import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  logEvent,
-} from '../services/analytics/index.js'
 import { roughTokenCountEstimation } from '../services/tokenEstimation.js'
 import type { Command, PromptCommand } from '../types/command.js'
 import {
@@ -62,7 +58,6 @@ import { getManagedFilePath } from '../utils/settings/managedPath.js'
 import { isRestrictedToPluginOnly } from '../utils/settings/pluginOnlyPolicy.js'
 import { HooksSchema, type HooksSettings } from '../utils/settings/types.js'
 import { createSignal } from '../utils/signal.js'
-import { registerMCPSkillBuilders } from './mcpSkillBuilders.js'
 
 export type LoadedFrom =
   | 'commands_DEPRECATED'
@@ -1044,14 +1039,7 @@ export async function addSkillDirectories(dirs: string[]): Promise<void> {
       `[skills] Dynamically discovered ${newSkillCount} skills from ${dirs.length} directories`,
     )
     if (addedSkills.length > 0) {
-      logEvent('tengu_dynamic_skills_changed', {
-        source:
-          'file_operation' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        previousCount: previousSkillNamesForLogging.size,
-        newCount: dynamicSkills.size,
-        addedCount: addedSkills.length,
-        directoryCount: dirs.length,
-      })
+
     }
   }
 
@@ -1126,14 +1114,6 @@ export function activateConditionalSkillsForPaths(
   }
 
   if (activated.length > 0) {
-    logEvent('tengu_dynamic_skills_changed', {
-      source:
-        'conditional_paths' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      previousCount: dynamicSkills.size - activated.length,
-      newCount: dynamicSkills.size,
-      addedCount: activated.length,
-      directoryCount: 0,
-    })
 
     // Notify listeners that skills were loaded (so they can clear caches)
     skillsLoaded.emit()
@@ -1159,13 +1139,3 @@ export function clearDynamicSkills(): void {
   activatedConditionalSkillNames.clear()
 }
 
-// Expose createSkillCommand + parseSkillFrontmatterFields to MCP skill
-// discovery via a leaf registry module. See mcpSkillBuilders.ts for why this
-// indirection exists (a literal dynamic import from mcpSkills.ts fans a single
-// edge out into many cycle violations; a variable-specifier dynamic import
-// passes dep-cruiser but fails to resolve in Bun-bundled binaries at runtime).
-// eslint-disable-next-line custom-rules/no-top-level-side-effects -- write-once registration, idempotent
-registerMCPSkillBuilders({
-  createSkillCommand,
-  parseSkillFrontmatterFields,
-})

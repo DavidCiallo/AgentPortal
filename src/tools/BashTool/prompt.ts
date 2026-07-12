@@ -44,35 +44,11 @@ function getCommitAndPRInstructions(): string {
   // hiding are mechanical and work regardless, but the explicit "don't blow
   // your cover" instructions are the last line of defense against the model
   // volunteering an internal codename in a commit message.
-  const undercoverSection =
-    process.env.USER_TYPE === 'ant' && isUndercover()
-      ? getUndercoverInstructions() + '\n'
-      : ''
+  const undercoverSection = ''
 
   if (!shouldIncludeGitInstructions()) return undercoverSection
 
   // For ant users, use the short version pointing to skills
-  if (process.env.USER_TYPE === 'ant') {
-    const skillsSection = !isEnvTruthy(process.env.CLAUDE_CODE_SIMPLE)
-      ? `For git commits and pull requests, use the \`/commit\` and \`/commit-push-pr\` skills:
-- \`/commit\` - Create a git commit with staged changes
-- \`/commit-push-pr\` - Commit, push, and create a pull request
-
-These skills handle git safety protocols, proper commit message formatting, and PR creation.
-
-Before creating a pull request, run \`/simplify\` to review your changes, then test end-to-end (e.g. via \`/tmux\` for interactive features).
-
-`
-      : ''
-    return `${undercoverSection}# Git operations
-
-${skillsSection}IMPORTANT: NEVER skip hooks (--no-verify, --no-gpg-sign, etc) unless the user explicitly requests it.
-
-Use the gh command via the Bash tool for other GitHub-related tasks including working with issues, checks, and releases. If given a Github URL use the gh command to get the information needed.
-
-# Other common operations
-- View comments on a Github PR: gh api repos/foo/bar/pulls/123/comments`
-  }
 
   // For external users, include full inline instructions
   return `# Committing changes with git
@@ -83,7 +59,7 @@ You can call multiple tools in a single response. When multiple independent piec
 
 Git Safety Protocol:
 - NEVER update the git config
-- NEVER run destructive git commands (push --force, reset --hard, checkout ., restore ., clean -f, branch -D) unless the user explicitly requests these actions. Taking unauthorized destructive actions is unhelpful and can result in lost work, so it's best to ONLY run these commands when given direct instructions 
+- NEVER run destructive git commands (push --force, reset --hard, checkout ., restore ., clean -f, branch -D) unless the user explicitly requests these actions. Taking unauthorized destructive actions is unhelpful and can result in lost work, so it's best to ONLY run these commands when given direct instructions
 - NEVER skip hooks (--no-verify, --no-gpg-sign, etc) unless the user explicitly requests it
 - NEVER run force push to main/master, warn the user if they request it
 - CRITICAL: Always create NEW commits rather than amending, unless the user explicitly requests a git amend. When a pre-commit hook fails, the commit did NOT happen — so --amend would modify the PREVIOUS commit, which may result in destroying work or losing previous changes. Instead, after hook failure, fix the issue, re-stage, and create a NEW commit

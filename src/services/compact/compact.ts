@@ -3,9 +3,7 @@ import type { UUID } from 'crypto'
 import uniqBy from 'lodash-es/uniqBy.js'
 
 /* eslint-disable @typescript-eslint/no-require-imports */
-const sessionTranscriptModule = feature('KAIROS')
-  ? (require('../sessionTranscript/sessionTranscript.js') as typeof import('../sessionTranscript/sessionTranscript.js'))
-  : null
+const sessionTranscriptModule = null;
 
 import { APIUserAbortError } from '@anthropic-ai/sdk'
 import { markPostCompaction } from 'src/bootstrap/state.js'
@@ -100,10 +98,6 @@ import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
 } from '../analytics/index.js'
-import {
-  getMaxOutputTokensForModel,
-  queryModelWithStreaming,
-} from '../api/claude.js'
 import {
   getPromptTooLongTokenGap,
   PROMPT_TOO_LONG_ERROR_MESSAGE,

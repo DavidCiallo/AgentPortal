@@ -6,12 +6,7 @@ import pickBy from 'lodash-es/pickBy.js'
 import { basename, dirname, join, resolve } from 'path'
 import { getOriginalCwd, getSessionTrustAccepted } from '../bootstrap/state.js'
 import { getAutoMemEntrypoint } from '../memdir/paths.js'
-import { logEvent } from '../services/analytics/index.js'
 import type { McpServerConfig } from '../services/mcp/types.js'
-import type {
-  BillingType,
-  ReferralEligibilityResponse,
-} from '../services/oauth/types.js'
 import { getCwd } from '../utils/cwd.js'
 import { registerCleanup } from './cleanupRegistry.js'
 import { logForDebugging } from './debug.js'
@@ -160,7 +155,6 @@ import type { EDITOR_MODES, NOTIFICATION_CHANNELS } from './configConstants.js'
 export type NotificationChannel = (typeof NOTIFICATION_CHANNELS)[number]
 
 export type AccountInfo = {
-  accountUuid: string
   emailAddress: string
   organizationUuid?: string
   organizationName?: string | null // added 4/23/2025, not populated for existing users
@@ -310,11 +304,8 @@ export type GlobalConfig = {
     ReferralEligibilityResponse & { timestamp: number }
   >
 
-  // Grove config cache per account - key is account UUID
-  groveConfigCache?: Record<
-    string,
-    { grove_enabled: boolean; timestamp: number }
-  >
+  // Grove config cache
+  groveConfigCache?: { grove_enabled: boolean; timestamp: number }
 
   // Guest passes upsell tracking
   passesUpsellSeenCount?: number // Number of times the guest passes upsell has been shown

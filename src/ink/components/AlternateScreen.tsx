@@ -68,7 +68,7 @@ export function AlternateScreen(t0) {
   const t4 = size?.rows ?? 24;
   let t5;
   if ($[4] !== children || $[5] !== t4) {
-    t5 = <Box flexDirection="column" height={t4} width="100%" flexShrink={0}>{children}</Box>;
+    t5 = <Box flexDirection="column" flex={1} width="100%" overflow="hidden">{children}</Box>;
     $[4] = children;
     $[5] = t4;
     $[6] = t5;

@@ -137,7 +137,7 @@ async function configureApiKeyHeaders(
 ): Promise<void> {
   const token =
     process.env.ANTHROPIC_AUTH_TOKEN ||
-    (await getApiKeyFromApiKeyHelper(isNonInteractiveSession))
+    (await getApiKeyFromApiKeyHelper())
   if (token) {
     headers['Authorization'] = `Bearer ${token}`
   }

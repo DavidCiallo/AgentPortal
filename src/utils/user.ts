@@ -38,7 +38,6 @@ export type CoreUserData = {
   appVersion: string
   platform: typeof env.platform
   organizationUuid?: string
-  accountUuid?: string
   userType?: string
   subscriptionType?: string
   rateLimitTier?: string
@@ -99,7 +98,6 @@ export const getCoreUserData = memoize(
     // Only include OAuth account data when actively using OAuth authentication
     const oauthAccount = getOauthAccountInfo()
     const organizationUuid = oauthAccount?.organizationUuid
-    const accountUuid = oauthAccount?.accountUuid
 
     return {
       deviceId,
@@ -108,7 +106,6 @@ export const getCoreUserData = memoize(
       appVersion: MACRO.VERSION,
       platform: getHostPlatformForAnalytics(),
       organizationUuid,
-      accountUuid,
       userType: process.env.USER_TYPE,
       subscriptionType,
       rateLimitTier,

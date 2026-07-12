@@ -1,10 +1,6 @@
 import { feature } from 'bun:bundle'
 import { ASYNC_AGENT_ALLOWED_TOOLS } from '../constants/tools.js'
 import { checkStatsigFeatureGate_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
-import {
-  type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  logEvent,
-} from '../services/analytics/index.js'
 import { AGENT_TOOL_NAME } from '../tools/AgentTool/constants.js'
 import { BASH_TOOL_NAME } from '../tools/BashTool/toolName.js'
 import { FILE_EDIT_TOOL_NAME } from '../tools/FileEditTool/constants.js'
@@ -67,10 +63,6 @@ export function matchSessionMode(
   } else {
     delete process.env.CLAUDE_CODE_COORDINATOR_MODE
   }
-
-  logEvent('tengu_coordinator_mode_switched', {
-    to: sessionMode as unknown as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-  })
 
   return sessionIsCoordinator
     ? 'Entered coordinator mode to match resumed session.'
@@ -355,7 +347,7 @@ User:
   </task-notification>
 
 You:
-  Found the bug — null pointer in validate.ts:42. 
+  Found the bug — null pointer in validate.ts:42.
 
   ${SEND_MESSAGE_TOOL_NAME}({ to: "agent-a1b", message: "Fix the null pointer in src/auth/validate.ts:42. Add a null check before accessing user.id — if null, ... Commit and report the hash." })
 

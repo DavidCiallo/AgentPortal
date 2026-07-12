@@ -1,13 +1,21 @@
 const WS_URL = `ws://${location.host}`
 let ws = null
 let sessionId = ''
+let currentProject = ''      // raw cwd of the active session
+let currentProjectId = ''    // sanitized project dir name (matches /api/projects id)
 let isGenerating = false
+// The user's message text, saved when a round starts so it can be
+// restored into the textarea if the user cancels mid-generation.
+let pendingUserInput = ''
 let currentAssistantEl = null
-let pendingToolCalls = []  // Buffered tool_use_display events, rendered when tool_result arrives
+let pendingToolElements = new Map()  // toolUseId → rendered DOM element, for live output updates
 let pendingPrompts = new Map()
 let currentModel = ''  // Model name from settings
 let currentToolContainer = null  // .tool-calls-container for live tool calls
 let currentToolList = null       // .tool-calls-list inside the container
+
+// Edit mode for session management (mobile friendly)
+let isEditMode = false
 
 // History pagination (infinite scroll up)
 let messageOffset = 0
@@ -43,17 +51,6 @@ function toggleTheme() {
   const current = getTheme()
   const next = current === 'dark' ? 'light' : 'dark'
   setTheme(next)
-}
-
-// Auto-approve toggle
-function toggleAutoApprove(enabled) {
-  localStorage.setItem('autoApprove', enabled ? '1' : '0')
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({
-      type: 'set_permission_mode',
-      mode: enabled ? 'auto_approve' : 'ask',
-    }))
-  }
 }
 
 // Toggle tool calls expansion
@@ -156,7 +153,7 @@ function renderToolCallLive(toolName, display, output = '', isError = false) {
     }
     updateToolContainerCount()
     scrollToBottom()
-    return
+    return lastDisplay
   }
 
   // New element
@@ -176,6 +173,7 @@ function renderToolCallLive(toolName, display, output = '', isError = false) {
   list.appendChild(el)
   updateToolContainerCount()
   scrollToBottom()
+  return el
 }
 
 function getOrCreateToolList() {
@@ -242,10 +240,6 @@ function renderToolCallsList(toolCalls) {
   return list
 }
 
-// Restore auto-approve state
-const savedAutoApprove = localStorage.getItem('autoApprove') === '1'
-document.getElementById('autoApproveToggle').checked = savedAutoApprove
-
 // Restore show-tools state (default: expanded)
 const savedShowTools = localStorage.getItem('showTools') !== '0'
 document.getElementById('showToolsToggle').checked = savedShowTools
@@ -259,15 +253,13 @@ function connect() {
 
   ws.onopen = () => {
     setConnectionStatus(true)
-    sendBtn.disabled = false
-    // Sync auto-approve state to server
-    if (localStorage.getItem('autoApprove') === '1') {
-      ws.send(JSON.stringify({ type: 'set_permission_mode', mode: 'auto_approve' }))
-    }
+    setSendButtonState('send')
     // Load config to populate currentModel
     ws.send(JSON.stringify({ type: 'get_config' }))
-    // Restore the last session from localStorage
+    // Restore the last session from localStorage (also subscribes if restored)
     autoRestoreLastSession()
+    // If already in a session (e.g. after reconnect), resubscribe to live updates
+    if (sessionId) subscribeToSession()
   }
 
   ws.onclose = () => {
@@ -309,23 +301,30 @@ function handleMessage(msg) {
     case 'tool_use_display':
       // Finalize current text bubble — next text_chunk starts a new message
       currentAssistantEl = null
-      // Buffer — render on tool_result so we have output/isError for coloring
-      pendingToolCalls.push({ toolName: msg.toolName, display: msg.display })
-      break
-
-    case 'tool_result':
-      // Render now that we have output and error status
-      if (pendingToolCalls.length > 0) {
-        const tc = pendingToolCalls.shift()
-        // Skip Read tool display — file contents are noisy and unnecessary in chat
-        if (tc.toolName !== 'Read') {
-          renderToolCallLive(tc.toolName, tc.display, msg.output || '', msg.isError || false)
+      // Render immediately so user sees the tool running (real-time feedback)
+      if (msg.toolName !== 'Read') {
+        const el = renderToolCallLive(msg.toolName, msg.display)
+        if (msg.toolUseId && el) {
+          pendingToolElements.set(msg.toolUseId, el)
         }
       }
       break
 
-    case 'action_required':
-      showPermissionDialog(msg)
+    case 'tool_result':
+      // Match by toolUseId and append output to the already-rendered element
+      if (msg.toolUseId && pendingToolElements.has(msg.toolUseId)) {
+        const el = pendingToolElements.get(msg.toolUseId)
+        pendingToolElements.delete(msg.toolUseId)
+        if (msg.output) {
+          const statusClass = msg.isError ? 'tool-result-error' : 'tool-result-neutral'
+          const outDiv = document.createElement('div')
+          outDiv.className = `tool-result-output ${statusClass}`
+          outDiv.textContent = msg.output
+          el.appendChild(outDiv)
+          if (msg.isError) el.classList.add('tool-error')
+          scrollToBottom()
+        }
+      }
       break
 
     case 'done':
@@ -336,21 +335,33 @@ function handleMessage(msg) {
         if (currentProject) {
           localStorage.setItem('lastProjectDir', currentProject)
         }
-        // Also save in the same format switchSession() uses
-        const projectDir = currentProject
-          ? currentProject.replace(/[/\\:]/g, '-')
-          : 'unknown'
+        // Also save in the same format switchSession() uses. Prefer the
+        // server-provided sanitized project id (currentProjectId, set from
+        // session_started) over re-deriving it client-side — the server's
+        // sanitizePath handles characters the simple regex would miss.
+        const projectDir = currentProjectId
+          || (currentProject ? currentProject.replace(/[/\\:]/g, '-') : 'unknown')
         localStorage.setItem('lastSession', JSON.stringify({
           projectId: projectDir,
           sessionId,
           cwd: currentProject || '',
         }))
+
+        // Refresh the sidebar so a brand-new conversation appears in the
+        // list immediately. The session entry only becomes visible once
+        // its JSONL has a summary/last-prompt record, which is written
+        // during the round we just finished — so reload now, then mark
+        // the active row. Skip the network round-trip if the project
+        // container isn't mounted (sidebar never opened).
+        if (currentProjectId && document.getElementById(`sessions-${currentProjectId}`)) {
+          loadSessions(currentProjectId).then(() => {
+            document.querySelectorAll('.session-item').forEach(el => el.classList.remove('active'))
+            document.querySelector(`.session-item[data-session-id="${sessionId}"]`)?.classList.add('active')
+          })
+        }
       }
-      // Flush any remaining buffered tool calls (no output — never got results)
-      while (pendingToolCalls.length > 0) {
-        const tc = pendingToolCalls.shift()
-        renderToolCallLive(tc.toolName, tc.display)
-      }
+      // Flush any remaining buffered tool elements (never got results)
+      pendingToolElements.clear()
       // Reset container for next response
       currentToolContainer = null
       currentToolList = null
@@ -363,38 +374,27 @@ function handleMessage(msg) {
       if (currentAssistantEl && !currentAssistantEl.textContent.trim()) {
         currentAssistantEl.remove()
       }
-      isGenerating = false
       currentAssistantEl = null
-      sendBtn.disabled = false
+      setSendButtonState('send')
+      pendingUserInput = ''
       messageInput.focus()
 
       hideAgentStatus()
       break
 
     case 'cancelled':
-      // Flush any remaining buffered tool calls
-      while (pendingToolCalls.length > 0) {
-        const tc = pendingToolCalls.shift()
-        if (tc.toolName !== 'Read') {
-          renderToolCallLive(tc.toolName, tc.display)
-        }
-      }
+      // Flush any remaining buffered tool elements
+      pendingToolElements.clear()
       if (currentAssistantEl && !currentAssistantEl.textContent.trim()) {
         currentAssistantEl.remove()
       }
-      isGenerating = false
       currentAssistantEl = null
-      pendingToolCalls = []
       currentToolContainer = null
       currentToolList = null
-      sendBtn.disabled = false
+      setSendButtonState('send')
 
       hideAgentStatus()
       addMessage('Generation cancelled.', 'assistant')
-      break
-
-    case 'permission_mode_changed':
-      // Server confirmed mode change
       break
 
     case 'error':
@@ -409,10 +409,19 @@ function handleMessage(msg) {
         return  // Don't show error yet
       }
       addMessage(`Error: ${msg.message}`, 'error')
-      isGenerating = false
-      sendBtn.disabled = false
+      setSendButtonState('send')
+      pendingUserInput = ''
 
       hideAgentStatus()
+      break
+
+    case 'session_started':
+      // Server has allocated/confirmed the sessionId for this round. Pin it
+      // immediately so subsequent UI state (retry, subscribe, etc.) targets
+      // the right session instead of waiting for `done`.
+      sessionId = msg.sessionId || sessionId
+      if (msg.cwd) currentProject = msg.cwd
+      if (msg.projectId) currentProjectId = msg.projectId
       break
 
     case 'config':
@@ -438,38 +447,20 @@ function handleMessage(msg) {
       showConfigStatus('error', msg.message || 'Validation failed')
       document.querySelector('.btn-save').disabled = false
       break
+
+    case 'subscribed':
+      // Server confirmed subscription. If a round is running, show agent status
+      // so the UI reflects the in-progress execution that was replayed.
+      if (msg.running) {
+        setSendButtonState('stop')
+        // Use server-provided round start time so late joiners see the true elapsed time
+        showAgentStatus('Working', true, msg.roundStartTime)
+      }
+      break
   }
   } catch (e) {
     console.error('[handleMessage] Error:', e, msg)
   }
-}
-
-function showPermissionDialog(prompt) {
-  const dialog = document.createElement('div')
-  dialog.className = 'permission-dialog'
-  dialog.id = `prompt-${prompt.promptId}`
-  dialog.innerHTML = `
-    <p>${escapeHtml(prompt.question)}</p>
-    <div class="permission-actions">
-      <button class="btn-approve" onclick="respondPermission('${prompt.promptId}', 'yes')">Approve</button>
-      <button class="btn-deny" onclick="respondPermission('${prompt.promptId}', 'no')">Deny</button>
-    </div>
-  `
-  chatContainer.appendChild(dialog)
-  scrollToBottom(true)
-}
-
-function respondPermission(promptId, reply) {
-  const dialog = document.getElementById(`prompt-${promptId}`)
-  if (dialog) {
-    dialog.remove()
-  }
-
-  ws.send(JSON.stringify({
-    type: 'input',
-    promptId,
-    reply,
-  }))
 }
 
 function renderMarkdown(text) {
@@ -520,15 +511,15 @@ function setConnectionStatus(connected) {
   agentStatusText.textContent = connected ? 'Connected' : 'Disconnected'
 }
 
-function showAgentStatus(text, resetTimer = true) {
+function showAgentStatus(text, resetTimer = true, startTime) {
   if (!agentStatusEl || !agentStatusDot || !agentStatusText) return
   agentStatusEl.classList.remove('connected', 'disconnected')
   agentStatusEl.classList.add('visible')
-  if (resetTimer) agentStatusStart = Date.now()
+  if (resetTimer) agentStatusStart = startTime || Date.now()
   agentStatusText.textContent = text || 'Working'
   if (agentStatusInterval) clearInterval(agentStatusInterval)
   agentStatusInterval = setInterval(() => {
-    const elapsed = Math.floor((Date.now() - agentStatusStart) / 1000)
+    const elapsed = Math.max(0, Math.floor((Date.now() - agentStatusStart) / 1000))
     const m = Math.floor(elapsed / 60)
     const s = elapsed % 60
     agentStatusText.textContent = `${text || 'Working'} (${m}m ${s}s)`
@@ -546,6 +537,29 @@ function hideAgentStatus() {
   setConnectionStatus(_connected)
 }
 
+/**
+ * Toggle the Send button between its two roles:
+ *  - 'send': shows "Send", disabled when the textarea is empty, enabled otherwise.
+ *  - 'stop': shows "Stop", always enabled — clicks cancel the running round.
+ *
+ * The button is reused (rather than adding a second element) to keep the input
+ * area compact, especially on mobile.
+ */
+function setSendButtonState(state) {
+  if (state === 'stop') {
+    isGenerating = true
+    sendBtn.textContent = 'Stop'
+    sendBtn.classList.add('stop')
+    sendBtn.disabled = false
+  } else {
+    isGenerating = false
+    sendBtn.textContent = 'Send'
+    sendBtn.classList.remove('stop')
+    // Send is disabled when there's no text to send.
+    sendBtn.disabled = messageInput.value.trim() === ''
+  }
+}
+
 function isNearBottom() {
   // Consider user "near bottom" if within 1 viewport height from the bottom
   return chatContainer.scrollTop + chatContainer.clientHeight >= chatContainer.scrollHeight - chatContainer.clientHeight
@@ -553,7 +567,13 @@ function isNearBottom() {
 
 function scrollToBottom(force = false) {
   if (!force && !isNearBottom()) return
-  chatContainer.scrollTop = chatContainer.scrollHeight
+  // Defer to next frame so layout (scrollHeight) is settled after
+  // large innerHTML rewrites. Setting scrollTop synchronously can
+  // land short when the browser hasn't computed the new layout yet,
+  // causing a visible flicker/jump.
+  requestAnimationFrame(() => {
+    chatContainer.scrollTop = chatContainer.scrollHeight
+  })
 }
 
 function escapeHtml(text) {
@@ -578,22 +598,85 @@ function closeSettings() {
 function loadConfig(config) {
   document.getElementById('providerSelect').value = 'openai'
   document.getElementById('baseUrlInput').value = config.baseUrl || ''
-  const modelSelect = document.getElementById('modelSelect')
-  if (config.model && [...modelSelect.options].some(o => o.value === config.model)) {
-    modelSelect.value = config.model
-  } else if (config.model) {
-    // Add a custom option if the saved model isn't in the list
-    const opt = document.createElement('option')
-    opt.value = config.model
-    opt.textContent = config.model
-    modelSelect.appendChild(opt)
-    modelSelect.value = config.model
-  } else {
-    modelSelect.value = 'gpt-4o'
-  }
   document.getElementById('apiKeyInput').value = config.hasApiKey ? '••••••••' : ''
   document.getElementById('apiKeyInput').placeholder = config.hasApiKey ? '••••••••' : 'sk-...'
   currentModel = config.model || ''
+
+  // Fetch available models from the API and populate the dropdown
+  fetchModelsAndPopulateSelect(config.model)
+}
+
+async function refreshModels() {
+  const baseUrl = document.getElementById('baseUrlInput').value
+  if (baseUrl) {
+    // Override env config to use the URL the user typed
+    await fetchModelsAndPopulateSelect(document.getElementById('modelSelect').value, baseUrl)
+  } else {
+    await fetchModelsAndPopulateSelect(document.getElementById('modelSelect').value)
+  }
+}
+
+async function fetchModelsAndPopulateSelect(currentModelValue, baseUrlOverride) {
+  const modelSelect = document.getElementById('modelSelect')
+  // Show loading state
+  modelSelect.innerHTML = '<option value="">Loading models...</option>'
+  modelSelect.disabled = true
+
+  try {
+    let url = '/api/models'
+    if (baseUrlOverride) {
+      url += '?' + new URLSearchParams({ baseUrl: baseUrlOverride })
+    }
+    const response = await fetch(url)
+    const data = await response.json()
+
+    modelSelect.innerHTML = ''
+
+    if (data.models && data.models.length > 0) {
+      // Sort models alphabetically
+      const sorted = [...data.models].sort()
+      for (const modelId of sorted) {
+        const opt = document.createElement('option')
+        opt.value = modelId
+        opt.textContent = modelId
+        modelSelect.appendChild(opt)
+      }
+    } else {
+      // Fallback: no models returned
+      const opt = document.createElement('option')
+      opt.value = ''
+      opt.textContent = 'No models available'
+      modelSelect.appendChild(opt)
+    }
+
+    // Select current model if it exists in the list
+    if (currentModelValue && [...modelSelect.options].some(o => o.value === currentModelValue)) {
+      modelSelect.value = currentModelValue
+    } else if (currentModelValue) {
+      // Add as custom option if not in list
+      const opt = document.createElement('option')
+      opt.value = currentModelValue
+      opt.textContent = currentModelValue
+      modelSelect.appendChild(opt)
+      modelSelect.value = currentModelValue
+    }
+  } catch (err) {
+    console.error('Failed to fetch models:', err)
+    // Fallback to common models on error
+    modelSelect.innerHTML = ''
+    const fallbacks = ['gpt-4o', 'gpt-4o-mini', 'deepseek-chat', 'deepseek-reasoner']
+    for (const id of fallbacks) {
+      const opt = document.createElement('option')
+      opt.value = id
+      opt.textContent = id
+      modelSelect.appendChild(opt)
+    }
+    if (currentModelValue) {
+      modelSelect.value = currentModelValue
+    }
+  } finally {
+    modelSelect.disabled = false
+  }
 }
 
 function saveSettings() {
@@ -648,6 +731,7 @@ async function sendMessage() {
         messageOffset = data.messages.length
         totalMessages = data.total
         hasMoreMessages = data.hasMore
+        scrollToBottom(true)
       }
     } catch {
       // Failed to load history — proceed with empty chat
@@ -655,11 +739,14 @@ async function sendMessage() {
   }
 
   addMessage(message, 'user')
+  scrollToBottom(true)
+  // Remember what the user sent so we can put it back into the textarea
+  // if they cancel the round before it completes.
+  pendingUserInput = message
   messageInput.value = ''
   messageInput.style.height = 'auto'
 
-  isGenerating = true
-  sendBtn.disabled = true
+  setSendButtonState('stop')
   showAgentStatus('Working')
 
   const chatMsg = {
@@ -676,7 +763,20 @@ async function sendMessage() {
 }
 
 // Event listeners
-sendBtn.addEventListener('click', sendMessage)
+sendBtn.addEventListener('click', () => {
+  if (isGenerating) {
+    // Cancel the running round and restore the user's input so they can edit
+    // and resend without retyping.
+    ws.send(JSON.stringify({ type: 'cancel', sessionId }))
+    if (pendingUserInput) {
+      messageInput.value = pendingUserInput
+      messageInput.style.height = 'auto'
+      messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + 'px'
+    }
+    return
+  }
+  sendMessage()
+})
 
 // Infinite scroll — load older messages when within ~1 viewport height from top
 let scrollLoadTimer = null
@@ -699,6 +799,18 @@ messageInput.addEventListener('keydown', (e) => {
 messageInput.addEventListener('input', () => {
   messageInput.style.height = 'auto'
   messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + 'px'
+  // Keep the Send button's disabled state in sync with the textarea contents.
+  // (Only when in 'send' mode — Stop is always enabled.)
+  if (!isGenerating) {
+    sendBtn.disabled = messageInput.value.trim() === ''
+  }
+})
+
+// Android Chrome keyboard: scroll chat to bottom when input gets focus
+messageInput.addEventListener('focus', () => {
+  setTimeout(() => {
+    chatContainer.scrollTop = chatContainer.scrollHeight
+  }, 300)
 })
 
 // Close modal when clicking outside
@@ -711,7 +823,6 @@ document.getElementById('settingsModal').addEventListener('click', (e) => {
 // Close modal when clicking outside
 
 // Project list management
-let currentProject = null
 
 async function loadProjects() {
   try {
@@ -749,6 +860,22 @@ async function loadProjects() {
   }
 }
 
+function toggleEditMode() {
+  isEditMode = !isEditMode
+  const editBtn = document.getElementById('editBtn')
+  const sidebar = document.querySelector('.sidebar')
+
+  if (isEditMode) {
+    editBtn.textContent = 'Done'
+    editBtn.classList.add('active')
+    sidebar.classList.add('edit-mode')
+  } else {
+    editBtn.textContent = 'Edit'
+    editBtn.classList.remove('active')
+    sidebar.classList.remove('edit-mode')
+  }
+}
+
 async function loadSessions(projectId) {
   try {
     const response = await fetch(`/api/sessions?project=${encodeURIComponent(projectId)}`)
@@ -768,14 +895,48 @@ async function loadSessions(projectId) {
       const time = new Date(session.lastModified).toLocaleString()
 
       item.innerHTML = `
-        <div class="session-title">${escapeHtml(title.substring(0, 50))}</div>
-        <div class="session-time">${time}</div>
+        <div class="session-content">
+          <div class="session-title">${escapeHtml(title.substring(0, 50))}</div>
+          <div class="session-time">${time}</div>
+        </div>
+        <button class="session-delete-btn" onclick="event.stopPropagation(); deleteSession('${escapeHtml(projectId)}', '${escapeHtml(session.sessionId)}')" title="Delete session">×</button>
       `
 
       sessionList.appendChild(item)
     })
   } catch (err) {
     console.error('Failed to load sessions:', err)
+  }
+}
+
+async function deleteSession(projectId, sessionIdToDelete) {
+  try {
+    // Don't allow deleting the current active session
+    if (sessionIdToDelete === sessionId) {
+      alert('Cannot delete the currently active session')
+      return
+    }
+
+    // Confirm deletion
+    if (!confirm('Are you sure you want to delete this session?')) {
+      return
+    }
+
+    const response = await fetch(`/api/session?project=${encodeURIComponent(projectId)}&session=${encodeURIComponent(sessionIdToDelete)}`, {
+      method: 'DELETE'
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      alert(error.error || 'Failed to delete session')
+      return
+    }
+
+    // Reload sessions
+    loadSessions(projectId)
+  } catch (err) {
+    console.error('Failed to delete session:', err)
+    alert('Failed to delete session')
   }
 }
 
@@ -902,6 +1063,18 @@ async function switchSession(projectId, newSessionId, cwd) {
   chatContainer.innerHTML = ''
   sessionId = newSessionId
   currentProject = cwd || projectId
+  currentProjectId = projectId
+
+  // Reset agent status from the previous session — whether it was running
+  // has nothing to do with the session we're switching to. The new session's
+  // subscribe response will tell us if it's running.
+  hideAgentStatus()
+  setSendButtonState('send')
+  pendingUserInput = ''
+  currentAssistantEl = null
+  currentToolContainer = null
+  currentToolList = null
+  pendingToolElements.clear()
 
   // Remember last session
   localStorage.setItem('lastSession', JSON.stringify({ projectId, sessionId: newSessionId, cwd: cwd || '' }))
@@ -926,7 +1099,24 @@ async function switchSession(projectId, newSessionId, cwd) {
     addMessage('Failed to load session history. Start typing to continue...', 'assistant')
   }
 
+  // Subscribe to live updates for this session (catches in-progress rounds)
+  subscribeToSession()
+
   scrollToBottom(true)
+}
+
+// Tell the server we want to subscribe to this session's live event stream.
+// If an agent round is already running, the server will replay buffered events
+// so this client sees the in-progress execution.
+function subscribeToSession() {
+  if (!sessionId) return
+  if (!ws || ws.readyState !== WebSocket.OPEN) return
+  ws.send(JSON.stringify({
+    type: 'subscribe',
+    sessionId,
+    cwd: currentProject || undefined,
+    model: currentModel || undefined,
+  }))
 }
 
 // Auto-restore last session on page load
@@ -947,6 +1137,7 @@ function autoRestoreLastSession() {
 
     sessionId = savedSessionId
     currentProject = cwd || projectId
+    currentProjectId = projectId
 
     // Fetch and display session messages via HTTP
     fetch(`/api/session-messages?project=${encodeURIComponent(projectId)}&session=${encodeURIComponent(savedSessionId)}&offset=0&limit=40`)
@@ -963,6 +1154,8 @@ function autoRestoreLastSession() {
           totalMessages = data.total
           hasMoreMessages = data.hasMore
           scrollToBottom(true)
+          // Subscribe to live updates (catches in-progress rounds)
+          subscribeToSession()
         }
       })
       .catch(err => console.error('[autoRestore] Failed to load session:', err))
@@ -1056,6 +1249,11 @@ async function loadDirectory(dirPath) {
     }
 
     pathEl.textContent = data.currentPath
+    // Keep the custom path input in sync with the directory the user has
+    // navigated to. Otherwise "Start Chat" would use a stale/empty path even
+    // though the browser shows the intended folder.
+    document.getElementById('customPath').value = data.currentPath
+    selectedProjectPath = data.currentPath
 
     list.innerHTML = ''
 
@@ -1143,6 +1341,7 @@ async function createNewChat() {
 
   // Set the project
   currentProject = projectPath
+  currentProjectId = projectPath.replace(/[/\\:]/g, '-')
   sessionId = ''
 
   // Clear chat and show welcome message
@@ -1204,6 +1403,12 @@ if (window.visualViewport) {
     syncBodyHeight()
     if (window.innerWidth > 768) {
       window.scrollTo(0, 0)
+    }
+    // Android Chrome keyboard: scroll chat to bottom when viewport shrinks
+    if (window.innerWidth <= 768) {
+      requestAnimationFrame(() => {
+        chatContainer.scrollTop = chatContainer.scrollHeight
+      })
     }
   })
 }

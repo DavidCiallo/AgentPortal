@@ -7,11 +7,9 @@ import { getOriginalCwd, switchSession } from '../bootstrap/state.js';
 import type { Command } from '../commands.js';
 import { LogSelector } from '../components/LogSelector.js';
 import { Spinner } from '../components/Spinner.js';
-import { restoreCostStateForSession } from '../cost-tracker.js';
 import { setClipboard } from '../ink/termio/osc.js';
 import { Box, Text } from '../ink.js';
 import { useKeybinding } from '../keybindings/useKeybinding.js';
-import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS, logEvent } from '../services/analytics/index.js';
 import type { MCPServerConnection, ScopedMcpServerConfig } from '../services/mcp/types.js';
 import { useAppState, useSetAppState } from '../state/AppState.js';
 import type { Tool } from '../Tool.js';
@@ -224,7 +222,6 @@ export function ResumeConversation({
         switchSession(asSessionId(result_3.sessionId), log_0.fullPath ? dirname(log_0.fullPath) : null);
         await renameRecordingForSession();
         await resetSessionFilePointer();
-        restoreCostStateForSession(result_3.sessionId);
       } else if (forkSession && result_3.contentReplacements?.length) {
         await recordContentReplacement(result_3.contentReplacements);
       }
@@ -270,11 +267,6 @@ export function ResumeConversation({
         (require('../services/contextCollapse/persist.js') as typeof import('../services/contextCollapse/persist.js')).restoreFromEntries(result_3.contextCollapseCommits ?? [], result_3.contextCollapseSnapshot);
         /* eslint-enable @typescript-eslint/no-require-imports */
       }
-      logEvent('tengu_session_resumed', {
-        entrypoint: 'picker' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        success: true,
-        resume_duration_ms: Math.round(performance.now() - resumeStart)
-      });
       setLogs([]);
       setResumeData({
         messages: result_3.messages,
@@ -285,10 +277,7 @@ export function ResumeConversation({
         mainThreadAgentDefinition: resolvedAgentDef
       });
     } catch (e) {
-      logEvent('tengu_session_resumed', {
-        entrypoint: 'picker' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-        success: false
-      });
+      ;
       logError(e as Error);
       setResumeError(errorMessage(e));
       setResuming(false);

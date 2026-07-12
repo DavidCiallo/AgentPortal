@@ -1,5 +1,5 @@
 import { createServer } from 'node:http'
-import { readFile, readdir, mkdir, stat } from 'node:fs/promises'
+import { readFile, readdir, mkdir, stat, unlink } from 'node:fs/promises'
 import { join, extname, basename, resolve, win32 } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
@@ -13,7 +13,7 @@ import { getTools } from '../tools.js'
 import { getDefaultAppState } from '../state/AppStateStore.js'
 import { AppState } from '../state/AppState.js'
 import { FileStateCache, READ_FILE_STATE_CACHE_SIZE } from '../utils/fileStateCache.js'
-import { setMainLoopModelOverride, switchSession } from '../bootstrap/state.js'
+import { setMainLoopModelOverride, switchSession, getOriginalCwd, getSessionId } from '../bootstrap/state.js'
 import { resetSessionFilePointer } from '../utils/sessionStorage.js'
 import { parseUserSpecifiedModel } from '../utils/model/model.js'
 import {
@@ -31,8 +31,11 @@ import {
   readSessionLite,
   extractFirstPromptFromHead,
   extractLastJsonStringField,
+  extractLastPromptFromTail,
   extractJsonStringField,
+  sanitizePath,
 } from '../utils/sessionStoragePortable.js'
+import { listOpenAICompatibleModels } from '../utils/providerDiscovery.js'
 
 /**
  * Format tool use input into human-readable display text (matching CLI output style)
@@ -80,7 +83,7 @@ function formatToolUseForDisplay(toolName: string, input: any, cwd?: string): st
             }
           }
         }
-      } catch {}
+      } catch { }
 
       // Format old and new content with line numbers
       const parts = [`${header} ${diffStr} lines`]
@@ -158,10 +161,306 @@ interface SessionData {
   createdAt: number
 }
 
+type Client = {
+  ws: WebSocket
+  send: (data: any) => void
+}
+
+/**
+ * Owns the agent lifecycle for a session, decoupled from any single WS connection.
+ * All connected clients subscribed to this session receive every event.
+ * Late joiners get a replay of the current round's buffered events.
+ */
+class SessionRunner {
+  sessionId: string
+  cwd: string
+  model: string | undefined
+  private server: WebServer
+  private clients = new Set<Client>()
+  private engine: QueryEngine | null = null
+  private appState: AppState = getDefaultAppState()
+  private messages: any[] = []
+  private interrupted = false
+  private running = false
+  private roundStartTime = 0
+  private toolNameById = new Map<string, string>()
+  private fileCache = new FileStateCache(READ_FILE_STATE_CACHE_SIZE, 25 * 1024 * 1024)
+  // Event buffer for late joiners — events from the current execution round
+  private eventBuffer: any[] = []
+  private bufferSeq = 0
+
+  constructor(server: WebServer, sessionId: string, cwd: string, model?: string) {
+    this.server = server
+    this.sessionId = sessionId
+    this.cwd = cwd || process.cwd()
+    this.model = model
+  }
+
+  addClient(c: Client) {
+    this.clients.add(c)
+    // Replay buffered events so the late joiner sees the current round's progress
+    if (this.eventBuffer.length > 0) {
+      for (const ev of this.eventBuffer) {
+        c.send(ev)
+      }
+    }
+    // Tell the newcomer whether a round is already in flight
+    c.send({ type: 'subscribed', sessionId: this.sessionId, running: this.running, roundStartTime: this.roundStartTime })
+  }
+
+  removeClient(c: Client) {
+    this.clients.delete(c)
+  }
+
+  private broadcast(data: any) {
+    this.eventBuffer.push(data)
+    this.bufferSeq++
+    for (const c of this.clients) c.send(data)
+  }
+
+  isRunning() { return this.running }
+
+  /** Replace the event buffer when starting a new round. */
+  private resetBuffer() {
+    this.eventBuffer = []
+    this.bufferSeq = 0
+  }
+
+  async startRound(userMessage: string): Promise<void> {
+    if (this.running) {
+      // Notify all clients that the request was queued/rejected
+      this.broadcast({ type: 'error', message: 'A request is already in progress' })
+      return
+    }
+
+    this.running = true
+    this.interrupted = false
+    this.roundStartTime = Date.now()
+    this.resetBuffer()
+
+    // Tell clients which session this round is being written to. The browser
+    // needs this immediately (not at `done`) so that: (a) the active session
+    // indicator tracks the freshly-created session, and (b) the sidebar can
+    // refresh once the round finishes and the JSONL gains a summary record.
+    const effectiveCwd = this.cwd || getOriginalCwd()
+    this.broadcast({
+      type: 'session_started',
+      sessionId: this.sessionId,
+      cwd: this.cwd,
+      projectId: sanitizePath(effectiveCwd),
+    })
+
+    // Load history from in-memory cache or JSONL file
+    if (this.messages.length === 0) {
+      const cached = this.server.getSessionMessages(this.sessionId)
+      if (cached && cached.length > 0) {
+        this.messages = [...cached]
+      } else {
+        try {
+          const loaded = await this.server.loadSessionMessagesFromDisk(this.sessionId)
+          if (loaded.length > 0) {
+            const MAX_HISTORY = 40
+            this.messages = loaded.slice(-MAX_HISTORY)
+            this.server.setSessionMessages(this.sessionId, this.messages)
+          }
+        } catch {
+          // fresh session
+        }
+      }
+    }
+
+    // Resolve model: prefer client-sent, then profile, then env
+    let resolvedModel: string | undefined = this.model
+    if (!resolvedModel) {
+      const profile = loadProfileFile({ cwd: this.cwd })
+      if (profile?.env?.OPENAI_MODEL) resolvedModel = profile.env.OPENAI_MODEL
+    }
+    if (!resolvedModel && process.env.OPENAI_MODEL) resolvedModel = process.env.OPENAI_MODEL
+    if (resolvedModel) {
+      setMainLoopModelOverride(parseUserSpecifiedModel(resolvedModel))
+    }
+
+    // Sync global session ID + project dir so the transcript lands in the
+    // exact folder the sidebar reads from: ~/.claude/projects/<sanitizePath(cwd)>.
+    // switchSession's second arg becomes sessionProjectDir, which
+    // getTranscriptPath() uses verbatim (no further sanitization). Passing the
+    // raw cwd would write the transcript into the user's actual project dir
+    // instead of the projects cache — the sidebar would never see it. So pass
+    // the sanitized path under getProjectsDir(), matching what
+    // handleListSessions scans.
+    const transcriptProjectDir = join(getProjectsDir(), sanitizePath(effectiveCwd))
+    switchSession(this.sessionId as any, transcriptProjectDir)
+    await resetSessionFilePointer()
+
+    this.engine = new QueryEngine({
+      cwd: this.cwd,
+      tools: getTools(this.appState.toolPermissionContext),
+      commands: [],
+      mcpClients: [],
+      agents: [],
+      ...(this.messages.length > 0 ? { initialMessages: this.messages } : {}),
+      includePartialMessages: true,
+      canUseTool: async (tool, input, _context, _assistantMsg, toolUseID) => {
+        if (toolUseID) this.toolNameById.set(toolUseID, tool.name)
+        this.broadcast({
+          type: 'tool_start',
+          toolName: tool.name,
+          arguments: input,
+          toolUseId: toolUseID,
+        })
+        // Auto-approve all tool calls unconditionally
+        return { behavior: 'allow' }
+      },
+      getAppState: () => this.appState,
+      setAppState: (updater) => { this.appState = updater(this.appState) },
+      readFileCache: this.fileCache,
+      userSpecifiedModel: resolvedModel,
+      fallbackModel: resolvedModel,
+    })
+
+    let fullText = ''
+    let isThinking = false
+    let currentToolUse: { id: string; name: string; inputJson: string } | null = null
+    let lastDataTime = Date.now()
+    let thinkingTokenEstimate = 0
+    const generator = this.engine.submitMessage(userMessage)
+
+    const keepaliveTimer = setInterval(() => {
+      const idleMs = Date.now() - lastDataTime
+      this.broadcast({ type: 'keepalive', idleMs })
+    }, 3000)
+
+    try {
+      for await (const event of generator) {
+        lastDataTime = Date.now()
+        if (this.interrupted) {
+          clearInterval(keepaliveTimer)
+          break
+        }
+
+        if (event.type === 'stream_event') {
+          const delta = event.event
+          if (delta.type === 'content_block_start') {
+            if (delta.content_block?.type === 'thinking') {
+              isThinking = true
+              this.broadcast({ type: 'thinking_start' })
+            } else if (delta.content_block?.type === 'tool_use') {
+              if (isThinking) {
+                isThinking = false
+                this.broadcast({ type: 'thinking_end' })
+              }
+              currentToolUse = {
+                id: delta.content_block.id,
+                name: delta.content_block.name,
+                inputJson: '',
+              }
+            }
+          } else if (delta.type === 'content_block_delta') {
+            if (delta.delta.type === 'thinking_delta') {
+              thinkingTokenEstimate += delta.delta.thinking.length
+              this.broadcast({ type: 'thinking_chunk', text: delta.delta.thinking, estimatedTokens: Math.round(thinkingTokenEstimate / 4) })
+            } else if (delta.delta.type === 'text_delta') {
+              if (isThinking) {
+                isThinking = false
+                this.broadcast({ type: 'thinking_end' })
+              }
+              this.broadcast({ type: 'text_chunk', text: delta.delta.text })
+              fullText += delta.delta.text
+            } else if (delta.delta.type === 'input_json_delta' && currentToolUse) {
+              currentToolUse.inputJson += delta.delta.partial_json
+            }
+          } else if (delta.type === 'content_block_stop') {
+            if (isThinking) {
+              isThinking = false
+              this.broadcast({ type: 'thinking_end' })
+            }
+            if (currentToolUse) {
+              let toolInput: any = {}
+              try { toolInput = JSON.parse(currentToolUse.inputJson) } catch { }
+              const display = formatToolUseForDisplay(currentToolUse.name, toolInput, this.cwd)
+              this.broadcast({
+                type: 'tool_use_display',
+                toolName: currentToolUse.name,
+                toolUseId: currentToolUse.id,
+                display,
+              })
+              currentToolUse = null
+            }
+          }
+        } else if (event.type === 'user') {
+          const content = event.message.content as Array<{ type: string, content: any, tool_use_id: string, is_error: boolean }>
+          if (Array.isArray(content)) {
+            for (const block of content) {
+              if (block.type === 'tool_result') {
+                let outputStr = ''
+                if (typeof block.content === 'string') {
+                  outputStr = block.content
+                } else if (Array.isArray(block.content)) {
+                  outputStr = block.content
+                    .map((c: any) => (c.type === 'text' ? c.text : ''))
+                    .join('\n')
+                }
+                this.broadcast({
+                  type: 'tool_result',
+                  toolName: this.toolNameById.get(block.tool_use_id) ?? block.tool_use_id,
+                  toolUseId: block.tool_use_id,
+                  output: outputStr,
+                  isError: block.is_error || false,
+                })
+              }
+            }
+          }
+        } else if (event.type === 'result') {
+          if (event.subtype === 'success') {
+            if (event.is_error) {
+              console.error('[web] API error (is_error):', event.result)
+              this.broadcast({ type: 'error', message: event.result || 'Unknown API error' })
+            } else if (event.result) {
+              fullText = event.result
+            }
+          } else if (event.subtype === 'error_during_execution') {
+            console.error('[web] error_during_execution:', event.result)
+            this.broadcast({ type: 'error', message: event.result || 'Execution error' })
+          } else if (event.subtype === 'error_max_turns') {
+            this.broadcast({ type: 'error', message: event.result || 'Reached max turns' })
+          }
+        } else if (event.type === 'system') {
+          // System events — no-op
+        } else {
+          console.log('[web] unhandled event:', event)
+        }
+      }
+
+      if (!this.interrupted) {
+        const rawMessages = [...this.engine.getMessages()]
+        this.messages = rawMessages.slice(-60)
+        this.server.setSessionMessages(this.sessionId, this.messages)
+        this.broadcast({ type: 'done', fullText, sessionId: this.sessionId })
+      }
+    } catch (err: any) {
+      console.error('[web] runner error:', err.message, err.stack)
+      this.broadcast({ type: 'error', message: err.message || 'Internal error' })
+    } finally {
+      clearInterval(keepaliveTimer)
+      this.engine = null
+      this.running = false
+      this.resetBuffer()
+    }
+  }
+
+  cancel() {
+    this.interrupted = true
+    if (this.engine) this.engine.interrupt()
+    this.broadcast({ type: 'cancelled' })
+  }
+
+}
+
 export class WebServer {
   private httpServer: ReturnType<typeof createServer>
   private wss: WebSocketServer
   private sessions: Map<string, SessionData> = new Map()
+  private runners: Map<string, SessionRunner> = new Map()
   private webRoot: string
   private port: number
   private host: string
@@ -207,6 +506,15 @@ export class WebServer {
         return this.handleCreateDirectory(res, dirPath)
       })
       return
+    }
+    if (url.pathname === '/api/models') {
+      const baseUrl = url.searchParams.get('baseUrl') || undefined
+      return this.handleListModels(res, baseUrl)
+    }
+    if (url.pathname === '/api/session' && req.method === 'DELETE') {
+      const project = url.searchParams.get('project') || ''
+      const session = url.searchParams.get('session') || ''
+      return this.handleDeleteSession(res, project, session)
     }
 
     // Static files
@@ -293,6 +601,45 @@ export class WebServer {
     }
   }
 
+  private async handleDeleteSession(res: any, project: string, session: string) {
+    try {
+      if (!project || !session) {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'Missing project or session parameter' }))
+        return
+      }
+
+      // Don't allow deleting the current active session
+      const currentSessionId = getSessionId()
+      if (session === currentSessionId) {
+        res.writeHead(400, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'Cannot delete the currently active session' }))
+        return
+      }
+
+      const projectsDir = getProjectsDir()
+      const sessionPath = join(projectsDir, project, `${session}.jsonl`)
+
+      // Verify the session file exists
+      try {
+        await stat(sessionPath)
+      } catch {
+        res.writeHead(404, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'Session not found' }))
+        return
+      }
+
+      // Delete the session file
+      await unlink(sessionPath)
+
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ success: true }))
+    } catch (err: any) {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: err.message }))
+    }
+  }
+
   /**
    * Read session files directly from a project directory
    */
@@ -338,6 +685,7 @@ export class WebServer {
 
           const summary =
             customTitle ||
+            extractLastPromptFromTail(tail) ||
             extractLastJsonStringField(tail, 'lastPrompt') ||
             extractLastJsonStringField(tail, 'summary') ||
             firstPrompt
@@ -624,6 +972,22 @@ export class WebServer {
     }
   }
 
+  private async handleListModels(res: any, baseUrlOverride?: string) {
+    try {
+      const profile = loadProfileFile({ cwd: process.cwd() })
+      const baseUrl = baseUrlOverride || profile?.env?.OPENAI_BASE_URL || process.env.OPENAI_BASE_URL
+      const apiKey = profile?.env?.OPENAI_API_KEY || process.env.OPENAI_API_KEY
+
+      const models = await listOpenAICompatibleModels({ baseUrl, apiKey })
+
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ models: models ?? [] }))
+    } catch (err: any) {
+      res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: err.message, models: [] }))
+    }
+  }
+
   private async loadSessionMessagesFromFile(filePath: string): Promise<any[]> {
     const messages: any[] = []
     const fileStream = createReadStream(filePath, { encoding: 'utf8' })
@@ -674,15 +1038,7 @@ export class WebServer {
   }
 
   private handleConnection(ws: WebSocket) {
-    let engine: QueryEngine | null = null
-    let appState: AppState = getDefaultAppState()
-    let sessionId = ''
-    let previousMessages: any[] = []
-    let interrupted = false
-    let autoApprove = false
-    let cwd = ''
-    const approvedTools = new Set<string>()
-    const pendingRequests = new Map<string, (reply: any) => void>()
+    let subscribedRunner: SessionRunner | null = null
 
     const send = (data: any) => {
       if (ws.readyState === WebSocket.OPEN) {
@@ -690,302 +1046,73 @@ export class WebServer {
       }
     }
 
+    const client: Client = { ws, send }
+
     ws.on('message', async (raw: Buffer) => {
       try {
         const msg = JSON.parse(raw.toString())
 
+        if (msg.type === 'subscribe') {
+          // Subscribe this connection to a session's event stream
+          const sid = msg.sessionId
+          if (!sid) {
+            send({ type: 'error', message: 'subscribe requires sessionId' })
+            return
+          }
+          // Detach from previous runner if any
+          if (subscribedRunner) {
+            subscribedRunner.removeClient(client)
+          }
+          let runner = this.runners.get(sid)
+          if (!runner) {
+            runner = new SessionRunner(this, sid, msg.cwd || process.cwd(), msg.model)
+            this.runners.set(sid, runner)
+          }
+          runner.addClient(client)
+          subscribedRunner = runner
+          return
+        }
+
         if (msg.type === 'chat') {
-          if (engine) {
+          // Ensure we have (or create) a runner for this session
+          const sid = msg.sessionId || randomUUID()
+          let runner = this.runners.get(sid)
+          if (!runner) {
+            runner = new SessionRunner(this, sid, msg.cwd || process.cwd(), msg.model)
+            this.runners.set(sid, runner)
+          }
+          // Auto-subscribe this client if not already
+          if (subscribedRunner !== runner) {
+            if (subscribedRunner) subscribedRunner.removeClient(client)
+            runner.addClient(client)
+            subscribedRunner = runner
+          }
+
+          if (runner.isRunning()) {
             send({ type: 'error', message: 'A request is already in progress' })
             return
           }
 
-          interrupted = false
-          sessionId = msg.sessionId || randomUUID()
-          previousMessages = []
-
-          // Load session history from memory cache
-          if (this.sessions.has(sessionId)) {
-            previousMessages = [...this.sessions.get(sessionId)!.messages]
-          } else if (sessionId) {
-            // Try to load from JSONL file
-            try {
-              const projectsDir = getProjectsDir()
-              const dirents = await readdir(projectsDir, { withFileTypes: true })
-              for (const d of dirents) {
-                if (!d.isDirectory()) continue
-                const projectPath = join(projectsDir, d.name)
-                const filePath = join(projectPath, `${sessionId}.jsonl`)
-                try {
-                  await readFile(filePath)
-                  const allMessages = await this.loadSessionMessagesFromFile(filePath)
-                  // Limit to last 40 messages to avoid exceeding API token limits
-                  const MAX_HISTORY = 40
-                  previousMessages = allMessages.slice(-MAX_HISTORY)
-                  this.sessions.set(sessionId, { messages: previousMessages, createdAt: Date.now() })
-                  break
-                } catch {
-                  // File doesn't exist in this project, continue
-                }
-              }
-            } catch {
-              // Failed to load from file, start fresh
-            }
-          }
-
-          const toolNameById = new Map<string, string>()
-          const fileCache = new FileStateCache(READ_FILE_STATE_CACHE_SIZE, 25 * 1024 * 1024)
-
-          cwd = msg.cwd || process.cwd()
-
-          // Resolve model: prefer client-sent model, then profile, then env
-          let resolvedModel: string | undefined = msg.model
-          if (!resolvedModel) {
-            const profile = loadProfileFile({ cwd })
-            if (profile?.env?.OPENAI_MODEL) {
-              resolvedModel = profile.env.OPENAI_MODEL
-            }
-          }
-          if (!resolvedModel && process.env.OPENAI_MODEL) {
-            resolvedModel = process.env.OPENAI_MODEL
-          }
-          // Set global model override so QueryEngine picks it up
-          if (resolvedModel) {
-            setMainLoopModelOverride(parseUserSpecifiedModel(resolvedModel))
-          }
-
           const logMsg = `[${new Date().toISOString()}] [web] chat request: ${JSON.stringify({
+            sessionId: sid,
             clientModel: msg.model,
-            resolvedModel,
             baseUrl: process.env.OPENAI_BASE_URL,
             hasApiKey: !!process.env.OPENAI_API_KEY,
             modelEnv: process.env.OPENAI_MODEL,
           })}\n`
           console.log(logMsg.trim())
 
-          // Sync global session ID so sessionStorage writes to the correct file
-          // (not the random UUID from process startup)
-          switchSession(sessionId as any)
-          await resetSessionFilePointer()
+          // Fire-and-forget: the runner broadcasts to all subscribers
+          runner.startRound(msg.message)
+          return
+        }
 
-          engine = new QueryEngine({
-            cwd,
-            tools: getTools(appState.toolPermissionContext),
-            commands: [],
-            mcpClients: [],
-            agents: [],
-            ...(previousMessages.length > 0 ? { initialMessages: previousMessages } : {}),
-            includePartialMessages: true,
-            canUseTool: async (tool, input, context, assistantMsg, toolUseID) => {
-              if (toolUseID) {
-                toolNameById.set(toolUseID, tool.name)
-              }
+        if (msg.type === 'cancel') {
+          if (subscribedRunner) subscribedRunner.cancel()
+          return
+        }
 
-              send({
-                type: 'tool_start',
-                toolName: tool.name,
-                arguments: input,
-                toolUseId: toolUseID,
-              })
-
-              // Auto-approve mode or already approved tool — skip prompt
-              if (autoApprove || approvedTools.has(tool.name)) {
-                return { behavior: 'allow' }
-              }
-
-              // Ask for permission via UI
-              const promptId = randomUUID()
-              send({
-                type: 'action_required',
-                promptId,
-                question: `Approve ${tool.name}?`,
-                toolName: tool.name,
-              })
-
-              return new Promise((resolve) => {
-                pendingRequests.set(promptId, (reply) => {
-                  const lower = reply.toLowerCase()
-                  if (lower === 'yes' || lower === 'y' || lower === 'approve') {
-                    approvedTools.add(tool.name)
-                    resolve({ behavior: 'allow' })
-                  } else {
-                    resolve({
-                      behavior: 'deny',
-                      message: 'User denied',
-                      decisionReason: { type: 'other', reason: 'User denied via web UI' },
-                    })
-                  }
-                })
-              })
-            },
-            getAppState: () => appState,
-            setAppState: (updater) => { appState = updater(appState) },
-            readFileCache: fileCache,
-            userSpecifiedModel: resolvedModel,
-            fallbackModel: resolvedModel,
-          })
-
-          let fullText = ''
-          let isThinking = false
-          let currentToolUse: { id: string; name: string; inputJson: string } | null = null
-          let lastDataTime = Date.now()
-          let thinkingTokenEstimate = 0
-          const generator = engine.submitMessage(msg.message)
-
-          // Send keepalive while upstream is still processing (no data received)
-          const keepaliveTimer = setInterval(() => {
-            const idleMs = Date.now() - lastDataTime
-            send({ type: 'keepalive', idleMs })
-          }, 3000)
-
-          for await (const event of generator) {
-            lastDataTime = Date.now()
-            if (interrupted) {
-              clearInterval(keepaliveTimer)
-              break
-            }
-
-            if (event.type === 'stream_event') {
-              const delta = event.event
-              if (delta.type === 'content_block_start') {
-                if (delta.content_block?.type === 'thinking') {
-                  isThinking = true
-                  send({ type: 'thinking_start' })
-                } else if (delta.content_block?.type === 'tool_use') {
-                  if (isThinking) {
-                    isThinking = false
-                    send({ type: 'thinking_end' })
-                  }
-                  currentToolUse = {
-                    id: delta.content_block.id,
-                    name: delta.content_block.name,
-                    inputJson: '',
-                  }
-                }
-              } else if (delta.type === 'content_block_delta') {
-                if (delta.delta.type === 'thinking_delta') {
-                  thinkingTokenEstimate += delta.delta.thinking.length
-                  send({ type: 'thinking_chunk', text: delta.delta.thinking, estimatedTokens: Math.round(thinkingTokenEstimate / 4) })
-                } else if (delta.delta.type === 'text_delta') {
-                  if (isThinking) {
-                    isThinking = false
-                    send({ type: 'thinking_end' })
-                  }
-                  send({ type: 'text_chunk', text: delta.delta.text })
-                  fullText += delta.delta.text
-                } else if (delta.delta.type === 'input_json_delta' && currentToolUse) {
-                  currentToolUse.inputJson += delta.delta.partial_json
-                }
-              } else if (delta.type === 'content_block_stop') {
-                if (isThinking) {
-                  isThinking = false
-                  send({ type: 'thinking_end' })
-                }
-                if (currentToolUse) {
-                  // Parse accumulated tool input and send formatted display
-                  let toolInput: any = {}
-                  try { toolInput = JSON.parse(currentToolUse.inputJson) } catch {}
-                  const display = formatToolUseForDisplay(currentToolUse.name, toolInput, cwd)
-                  send({
-                    type: 'tool_use_display',
-                    toolName: currentToolUse.name,
-                    toolUseId: currentToolUse.id,
-                    display,
-                  })
-                  currentToolUse = null
-                }
-              }
-            } else if (event.type === 'user') {
-              const content = event.message.content
-              if (Array.isArray(content)) {
-                for (const block of content) {
-                  if (block.type === 'tool_result') {
-                    let outputStr = ''
-                    if (typeof block.content === 'string') {
-                      outputStr = block.content
-                    } else if (Array.isArray(block.content)) {
-                      outputStr = block.content
-                        .map((c: any) => (c.type === 'text' ? c.text : ''))
-                        .join('\n')
-                    }
-                    send({
-                      type: 'tool_result',
-                      toolName: toolNameById.get(block.tool_use_id) ?? block.tool_use_id,
-                      toolUseId: block.tool_use_id,
-                      output: outputStr,
-                      isError: block.is_error || false,
-                    })
-                  }
-                }
-              }
-            } else if (event.type === 'result') {
-              if (event.subtype === 'success') {
-                if (event.is_error) {
-                  // Don't overwrite fullText with error message — preserve
-                  // partial model output accumulated from stream events.
-                  // Send error separately so the frontend can display it.
-                  console.error('[web] API error (is_error):', event.result)
-                  send({ type: 'error', message: event.result || 'Unknown API error' })
-                } else if (event.result) {
-                  fullText = event.result
-                }
-              } else if (event.subtype === 'error_during_execution') {
-                console.error('[web] error_during_execution:', event.result)
-                send({ type: 'error', message: event.result || 'Execution error' })
-              } else if (event.subtype === 'error_max_turns') {
-                send({ type: 'error', message: event.result || 'Reached max turns' })
-              } else if (event.subtype === 'error_max_budget_usd') {
-                send({ type: 'error', message: event.result || 'Exceeded USD budget' })
-              }
-            } else if (event.type === 'system') {
-              // System events (e.g. init) — no-op
-            } else {
-              console.log('[web] unhandled event:', event.type, event.subtype || '')
-            }
-          }
-
-          if (!interrupted) {
-            // Save for multi-turn (cap to avoid unbounded growth)
-            const rawMessages = [...engine.getMessages()]
-            previousMessages = rawMessages.slice(-60)
-            this.sessions.set(sessionId, {
-              messages: previousMessages,
-              createdAt: Date.now(),
-            })
-
-            send({ type: 'done', fullText, sessionId })
-          }
-
-          clearInterval(keepaliveTimer)
-          engine = null
-
-        } else if (msg.type === 'input') {
-          // User replying to a permission prompt
-          const promptId = msg.promptId
-          const reply = msg.reply
-          if (pendingRequests.has(promptId)) {
-            pendingRequests.get(promptId)!(reply)
-            pendingRequests.delete(promptId)
-          }
-
-        } else if (msg.type === 'set_permission_mode') {
-          autoApprove = msg.mode === 'auto_approve'
-          if (autoApprove) {
-            approvedTools.clear()
-          }
-          send({ type: 'permission_mode_changed', autoApprove })
-
-        } else if (msg.type === 'cancel') {
-          interrupted = true
-          if (engine) engine.interrupt()
-          send({ type: 'cancelled' })
-
-        } else if (msg.type === 'approve') {
-          // Direct approval for a tool call
-          // This is handled by the pendingRequests map in the chat flow
-
-        } else if (msg.type === 'get_config') {
-          // Load current provider profile
+        if (msg.type === 'get_config') {
           const profile = loadProfileFile({ cwd: process.cwd() })
           send({
             type: 'config',
@@ -995,27 +1122,25 @@ export class WebServer {
             apiKey: profile?.env?.OPENAI_API_KEY ? '••••••••' : '',
             hasApiKey: !!profile?.env?.OPENAI_API_KEY,
           })
+          return
+        }
 
-        } else if (msg.type === 'save_config') {
-          // Save provider profile
+        if (msg.type === 'save_config') {
           const profile: ProviderProfile = msg.profile || 'openai'
           const env: ProfileEnv = {
             OPENAI_BASE_URL: msg.baseUrl || undefined,
             OPENAI_MODEL: msg.model || undefined,
           }
 
-          // Only update API key if user provided a new one (not the masked placeholder)
           if (msg.apiKey && msg.apiKey !== '••••••••') {
             env.OPENAI_API_KEY = msg.apiKey
           } else {
-            // Keep existing API key
             const existing = loadProfileFile({ cwd: process.cwd() })
             if (existing?.env?.OPENAI_API_KEY) {
               env.OPENAI_API_KEY = existing.env.OPENAI_API_KEY
             }
           }
 
-          // Validate configuration before saving
           send({ type: 'config_validating' })
 
           try {
@@ -1048,7 +1173,6 @@ export class WebServer {
               return
             }
 
-            // Try to parse response to verify it's valid
             const data = await response.json().catch(() => null)
             if (!data || (!data.data && !Array.isArray(data))) {
               send({
@@ -1058,11 +1182,9 @@ export class WebServer {
               return
             }
 
-            // Validation passed - save config
             const profileFile = createProfileFile(profile, env)
             saveProfileFile(profileFile, { cwd: process.cwd() })
 
-            // Update environment variables for current process
             if (env.OPENAI_BASE_URL) process.env.OPENAI_BASE_URL = env.OPENAI_BASE_URL
             if (env.OPENAI_MODEL) process.env.OPENAI_MODEL = env.OPENAI_MODEL
             if (env.OPENAI_API_KEY) process.env.OPENAI_API_KEY = env.OPENAI_API_KEY
@@ -1078,8 +1200,9 @@ export class WebServer {
               message,
             })
           }
-
+          return
         }
+
       } catch (err: any) {
         console.error('[web] WebSocket handler error:', err.message, err.stack)
         send({ type: 'error', message: err.message || 'Internal error' })
@@ -1087,18 +1210,13 @@ export class WebServer {
     })
 
     ws.on('close', () => {
-      interrupted = true
-      // Unblock any pending permission prompts
-      for (const resolve of pendingRequests.values()) {
-        resolve({
-          behavior: 'deny',
-          message: 'Connection closed',
-          decisionReason: { type: 'other', reason: 'WebSocket connection closed' },
-        })
+      // Just detach from the runner — do NOT interrupt the agent.
+      // Other subscribers (if any) keep the session alive; if none remain,
+      // the agent finishes on its own.
+      if (subscribedRunner) {
+        subscribedRunner.removeClient(client)
+        subscribedRunner = null
       }
-      pendingRequests.clear()
-      if (engine) engine.interrupt()
-      engine = null
     })
   }
 
@@ -1106,5 +1224,37 @@ export class WebServer {
     this.httpServer.listen(this.port, this.host, () => {
       console.log(`Portal Web UI running at http://${this.host}:${this.port}`)
     })
+  }
+
+  /** In-memory message cache accessor (used by SessionRunner) */
+  getSessionMessages(sessionId: string): any[] | null {
+    const s = this.sessions.get(sessionId)
+    return s ? s.messages : null
+  }
+
+  setSessionMessages(sessionId: string, messages: any[]) {
+    this.sessions.set(sessionId, { messages, createdAt: Date.now() })
+  }
+
+  /** Load messages for a session by scanning project dirs for the JSONL file. */
+  async loadSessionMessagesFromDisk(sessionId: string): Promise<any[]> {
+    try {
+      const projectsDir = getProjectsDir()
+      const dirents = await readdir(projectsDir, { withFileTypes: true })
+      for (const d of dirents) {
+        if (!d.isDirectory()) continue
+        const projectPath = join(projectsDir, d.name)
+        const filePath = join(projectPath, `${sessionId}.jsonl`)
+        try {
+          await readFile(filePath)
+          return await this.loadSessionMessagesFromFile(filePath)
+        } catch {
+          // not in this project dir
+        }
+      }
+    } catch {
+      // projects dir missing
+    }
+    return []
   }
 }

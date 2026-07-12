@@ -4,9 +4,11 @@ dist/
 .env
 .env.*
 !.env.example
-.openclaude-profile.json
+.portal-profile.json
 reports/
 GEMINI.md
 package-lock.json
 /.claude
 coverage/
+test-regex*.ts
+*.backup
