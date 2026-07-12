@@ -2079,6 +2079,25 @@ export function REPL({
     if (was !== now) repinScroll();
     prevDialogRef.current = focusedInputDialog;
   }, [focusedInputDialog, repinScroll]);
+
+  // Re-pin scroll to bottom when the viewport shrinks (e.g. mobile
+  // soft-keyboard appearing). ScrollBox's stickyScroll auto-follow only
+  // fires when content grows — a viewport height decrease leaves the
+  // scroll offset past the new max, showing blank space at the bottom.
+  // useLayoutEffect so the re-pin commits in the same Ink frame as the
+  // height change (no 1-frame blank flash).
+  const { rows: terminalRows } = useTerminalSize();
+  const prevRowsRef = useRef(terminalRows);
+  useLayoutEffect(() => {
+    const prev = prevRowsRef.current;
+    prevRowsRef.current = terminalRows;
+    if (terminalRows < prev) {
+      // Viewport shrank. If the scroll was pinned before the resize,
+      // the new (shorter) viewport now clips the bottom — re-pin.
+      const s = scrollRef.current;
+      if (s?.isSticky()) s.scrollToBottom();
+    }
+  }, [terminalRows]);
   function onCancel() {
     if (focusedInputDialog === 'elicitation') {
       // Elicitation dialog handles its own Escape, and closing it shouldn't affect any loading state.

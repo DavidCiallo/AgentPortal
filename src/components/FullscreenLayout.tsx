@@ -411,7 +411,7 @@ export function FullscreenLayout(t0) {
     }
     let t17;
     if ($[31] !== bottom) {
-      t17 = <Box flexDirection="column" flexShrink={0} width="100%" maxHeight="50%">{t15}{t16}<Box flexDirection="column" width="100%" flexGrow={1} overflowY="hidden">{bottom}</Box></Box>;
+      t17 = <Box flexDirection="column" flexShrink={0} width="100%" maxHeight="50%" position="absolute" bottom={0}>{t15}{t16}<Box flexDirection="column" width="100%" flexGrow={1} overflowY="hidden">{bottom}</Box></Box>;
       $[31] = bottom;
       $[32] = t17;
     } else {
