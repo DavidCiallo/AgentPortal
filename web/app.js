@@ -543,7 +543,13 @@ function isNearBottom() {
 
 function scrollToBottom(force = false) {
   if (!force && !isNearBottom()) return
-  chatContainer.scrollTop = chatContainer.scrollHeight
+  // Defer to next frame so layout (scrollHeight) is settled after
+  // large innerHTML rewrites. Setting scrollTop synchronously can
+  // land short when the browser hasn't computed the new layout yet,
+  // causing a visible flicker/jump.
+  requestAnimationFrame(() => {
+    chatContainer.scrollTop = chatContainer.scrollHeight
+  })
 }
 
 function escapeHtml(text) {
@@ -701,6 +707,7 @@ async function sendMessage() {
         messageOffset = data.messages.length
         totalMessages = data.total
         hasMoreMessages = data.hasMore
+        scrollToBottom(true)
       }
     } catch {
       // Failed to load history — proceed with empty chat
@@ -708,6 +715,7 @@ async function sendMessage() {
   }
 
   addMessage(message, 'user')
+  scrollToBottom(true)
   messageInput.value = ''
   messageInput.style.height = 'auto'
 
