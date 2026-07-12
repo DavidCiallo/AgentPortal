@@ -642,6 +642,7 @@ export class WebServer {
           const summary =
             customTitle ||
             extractLastPromptFromTail(tail) ||
+            extractLastJsonStringField(tail, 'lastPrompt') ||
             extractLastJsonStringField(tail, 'summary') ||
             firstPrompt
 

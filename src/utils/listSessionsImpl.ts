@@ -116,9 +116,11 @@ export function parseSessionInfoFromLite(
   // appended in real time, so extractLastPromptFromTail is always current.
   // Fall back to the metadata field, then head-derived firstPrompt.
   const lastPrompt = extractLastPromptFromTail(tail)
+  const lastPromptMeta = extractLastJsonStringField(tail, 'lastPrompt')
   const summary =
     customTitle ||
     lastPrompt ||
+    lastPromptMeta ||
     extractLastJsonStringField(tail, 'summary') ||
     firstPrompt
 
