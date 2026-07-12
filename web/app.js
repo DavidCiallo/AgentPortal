@@ -824,14 +824,48 @@ async function loadSessions(projectId) {
       const time = new Date(session.lastModified).toLocaleString()
 
       item.innerHTML = `
-        <div class="session-title">${escapeHtml(title.substring(0, 50))}</div>
-        <div class="session-time">${time}</div>
+        <div class="session-content">
+          <div class="session-title">${escapeHtml(title.substring(0, 50))}</div>
+          <div class="session-time">${time}</div>
+        </div>
+        <button class="session-delete-btn" onclick="event.stopPropagation(); deleteSession('${escapeHtml(projectId)}', '${escapeHtml(session.sessionId)}')" title="Delete session">×</button>
       `
 
       sessionList.appendChild(item)
     })
   } catch (err) {
     console.error('Failed to load sessions:', err)
+  }
+}
+
+async function deleteSession(projectId, sessionIdToDelete) {
+  try {
+    // Don't allow deleting the current active session
+    if (sessionIdToDelete === sessionId) {
+      alert('Cannot delete the currently active session')
+      return
+    }
+
+    // Confirm deletion
+    if (!confirm('Are you sure you want to delete this session?')) {
+      return
+    }
+
+    const response = await fetch(`/api/session?project=${encodeURIComponent(projectId)}&session=${encodeURIComponent(sessionIdToDelete)}`, {
+      method: 'DELETE'
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      alert(error.error || 'Failed to delete session')
+      return
+    }
+
+    // Reload sessions
+    loadSessions(projectId)
+  } catch (err) {
+    console.error('Failed to delete session:', err)
+    alert('Failed to delete session')
   }
 }
 
