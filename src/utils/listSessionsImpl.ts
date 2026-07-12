@@ -17,6 +17,7 @@ import {
   extractFirstPromptFromHead,
   extractJsonStringField,
   extractLastJsonStringField,
+  extractLastPromptFromTail,
   findProjectDir,
   getProjectsDir,
   MAX_SANITIZED_LENGTH,
@@ -109,12 +110,15 @@ export function parseSessionInfoFromLite(
     const parsed = Date.parse(firstTimestamp)
     if (!Number.isNaN(parsed)) createdAt = parsed
   }
-  // last-prompt tail entry (captured by extractFirstPrompt at write
-  // time, filtered) shows what the user was most recently doing.
-  // Head scan is fallback for sessions without a last-prompt entry.
+  // Use the last meaningful user prompt from the tail as the primary
+  // activity description. Unlike the `lastPrompt` metadata field (which
+  // depends on reAppendSessionMetadata reaching disk), user messages are
+  // appended in real time, so extractLastPromptFromTail is always current.
+  // Fall back to the metadata field, then head-derived firstPrompt.
+  const lastPrompt = extractLastPromptFromTail(tail)
   const summary =
     customTitle ||
-    extractLastJsonStringField(tail, 'lastPrompt') ||
+    lastPrompt ||
     extractLastJsonStringField(tail, 'summary') ||
     firstPrompt
 

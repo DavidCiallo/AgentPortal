@@ -202,6 +202,94 @@ export function extractFirstPromptFromHead(head: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Last prompt extraction from tail chunk
+// ---------------------------------------------------------------------------
+
+/**
+ * Extracts the last meaningful user prompt from a JSONL tail chunk.
+ *
+ * Symmetric to extractFirstPromptFromHead but scans from the end. The tail
+ * window always contains the most recent user messages (they're appended in
+ * real time, unlike the `lastPrompt` metadata field which only reaches disk
+ * when reAppendSessionMetadata is explicitly invoked). This makes the sidebar
+ * title reflect the latest activity without depending on flush timing.
+ *
+ * Skips tool_result, isMeta, isCompactSummary, command-name, and synthetic
+ * messages. Truncates to 200 chars.
+ */
+export function extractLastPromptFromTail(tail: string): string {
+  // Find the last user line in the chunk. We walk newlines and keep the
+  // most recent qualifying user entry.
+  let commandFallback = ''
+  let lastResult = ''
+  let start = 0
+  while (start < tail.length) {
+    const newlineIdx = tail.indexOf('\n', start)
+    const line =
+      newlineIdx >= 0 ? tail.slice(start, newlineIdx) : tail.slice(start)
+    start = newlineIdx >= 0 ? newlineIdx + 1 : tail.length
+
+    if (!line.includes('"type":"user"') && !line.includes('"type": "user"'))
+      continue
+    if (line.includes('"tool_result"')) continue
+    if (line.includes('"isMeta":true') || line.includes('"isMeta": true'))
+      continue
+    if (
+      line.includes('"isCompactSummary":true') ||
+      line.includes('"isCompactSummary": true')
+    )
+      continue
+
+    try {
+      const entry = JSON.parse(line) as Record<string, unknown>
+      if (entry.type !== 'user') continue
+
+      const message = entry.message as Record<string, unknown> | undefined
+      if (!message) continue
+
+      const content = message.content
+      const texts: string[] = []
+      if (typeof content === 'string') {
+        texts.push(content)
+      } else if (Array.isArray(content)) {
+        for (const block of content as Record<string, unknown>[]) {
+          if (block.type === 'text' && typeof block.text === 'string') {
+            texts.push(block.text as string)
+          }
+        }
+      }
+
+      for (const raw of texts) {
+        let result = raw.replace(/\n/g, ' ').trim()
+        if (!result) continue
+
+        const cmdMatch = COMMAND_NAME_RE.exec(result)
+        if (cmdMatch) {
+          commandFallback = cmdMatch[1]!
+          continue
+        }
+
+        const bashMatch = /<bash-input>([\s\S]*?)<\/bash-input>/.exec(result)
+        if (bashMatch) {
+          lastResult = `! ${bashMatch[1]!.trim()}`
+          continue
+        }
+
+        if (SKIP_FIRST_PROMPT_PATTERN.test(result)) continue
+
+        if (result.length > 200) {
+          result = result.slice(0, 200).trim() + '\u2026'
+        }
+        lastResult = result
+      }
+    } catch {
+      continue
+    }
+  }
+  return lastResult || commandFallback
+}
+
+// ---------------------------------------------------------------------------
 // File I/O — read head and tail of a file
 // ---------------------------------------------------------------------------
 
