@@ -11,6 +11,9 @@ let currentModel = ''  // Model name from settings
 let currentToolContainer = null  // .tool-calls-container for live tool calls
 let currentToolList = null       // .tool-calls-list inside the container
 
+// Edit mode for session management (mobile friendly)
+let isEditMode = false
+
 // History pagination (infinite scroll up)
 let messageOffset = 0
 let totalMessages = 0
@@ -802,6 +805,22 @@ async function loadProjects() {
     })
   } catch (err) {
     console.error('Failed to load projects:', err)
+  }
+}
+
+function toggleEditMode() {
+  isEditMode = !isEditMode
+  const editBtn = document.getElementById('editBtn')
+  const sidebar = document.querySelector('.sidebar')
+
+  if (isEditMode) {
+    editBtn.textContent = 'Done'
+    editBtn.classList.add('active')
+    sidebar.classList.add('edit-mode')
+  } else {
+    editBtn.textContent = 'Edit'
+    editBtn.classList.remove('active')
+    sidebar.classList.remove('edit-mode')
   }
 }
 
