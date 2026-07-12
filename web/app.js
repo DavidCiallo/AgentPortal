@@ -4,6 +4,9 @@ let sessionId = ''
 let currentProject = ''      // raw cwd of the active session
 let currentProjectId = ''    // sanitized project dir name (matches /api/projects id)
 let isGenerating = false
+// The user's message text, saved when a round starts so it can be
+// restored into the textarea if the user cancels mid-generation.
+let pendingUserInput = ''
 let currentAssistantEl = null
 let pendingToolElements = new Map()  // toolUseId → rendered DOM element, for live output updates
 let pendingPrompts = new Map()
@@ -250,7 +253,7 @@ function connect() {
 
   ws.onopen = () => {
     setConnectionStatus(true)
-    sendBtn.disabled = false
+    setSendButtonState('send')
     // Load config to populate currentModel
     ws.send(JSON.stringify({ type: 'get_config' }))
     // Restore the last session from localStorage (also subscribes if restored)
@@ -371,9 +374,9 @@ function handleMessage(msg) {
       if (currentAssistantEl && !currentAssistantEl.textContent.trim()) {
         currentAssistantEl.remove()
       }
-      isGenerating = false
       currentAssistantEl = null
-      sendBtn.disabled = false
+      setSendButtonState('send')
+      pendingUserInput = ''
       messageInput.focus()
 
       hideAgentStatus()
@@ -385,11 +388,10 @@ function handleMessage(msg) {
       if (currentAssistantEl && !currentAssistantEl.textContent.trim()) {
         currentAssistantEl.remove()
       }
-      isGenerating = false
       currentAssistantEl = null
       currentToolContainer = null
       currentToolList = null
-      sendBtn.disabled = false
+      setSendButtonState('send')
 
       hideAgentStatus()
       addMessage('Generation cancelled.', 'assistant')
@@ -407,8 +409,8 @@ function handleMessage(msg) {
         return  // Don't show error yet
       }
       addMessage(`Error: ${msg.message}`, 'error')
-      isGenerating = false
-      sendBtn.disabled = false
+      setSendButtonState('send')
+      pendingUserInput = ''
 
       hideAgentStatus()
       break
@@ -450,8 +452,7 @@ function handleMessage(msg) {
       // Server confirmed subscription. If a round is running, show agent status
       // so the UI reflects the in-progress execution that was replayed.
       if (msg.running) {
-        isGenerating = true
-        sendBtn.disabled = true
+        setSendButtonState('stop')
         // Use server-provided round start time so late joiners see the true elapsed time
         showAgentStatus('Working', true, msg.roundStartTime)
       }
@@ -534,6 +535,29 @@ function hideAgentStatus() {
   }
   // Revert to connection status
   setConnectionStatus(_connected)
+}
+
+/**
+ * Toggle the Send button between its two roles:
+ *  - 'send': shows "Send", disabled when the textarea is empty, enabled otherwise.
+ *  - 'stop': shows "Stop", always enabled — clicks cancel the running round.
+ *
+ * The button is reused (rather than adding a second element) to keep the input
+ * area compact, especially on mobile.
+ */
+function setSendButtonState(state) {
+  if (state === 'stop') {
+    isGenerating = true
+    sendBtn.textContent = 'Stop'
+    sendBtn.classList.add('stop')
+    sendBtn.disabled = false
+  } else {
+    isGenerating = false
+    sendBtn.textContent = 'Send'
+    sendBtn.classList.remove('stop')
+    // Send is disabled when there's no text to send.
+    sendBtn.disabled = messageInput.value.trim() === ''
+  }
 }
 
 function isNearBottom() {
@@ -716,11 +740,13 @@ async function sendMessage() {
 
   addMessage(message, 'user')
   scrollToBottom(true)
+  // Remember what the user sent so we can put it back into the textarea
+  // if they cancel the round before it completes.
+  pendingUserInput = message
   messageInput.value = ''
   messageInput.style.height = 'auto'
 
-  isGenerating = true
-  sendBtn.disabled = true
+  setSendButtonState('stop')
   showAgentStatus('Working')
 
   const chatMsg = {
@@ -737,7 +763,20 @@ async function sendMessage() {
 }
 
 // Event listeners
-sendBtn.addEventListener('click', sendMessage)
+sendBtn.addEventListener('click', () => {
+  if (isGenerating) {
+    // Cancel the running round and restore the user's input so they can edit
+    // and resend without retyping.
+    ws.send(JSON.stringify({ type: 'cancel', sessionId }))
+    if (pendingUserInput) {
+      messageInput.value = pendingUserInput
+      messageInput.style.height = 'auto'
+      messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + 'px'
+    }
+    return
+  }
+  sendMessage()
+})
 
 // Infinite scroll — load older messages when within ~1 viewport height from top
 let scrollLoadTimer = null
@@ -760,6 +799,11 @@ messageInput.addEventListener('keydown', (e) => {
 messageInput.addEventListener('input', () => {
   messageInput.style.height = 'auto'
   messageInput.style.height = Math.min(messageInput.scrollHeight, 120) + 'px'
+  // Keep the Send button's disabled state in sync with the textarea contents.
+  // (Only when in 'send' mode — Stop is always enabled.)
+  if (!isGenerating) {
+    sendBtn.disabled = messageInput.value.trim() === ''
+  }
 })
 
 // Android Chrome keyboard: scroll chat to bottom when input gets focus
@@ -1025,8 +1069,8 @@ async function switchSession(projectId, newSessionId, cwd) {
   // has nothing to do with the session we're switching to. The new session's
   // subscribe response will tell us if it's running.
   hideAgentStatus()
-  isGenerating = false
-  sendBtn.disabled = false
+  setSendButtonState('send')
+  pendingUserInput = ''
   currentAssistantEl = null
   currentToolContainer = null
   currentToolList = null
