@@ -232,6 +232,13 @@ class SessionRunner {
       return
     }
 
+    // Prevent concurrent rounds across different sessions — their
+    // switchSession calls would race on the global sessionId.
+    if (!this.server.claimActiveRunner(this)) {
+      this.broadcast({ type: 'error', message: 'Another session is currently processing a request' })
+      return
+    }
+
     this.running = true
     this.interrupted = false
     this.roundStartTime = Date.now()
@@ -278,6 +285,13 @@ class SessionRunner {
     if (resolvedModel) {
       setMainLoopModelOverride(parseUserSpecifiedModel(resolvedModel))
     }
+
+    // Save the current global session ID so we can restore it when this round
+    // finishes. Without this, if Session B starts while Session A is still
+    // draining its write queue, B's switchSession overwrites the global ID and
+    // A's fire-and-forget recordTranscript calls stamp messages with B's ID —
+    // writing A's messages into B's transcript.
+    const previousSessionId = getSessionId()
 
     // Sync global session ID + project dir so the transcript lands in the
     // exact folder the sidebar reads from: ~/.claude/projects/<sanitizePath(cwd)>.
@@ -445,6 +459,16 @@ class SessionRunner {
       this.engine = null
       this.running = false
       this.resetBuffer()
+
+      // Restore the previous global session ID so a concurrent session's
+      // in-flight recordTranscript calls aren't stamped with this session's ID.
+      // Only restore if nothing else has already switched the session (e.g.
+      // another SessionRunner's startRound may have set its own ID).
+      this.server.releaseActiveRunner(this)
+      if (getSessionId() === (this.sessionId as any)) {
+        switchSession(previousSessionId as any, null)
+        void resetSessionFilePointer()
+      }
     }
   }
 
@@ -461,6 +485,10 @@ export class WebServer {
   private wss: WebSocketServer
   private sessions: Map<string, SessionData> = new Map()
   private runners: Map<string, SessionRunner> = new Map()
+  /** The SessionRunner currently executing a round, or null. Prevents
+   *  concurrent rounds across different sessions — which would corrupt the
+   *  global sessionId that recordTranscript relies on. */
+  private activeRunner: SessionRunner | null = null
   private webRoot: string
   private port: number
   private host: string
@@ -473,6 +501,27 @@ export class WebServer {
     this.httpServer = createServer(this.handleHttpRequest.bind(this))
     this.wss = new WebSocketServer({ server: this.httpServer })
     this.wss.on('connection', this.handleConnection.bind(this))
+  }
+
+  /**
+   * Try to claim the active-runner slot. Returns true if this runner can
+   * proceed, false if another runner is already active. This prevents
+   * concurrent rounds across different sessions from corrupting the global
+   * sessionId that recordTranscript relies on.
+   */
+  claimActiveRunner(runner: SessionRunner): boolean {
+    if (this.activeRunner && this.activeRunner !== runner) {
+      return false
+    }
+    this.activeRunner = runner
+    return true
+  }
+
+  /** Release the active-runner slot. Called when a round finishes. */
+  releaseActiveRunner(runner: SessionRunner): void {
+    if (this.activeRunner === runner) {
+      this.activeRunner = null
+    }
   }
 
   private async handleHttpRequest(req: any, res: any) {

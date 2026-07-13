@@ -35,3 +35,13 @@ export async function processPromptSlashCommand(
     shouldQuery: false,
   }
 }
+
+/** Format skill loading metadata for UI display */
+export function formatSkillLoadingMetadata(
+  skillName: string,
+  progressMessage?: string,
+): string {
+  return progressMessage
+    ? `[Loading skill: ${skillName}] ${progressMessage}`
+    : `[Loading skill: ${skillName}]`
+}

@@ -291,6 +291,11 @@ function handleMessage(msg) {
       currentAssistantEl.dataset.rawText = (currentAssistantEl.dataset.rawText || '') + msg.text
       // 流式渲染 markdown，每块逐步追加，兼顾逐字效果和 markdown/diff 高亮
       currentAssistantEl.innerHTML = renderMarkdown(currentAssistantEl.dataset.rawText)
+      // Reset tool container so the next tool_use_display starts a fresh
+      // group. Without this, tool A → text → tool A would merge the two
+      // tool A calls into a single group even though text separated them.
+      currentToolContainer = null
+      currentToolList = null
       scrollToBottom()
       break
 
