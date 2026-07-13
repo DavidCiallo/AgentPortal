@@ -37,7 +37,6 @@ import {
   getSessionId,
 } from '../../bootstrap/state.js'
 import { COMMAND_MESSAGE_TAG } from '../../constants/xml.js'
-import type { CanUseToolFn } from '../../hooks/useCanUseTool.js'
 import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED } from '../../services/analytics/index.js';
 import { getAgentContext } from '../../utils/agentContext.js'
 import { errorMessage } from '../../utils/errors.js'
@@ -92,7 +91,7 @@ async function executeForkedSkill(
   commandName: string,
   args: string | undefined,
   context: ToolUseContext,
-  canUseTool: CanUseToolFn,
+  canUseTool: any,
   parentMessage: AssistantMessage,
   onProgress?: ToolCallProgress<Progress>,
 ): Promise<ToolResult<Output>> {

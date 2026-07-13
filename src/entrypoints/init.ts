@@ -16,7 +16,6 @@ import { isEnvTruthy } from '../utils/envUtils.js'
 import { ConfigParseError, errorMessage } from '../utils/errors.js'
 import {
   gracefulShutdownSync,
-  setupGracefulShutdown,
 } from '../utils/gracefulShutdown.js'
 import {
   applyConfigEnvironmentVariables,
@@ -60,7 +59,6 @@ export const init = memoize(async (): Promise<void> => {
     profileCheckpoint('init_safe_env_vars_applied')
 
     // Make sure things get flushed on exit
-    setupGracefulShutdown()
     profileCheckpoint('init_after_graceful_shutdown')
 
     // Initialize JetBrains IDE detection asynchronously (populates cache for later sync access)

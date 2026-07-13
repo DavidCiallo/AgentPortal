@@ -1,16 +1,13 @@
-import { useCallback, useLayoutEffect, useRef } from 'react'
-
 /**
- * React 18-compatible replacement for React 19's useEffectEvent.
+ * Stub — original CLI hook removed. Provides a minimal polyfill equivalent
+ * to React 19's useEffectEvent.
  */
-export function useEffectEventCompat<Args extends unknown[], Return>(
-  fn: (...args: Args) => Return,
-): (...args: Args) => Return {
-  const fnRef = useRef(fn)
+import { useCallback, useRef } from 'react'
 
-  useLayoutEffect(() => {
-    fnRef.current = fn
-  }, [fn])
-
-  return useCallback((...args: Args) => fnRef.current(...args), [])
+export function useEffectEventCompat<T extends (...args: any[]) => any>(
+  callback: T,
+): T {
+  const ref = useRef(callback)
+  ref.current = callback
+  return useCallback((...args: any[]) => ref.current(...args), []) as T
 }
