@@ -106,11 +106,11 @@ function checkBunRuntime(): CheckResult {
 }
 
 function checkBuildArtifacts(): CheckResult {
-  const distCli = resolve(process.cwd(), 'dist', 'cli.mjs')
-  if (!existsSync(distCli)) {
-    return fail('Build artifacts', `Missing ${distCli}. Run: bun run build`)
+  const webEntry = resolve(process.cwd(), 'scripts', 'start-web.ts')
+  if (!existsSync(webEntry)) {
+    return fail('Web entrypoint', `Missing ${webEntry}.`)
   }
-  return pass('Build artifacts', distCli)
+  return pass('Web entrypoint', webEntry)
 }
 
 function isLocalBaseUrl(baseUrl: string): boolean {

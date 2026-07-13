@@ -241,12 +241,7 @@ async function main(): Promise<void> {
     process.exit(doctorCode)
   }
 
-  const buildCode = await runProcess('bun', ['run', 'build'], env)
-  if (buildCode !== 0) {
-    process.exit(buildCode)
-  }
-
-  const devCode = await runProcess('node', ['dist/cli.mjs', ...options.passthroughArgs], env)
+  const devCode = await runProcess('bun', ['run', 'scripts/start-web.ts', ...options.passthroughArgs], env)
   process.exit(devCode)
 }
 

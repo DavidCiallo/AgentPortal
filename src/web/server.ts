@@ -427,7 +427,7 @@ class SessionRunner {
         } else if (event.type === 'system') {
           // System events — no-op
         } else {
-          console.log('[web] unhandled event:', event)
+          // console.log('[web] unhandled event:', event)
         }
       }
 

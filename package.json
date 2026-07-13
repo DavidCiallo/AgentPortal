@@ -1,19 +1,20 @@
 {
   "name": "portal",
   "version": "0.2.3",
-  "description": "Portal — an coding agent base for openclaude",
+  "description": "Portal — a web-based coding agent",
   "type": "module",
   "bin": {
     "portal": "./bin/portal"
   },
   "files": [
     "bin/",
-    "dist/cli.mjs",
+    "src/",
+    "scripts/start-web.ts",
     "README.md"
   ],
   "scripts": {
-    "build": "bun run scripts/build.ts",
-    "dev": "bun run build && node dist/cli.mjs",
+    "dev:web": "bun run scripts/start-web.ts",
+    "start": "bun run scripts/start-web.ts",
     "dev:profile": "bun run scripts/provider-launch.ts",
     "dev:profile:fast": "bun run scripts/provider-launch.ts auto --fast --bare",
     "dev:codex": "bun run scripts/provider-launch.ts codex",
@@ -22,29 +23,19 @@
     "dev:ollama": "bun run scripts/provider-launch.ts ollama",
     "dev:ollama:fast": "bun run scripts/provider-launch.ts ollama --fast --bare",
     "dev:atomic-chat": "bun run scripts/provider-launch.ts atomic-chat",
+    "dev:fast": "bun run profile:fast && bun run dev:ollama:fast",
+    "dev:code": "bun run profile:code && bun run dev:profile",
     "profile:init": "bun run scripts/provider-bootstrap.ts",
     "profile:recommend": "bun run scripts/provider-recommend.ts",
     "profile:auto": "bun run scripts/provider-recommend.ts --apply",
     "profile:codex": "bun run profile:init -- --provider codex --model codexplan",
     "profile:fast": "bun run profile:init -- --provider ollama --model llama3.2:3b",
     "profile:code": "bun run profile:init -- --provider ollama --model qwen2.5-coder:7b",
-    "dev:fast": "bun run profile:fast && bun run dev:ollama:fast",
-    "dev:code": "bun run profile:code && bun run dev:profile",
-    "dev:grpc": "bun run scripts/start-grpc.ts",
-    "dev:grpc:cli": "bun run scripts/grpc-cli.ts",
-    "dev:web": "bun run scripts/start-web.ts",
-    "start": "node dist/cli.mjs",
     "security:pr-scan": "bun run scripts/pr-intent-scan.ts",
     "typecheck": "tsc --noEmit",
-    "smoke": "bun run build && node dist/cli.mjs --version",
-    "verify:privacy": "bun run scripts/verify-no-phone-home.ts",
-    "build:verified": "bun run build && bun run verify:privacy",
     "doctor:runtime": "bun run scripts/system-check.ts",
     "doctor:runtime:json": "bun run scripts/system-check.ts --json",
-    "doctor:report": "bun run scripts/system-check.ts --out reports/doctor-runtime.json",
-    "hardening:check": "bun run smoke && bun run doctor:runtime",
-    "hardening:strict": "bun run typecheck && bun run hardening:check",
-    "prepack": "npm run build"
+    "doctor:report": "bun run scripts/system-check.ts --out reports/doctor-runtime.json"
   },
   "dependencies": {
     "@alcalzone/ansi-tokenize": "0.3.0",

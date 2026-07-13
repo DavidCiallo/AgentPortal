@@ -1,29 +1,35 @@
 # Portal
 
-An open-source coding-agent CLI with a web UI.
+A web-based coding agent.
 
 ## Quick Start
 
 ```bash
 bun install
-bun run build
-node dist/cli.mjs
-```
-
-## Web UI
-
-Portal includes a built-in web interface with WebSocket-based chat, session management, and directory browsing.
-
-```bash
 bun run dev:web
 ```
 
-Then open `http://localhost:3004` in your browser.
+Then open `http://localhost:3200` in your browser (override with `WEB_PORT`).
+
+## Provider setup
+
+Portal talks to any OpenAI-compatible API. Configure a provider profile once and reuse it:
+
+```bash
+bun run profile:auto     # auto-recommend and apply a local Ollama profile
+bun run profile:codex    # configure for Codex
+bun run profile:fast     # configure for Ollama llama3.2:3b
+bun run profile:code     # configure for Ollama qwen2.5-coder:7b
+bun run dev:codex        # set up codex profile then launch the web UI
+bun run dev:ollama       # set up ollama profile then launch the web UI
+bun run dev:openai       # set up OpenAI profile then launch the web UI
+bun run dev:gemini       # set up Gemini profile then launch the web UI
+```
 
 ## Features
 
-- **CLI + Web UI** — terminal-first with a browser companion interface
-- **Multi-provider** — OpenAI-compatible APIs, Ollama, and other backends via `/provider` setup
+- **Web UI** — WebSocket-based chat with session management and directory browsing
+- **Multi-provider** — OpenAI-compatible APIs, Ollama, Codex, Gemini, and more
 - **Tool-driven workflows** — bash, file read/write/edit, grep, glob, agents, MCP, and web tools
 - **Session persistence** — chat history saved per-project, browsable from the web UI
 - **Theme support** — light, dark, and auto modes in the web UI
@@ -33,15 +39,15 @@ Then open `http://localhost:3004` in your browser.
 | Command | Description |
 | --- | --- |
 | `bun run dev:web` | Start web UI server |
-| `bun run build` | Build the project |
-| `bun test` | Run unit tests |
+| `bun run profile:auto` | Auto-configure a provider profile |
+| `bun run typecheck` | Run TypeScript type checking |
 | `bun run doctor:runtime` | Check runtime health |
 
 ## Project Structure
 
-- `src/` — core CLI and server runtime
+- `src/` — core runtime, tools, and web server
 - `web/` — web UI frontend (HTML, CSS, JS)
-- `scripts/` — build and verification scripts
+- `scripts/` — startup and verification scripts
 - `docs/` — documentation
 
 ## License
