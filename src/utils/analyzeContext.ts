@@ -33,11 +33,12 @@ import type {
   AgentDefinition,
   AgentDefinitionsResult,
 } from '../tools/AgentTool/loadAgentsDir.js'
-import { SKILL_TOOL_NAME } from '../tools/SkillTool/constants.js'
-import {
-  getLimitedSkillToolCommands,
-  getSkillToolInfo as getSlashCommandInfo,
-} from '../tools/SkillTool/prompt.js'
+// SkillTool removed — stubs for context analysis.
+const SKILL_TOOL_NAME = 'Skill'
+async function getLimitedSkillToolCommands(_cwd: string): Promise<never[]> { return [] }
+async function getSlashCommandInfo(_cwd: string): Promise<{ commands: never[]; totalCommands: number; includedCommands: number }> {
+  return { commands: [], totalCommands: 0, includedCommands: 0 }
+}
 import type {
   AssistantMessage,
   AttachmentMessage,
