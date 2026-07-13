@@ -199,10 +199,6 @@ export function createCronScheduler(
         nextFireAt.set(t.id, Infinity)
       }
 
-          .join(
-            ',',
-          ) as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
-      })
       if (onMissed) {
         onMissed(missed)
       } else {

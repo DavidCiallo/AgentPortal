@@ -114,7 +114,7 @@ import { GLOB_TOOL_NAME } from 'src/tools/GlobTool/prompt.js'
 import { GREP_TOOL_NAME } from 'src/tools/GrepTool/prompt.js'
 import type { DeepImmutable } from 'src/types/utils.js'
 import { getStrictToolResultPairing } from '../bootstrap/state.js'
-import type { SpinnerMode } from '../components/Spinner.js'
+import type { SpinnerMode } from '../types/tools.js'
 import {
   COMMAND_ARGS_TAG,
   COMMAND_MESSAGE_TAG,

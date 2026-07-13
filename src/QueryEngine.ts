@@ -5,8 +5,7 @@ import { randomUUID } from 'crypto'
 import last from 'lodash-es/last.js'
 import { getSessionId, isSessionPersistenceDisabled, } from 'src/bootstrap/state.js'
 import stripAnsi from 'strip-ansi'
-import type { Command } from './commands.js'
-import { getSlashCommandToolSkills } from './commands.js'
+import type { Command } from './types/command.js'
 import {
   LOCAL_COMMAND_STDERR_TAG,
   LOCAL_COMMAND_STDOUT_TAG,
@@ -14,7 +13,7 @@ import {
 import {
   getTotalAPIDuration,
 } from './bootstrap/state.js'
-import type { CanUseToolFn } from './hooks/useCanUseTool.js'
+import type { CanUseToolFn } from './types/canUseTool.js'
 import { loadMemoryPrompt } from './memdir/memdir.js'
 import { hasAutoMemPathOverride } from './memdir/paths.js'
 import { query } from './query.js'
@@ -485,8 +484,7 @@ export class QueryEngine {
     // ref-tracked plugins. CCR populates the cache via CLAUDE_CODE_SYNC_PLUGIN_INSTALL
     // (headlessPluginInstall) or CLAUDE_CODE_PLUGIN_SEED_DIR before this runs;
     // SDK callers that need fresh source can call /reload-plugins.
-    const [skills, { enabled: enabledPlugins }] = await Promise.all([
-      getSlashCommandToolSkills(getCwd()),
+    const [{ enabled: enabledPlugins }] = await Promise.all([
       loadAllPluginsCacheOnly(),
     ])
     headlessProfilerCheckpoint('after_skills_plugins')
@@ -498,7 +496,7 @@ export class QueryEngine {
       permissionMode: initialAppState.toolPermissionContext.mode,
       commands,
       agents,
-      skills,
+      skills: [],
       plugins: enabledPlugins,
       fastMode: initialAppState.fastMode,
     })

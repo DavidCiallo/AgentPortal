@@ -1,5 +1,5 @@
 import chalk from 'chalk'
-import { ctrlOToExpand } from '../components/CtrlOToExpand.js'
+const ctrlOToExpand = () => '' // CLI hint removed
 import { stringWidth } from '../ink/stringWidth.js'
 import sliceAnsi from './sliceAnsi.js'
 

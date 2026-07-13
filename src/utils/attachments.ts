@@ -75,7 +75,7 @@ import {
   getDefaultOpusModel,
 } from './model/model.js'
 import type { ReadResourceResult } from '@modelcontextprotocol/sdk/types.js'
-import { getSkillToolCommands } from '../commands.js'
+// getSkillToolCommands removed (SkillTool deleted)
 import type { Command } from '../types/command.js'
 import uniqBy from 'lodash-es/uniqBy.js'
 import { getProjectRoot } from '../bootstrap/state.js'
@@ -2611,7 +2611,7 @@ async function getSkillListingAttachments(
   }
 
   const cwd = getProjectRoot()
-  const localCommands = await getSkillToolCommands(cwd)
+  const localCommands: any[] = [] // SkillTool removed
   let allCommands = localCommands
 
   // When skill search is active, filter to bundled + MCP instead of full

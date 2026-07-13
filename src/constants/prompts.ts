@@ -17,14 +17,13 @@ import { FILE_EDIT_TOOL_NAME } from '../tools/FileEditTool/constants.js'
 import { TODO_WRITE_TOOL_NAME } from '../tools/TodoWriteTool/constants.js'
 import { TASK_CREATE_TOOL_NAME } from '../tools/TaskCreateTool/constants.js'
 import type { Tools } from '../Tool.js'
-import type { Command } from '../types/command.js'
+// Command type removed (was used for skillToolCommands)
 import { BASH_TOOL_NAME } from '../tools/BashTool/toolName.js'
 import {
   getCanonicalName,
   getMarketingNameForModel,
 } from '../utils/model/model.js'
-import { getSkillToolCommands } from 'src/commands.js'
-import { SKILL_TOOL_NAME } from '../tools/SkillTool/constants.js'
+// SkillTool removed — skill guidance disabled
 import { getOutputStyleConfig } from './outputStyles.js'
 import type {
   MCPServerConnection,
@@ -59,7 +58,7 @@ import { TICK_TAG } from './xml.js'
 import { logForDebugging } from '../utils/debug.js'
 import { loadMemoryPrompt } from '../memdir/memdir.js'
 import { isUndercover } from '../utils/undercover.js'
-import { isMcpInstructionsDeltaEnabled } from '../utils/mcpInstructionsDelta.js'
+import { isMcpInstructionsDeltaEnabled } from '../utils/mcpInstructionsDelta.js'
 /* eslint-disable @typescript-eslint/no-require-imports */
 const getCachedMCConfigForFRC = feature('CACHED_MICROCOMPACT')
   ? (
@@ -349,11 +348,9 @@ function getDiscoverSkillsGuidance(): string | null {
  */
 function getSessionSpecificGuidanceSection(
   enabledTools: Set<string>,
-  skillToolCommands: Command[],
 ): string | null {
   const hasAskUserQuestionTool = enabledTools.has(ASK_USER_QUESTION_TOOL_NAME)
-  const hasSkills =
-    skillToolCommands.length > 0 && enabledTools.has(SKILL_TOOL_NAME)
+  const hasSkills = false
   const hasAgentTool = enabledTools.has(AGENT_TOOL_NAME)
   const searchTools = hasEmbeddedSearchTools()
     ? `\`find\` or \`grep\` via the ${BASH_TOOL_NAME} tool`
@@ -438,8 +435,7 @@ export async function getSystemPrompt(
   }
 
   const cwd = getCwd()
-  const [skillToolCommands, outputStyleConfig, envInfo] = await Promise.all([
-    getSkillToolCommands(cwd),
+  const [outputStyleConfig, envInfo] = await Promise.all([
     getOutputStyleConfig(),
     computeSimpleEnvInfo(model, additionalWorkingDirectories),
   ])
@@ -474,7 +470,7 @@ ${CYBER_RISK_INSTRUCTION}`,
 
   const dynamicSections = [
     systemPromptSection('session_guidance', () =>
-      getSessionSpecificGuidanceSection(enabledTools, skillToolCommands),
+      getSessionSpecificGuidanceSection(enabledTools),
     ),
     systemPromptSection('memory', () => loadMemoryPrompt()),
     systemPromptSection('ant_model_override', () =>
@@ -597,7 +593,7 @@ export async function computeEnvInfo(
   // internal can leak into public commits/PRs. This includes the public
   // FRONTIER_MODEL_* constants — if those ever point at an unannounced model,
   // we don't want them in context. Go fully dark.
-  //
+  //
   // inlined at each callsite (not hoisted to a const) so the bundler can
   // constant-fold it to `false` in external builds and eliminate the branch.
   let modelDescription = ''
@@ -629,7 +625,7 @@ export async function computeSimpleEnvInfo(
 ): Promise<string> {
   const [isGit, unameSR] = await Promise.all([getIsGit(), getUnameSR()])
 
-  // Undercover: strip all model name/ID references. See computeEnvInfo.
+  // Undercover: strip all model name/ID references. See computeEnvInfo.
   let modelDescription: string | null = null
 
   const cutoff = getKnowledgeCutoff(modelId)

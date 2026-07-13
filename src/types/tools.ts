@@ -15,3 +15,5 @@ export type SkillToolProgress = any
 export type TaskOutputProgress = any
 export type ToolProgressData = any
 export type WebSearchProgress = any
+
+export type SpinnerMode = 'requesting' | 'responding'

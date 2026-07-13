@@ -1,6 +1,6 @@
 import type { ContentBlockParam } from '@anthropic-ai/sdk/resources/index.mjs'
 import type { UUID } from 'crypto'
-import type { CanUseToolFn } from '../hooks/useCanUseTool.js'
+import type { CanUseToolFn } from '../types/canUseTool.js'
 import type { CompactionResult } from '../services/compact/compact.js'
 import type { ScopedMcpServerConfig } from '../services/mcp/types.js'
 import type { ToolUseContext } from '../Tool.js'
@@ -213,4 +213,35 @@ export function getCommandName(cmd: CommandBase): string {
 /** Resolves whether the command is enabled, defaulting to true. */
 export function isCommandEnabled(cmd: CommandBase): boolean {
   return cmd.isEnabled?.() ?? true
+}
+
+/**
+ * Find a command by name in the given command array.
+ * Matches against name, userFacingName, and aliases.
+ */
+export function findCommand(
+  commandName: string,
+  commands: Command[],
+): Command | undefined {
+  return commands.find(
+    _ =>
+      _.name === commandName ||
+      getCommandName(_) === commandName ||
+      _.aliases?.includes(commandName),
+  )
+}
+
+/**
+ * Whether a slash command is safe to execute when its input arrived over the
+ * Remote Control bridge (mobile/web client).
+ *
+ * 'prompt' commands (skills) expand to text and are safe by construction;
+ * 'local-jsx' commands render Ink UI and stay blocked;
+ * 'local' commands are blocked by default (previously gated by BRIDGE_SAFE_COMMANDS).
+ */
+export function isBridgeSafeCommand(cmd: Command): boolean {
+  if (cmd.type === 'local-jsx') return false
+  if (cmd.type === 'prompt') return true
+  // All 'local' commands are blocked for bridge safety
+  return false
 }

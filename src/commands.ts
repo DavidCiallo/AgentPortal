@@ -1,122 +1,25 @@
-// biome-ignore-all assist/source/organizeImports: internal-only import markers must not be reordered
-import addDir from './commands/add-dir/index.js'
-import btw from './commands/btw/index.js'
-import clear from './commands/clear/index.js'
-import color from './commands/color/index.js'
-import commit from './commands/commit.js'
-import copy from './commands/copy/index.js'
-import commitPushPr from './commands/commit-push-pr.js'
-import compact from './commands/compact/index.js'
-import config from './commands/config/index.js'
-import { context, contextNonInteractive } from './commands/context/index.js'
-import diff from './commands/diff/index.js'
-import dream from './commands/dream/index.js'
-import doctor from './commands/doctor/index.js'
-import memory from './commands/memory/index.js'
-import help from './commands/help/index.js'
-import ide from './commands/ide/index.js'
-import init from './commands/init.js'
-import initVerifiers from './commands/init-verifiers.js'
-import keybindings from './commands/keybindings/index.js'
-import login from './commands/login/index.js'
-import logout from './commands/logout/index.js'
-import installSlackApp from './commands/install-slack-app/index.js'
-import cacheProbe from './commands/cache-probe/index.js'
-import mcp from './commands/mcp/index.js'
-import mobile from './commands/mobile/index.js'
-import pr_comments from './commands/pr_comments/index.js'
-import releaseNotes from './commands/release-notes/index.js'
-import resume from './commands/resume/index.js'
-import review, { ultrareview } from './commands/review.js'
-import session from './commands/session/index.js'
-import skills from './commands/skills/index.js'
-import status from './commands/status/index.js'
-import tasks from './commands/tasks/index.js'
-import securityReview from './commands/security-review.js'
-import terminalSetup from './commands/terminalSetup/index.js'
-import usage from './commands/usage/index.js'
-import theme from './commands/theme/index.js'
-import vim from './commands/vim/index.js'
-import { feature } from 'bun:bundle'
-/* eslint-disable @typescript-eslint/no-require-imports */
-const briefCommand =
-  feature('KAIROS') || feature('KAIROS_BRIEF')
-    ? require('./commands/brief.js').default
-    : null
-/* eslint-enable @typescript-eslint/no-require-imports */
-import thinkback from './commands/thinkback/index.js'
-import thinkbackPlay from './commands/thinkback-play/index.js'
-import permissions from './commands/permissions/index.js'
-import plan from './commands/plan/index.js'
-import fast from './commands/fast/index.js'
-import privacySettings from './commands/privacy-settings/index.js'
-import provider from './commands/provider/index.js'
-import hooks from './commands/hooks/index.js'
-import files from './commands/files/index.js'
-import branch from './commands/branch/index.js'
-import agents from './commands/agents/index.js'
-import autoFix from './commands/auto-fix.js'
-import plugin from './commands/plugin/index.js'
-import reloadPlugins from './commands/reload-plugins/index.js'
-import rewind from './commands/rewind/index.js'
-import heapDump from './commands/heapdump/index.js'
-import version from './commands/version.js'
-import wiki from './commands/wiki/index.js'
-import sandboxToggle from './commands/sandbox-toggle/index.js'
-import stickers from './commands/stickers/index.js'
-import advisor from './commands/advisor.js'
-import { logError } from './utils/log.js'
-import { toError } from './utils/errors.js'
+/**
+ * Minimal commands.ts — replaces the deleted 600-line aggregator.
+ *
+ * Built-in slash commands (src/commands/) have been removed. This module now
+ * only provides the skill-loading infrastructure that SkillTool and other
+ * consumers still depend on.
+ */
+import memoize from 'lodash-es/memoize.js'
 import { logForDebugging } from './utils/debug.js'
+import { toError } from './utils/errors.js'
+import { logError } from './utils/log.js'
 import {
-  getSkillDirCommands,
   clearSkillCaches,
   getDynamicSkills,
+  getSkillDirCommands,
 } from './skills/loadSkillsDir.js'
-import { getBundledSkills } from './skills/bundledSkills.js'
-import { getBuiltinPluginSkillCommands } from './plugins/builtinPlugins.js'
 import {
-  getPluginCommands,
   clearPluginCommandCache,
-  getPluginSkills,
   clearPluginSkillsCache,
+  getPluginCommands,
+  getPluginSkills,
 } from './utils/plugins/loadPluginCommands.js'
-import memoize from 'lodash-es/memoize.js'
-import { isUsing3PServices, isClaudeAISubscriber } from './utils/auth.js'
-import exit from './commands/exit/index.js'
-import exportCommand from './commands/export/index.js'
-import model from './commands/model/index.js'
-import tag from './commands/tag/index.js'
-import outputStyle from './commands/output-style/index.js'
-import {
-  extraUsage,
-  extraUsageNonInteractive,
-} from './commands/extra-usage/index.js'
-import rateLimitOptions from './commands/rate-limit-options/index.js'
-import statusline from './commands/statusline.js'
-import effort from './commands/effort/index.js'
-import stats from './commands/stats/index.js'
-// insights.ts is 113KB (3200 lines, includes diffLines/html rendering). Lazy
-// shim defers the heavy module until /insights is actually invoked.
-const usageReport: Command = {
-  type: 'prompt',
-  name: 'insights',
-  description: 'Generate a report analyzing your Portal sessions',
-  contentLength: 0,
-  progressMessage: 'analyzing your sessions',
-  source: 'builtin',
-  async getPromptForCommand(args, context) {
-    const real = (await import('./commands/insights.js')).default
-    if (real.type !== 'prompt') throw new Error('unreachable')
-    return real.getPromptForCommand(args, context)
-  },
-}
-import { getSettingSourceName } from './utils/settings/constants.js'
-import {
-  type Command,
-  getCommandName,
-  isCommandEnabled,
-} from './types/command.js'
 
 // Re-export types from the centralized location
 export type {
@@ -128,257 +31,59 @@ export type {
   PromptCommand,
   ResumeEntrypoint,
 } from './types/command.js'
-export { getCommandName, isCommandEnabled } from './types/command.js'
+export {
+  findCommand,
+  getCommandName,
+  isBridgeSafeCommand,
+  isCommandEnabled,
+} from './types/command.js'
 
-// Commands that get eliminated from the external build
-export const INTERNAL_ONLY_COMMANDS = [
-  commit,
-  commitPushPr,
-  initVerifiers,
-  version,
-].filter(Boolean)
-
-// Declared as a function so that we don't run this until getCommands is called,
-// since underlying functions read from config, which can't be read at module initialization time
-const COMMANDS = memoize((): Command[] => [
-  addDir,
-  advisor,
-  agents,
-  autoFix,
-  branch,
-  btw,
-  cacheProbe,
-  clear,
-  color,
-  compact,
-  config,
-  copy,
-  contextNonInteractive,
-  diff,
-  dream,
-  doctor,
-  effort,
-  exit,
-  fast,
-  files,
-  heapDump,
-  help,
-  ide,
-  init,
-  keybindings,
-  installSlackApp,
-  mcp,
-  memory,
-  mobile,
-  model,
-  outputStyle,
-  plugin,
-  provider,
-  pr_comments,
-  releaseNotes,
-  reloadPlugins,
-  resume,
-  session,
-  skills,
-  stats,
-  status,
-  statusline,
-  stickers,
-  tag,
-  theme,
-  review,
-  ultrareview,
-  rewind,
-  securityReview,
-  terminalSetup,
-  extraUsage,
-  extraUsageNonInteractive,
-  rateLimitOptions,
-  usage,
-  usageReport,
-  vim,
-  wiki,
-  ...(briefCommand ? [briefCommand] : []),
-  thinkback,
-  thinkbackPlay,
-  permissions,
-  plan,
-  privacySettings,
-  hooks,
-  exportCommand,
-  sandboxToggle,
-  ...(!isUsing3PServices() ? [logout, login()] : []),
-  tasks,
-])
-
+/** No built-in commands remain — returns an empty set. */
 export const builtInCommandNames = memoize(
-  (): Set<string> =>
-    new Set(COMMANDS().flatMap(_ => [_.name, ...(_.aliases ?? [])])),
+  (): Set<string> => new Set<string>(),
 )
 
-async function getSkills(cwd: string): Promise<{
-  skillDirCommands: Command[]
-  pluginSkills: Command[]
-  bundledSkills: Command[]
-  builtinPluginSkills: Command[]
-}> {
-  try {
-    const [skillDirCommands, pluginSkills] = await Promise.all([
-      getSkillDirCommands(cwd).catch(err => {
-        logError(toError(err))
-        logForDebugging(
-          'Skill directory commands failed to load, continuing without them',
-        )
-        return []
-      }),
-      getPluginSkills().catch(err => {
-        logError(toError(err))
-        logForDebugging('Plugin skills failed to load, continuing without them')
-        return []
-      }),
-    ])
-    // Bundled skills are registered synchronously at startup
-    const bundledSkills = getBundledSkills()
-    // Built-in plugin skills come from enabled built-in plugins
-    const builtinPluginSkills = getBuiltinPluginSkillCommands()
-    logForDebugging(
-      `getSkills returning: ${skillDirCommands.length} skill dir commands, ${pluginSkills.length} plugin skills, ${bundledSkills.length} bundled skills, ${builtinPluginSkills.length} builtin plugin skills`,
-    )
-    return {
-      skillDirCommands,
-      pluginSkills,
-      bundledSkills,
-      builtinPluginSkills,
-    }
-  } catch (err) {
-    // This should never happen since we catch at the Promise level, but defensive
-    logError(toError(err))
-    logForDebugging('Unexpected error in getSkills, returning empty')
-    return {
-      skillDirCommands: [],
-      pluginSkills: [],
-      bundledSkills: [],
-      builtinPluginSkills: [],
-    }
-  }
-}
-
-/* eslint-disable @typescript-eslint/no-require-imports */
-const getWorkflowCommands = feature('WORKFLOW_SCRIPTS')
-  ? (
-      require('./tools/WorkflowTool/createWorkflowCommand.js') as typeof import('./tools/WorkflowTool/createWorkflowCommand.js')
-    ).getWorkflowCommands
-  : null
-/* eslint-enable @typescript-eslint/no-require-imports */
-
 /**
- * Filters commands by their declared `availability` (auth/provider requirement).
- * Commands without `availability` are treated as universal.
- * This runs before `isEnabled()` so that provider-gated commands are hidden
- * regardless of feature-flag state.
- *
- * Not memoized — auth state can change mid-session (e.g. after /login),
- * so this must be re-evaluated on every getCommands() call.
- */
-export function meetsAvailabilityRequirement(cmd: Command): boolean {
-  if (!cmd.availability) return true
-  for (const a of cmd.availability) {
-    switch (a) {
-      case 'claude-ai':
-        if (isClaudeAISubscriber()) return true
-        break
-      case 'console':
-        // Console API key user = direct 1P API customer (not 3P, not claude.ai).
-        // Not available for openai provider — always falls through.
-        break
-      default: {
-        const _exhaustive: never = a
-        void _exhaustive
-        break
-      }
-    }
-  }
-  return false
-}
-
-/**
- * Loads all command sources (skills, plugins, workflows). Memoized by cwd
- * because loading is expensive (disk I/O, dynamic imports).
+ * Loads all available commands (skills from disk + plugins).
+ * Built-in commands have been removed.
  */
 const loadAllCommands = memoize(async (cwd: string): Promise<Command[]> => {
-  const [
-    { skillDirCommands, pluginSkills, bundledSkills, builtinPluginSkills },
-    pluginCommands,
-    workflowCommands,
-  ] = await Promise.all([
-    getSkills(cwd),
-    getPluginCommands(),
-    getWorkflowCommands ? getWorkflowCommands(cwd) : Promise.resolve([]),
+  const [skillDirCommands, pluginSkills, pluginCommands] = await Promise.all([
+    getSkillDirCommands(cwd).catch(err => {
+      logError(toError(err))
+      logForDebugging(
+        'Skill directory commands failed to load, continuing without them',
+      )
+      return []
+    }),
+    getPluginSkills().catch(err => {
+      logError(toError(err))
+      logForDebugging('Plugin skills failed to load, continuing without them')
+      return []
+    }),
+    getPluginCommands().catch(err => {
+      logError(toError(err))
+      logForDebugging('Plugin commands failed to load, continuing without them')
+      return []
+    }),
   ])
 
-  return [
-    ...bundledSkills,
-    ...builtinPluginSkills,
-    ...skillDirCommands,
-    ...workflowCommands,
-    ...pluginCommands,
-    ...pluginSkills,
-    ...COMMANDS(),
-  ]
+  return [...skillDirCommands, ...pluginSkills, ...pluginCommands]
 })
 
 /**
- * Returns commands available to the current user. The expensive loading is
- * memoized, but availability and isEnabled checks run fresh every call so
- * auth changes (e.g. /login) take effect immediately.
+ * Returns commands available to the current user.
  */
 export async function getCommands(cwd: string): Promise<Command[]> {
   const allCommands = await loadAllCommands(cwd)
-
-  // Get dynamic skills discovered during file operations
   const dynamicSkills = getDynamicSkills()
 
-  // Build base commands without dynamic skills
-  const baseCommands = allCommands.filter(
-    _ => meetsAvailabilityRequirement(_) && isCommandEnabled(_),
-  )
+  const baseNames = new Set(allCommands.map(c => c.name))
+  const uniqueDynamicSkills = dynamicSkills.filter(s => !baseNames.has(s.name))
 
-  if (dynamicSkills.length === 0) {
-    return baseCommands
-  }
-
-  // Dedupe dynamic skills - only add if not already present
-  const baseCommandNames = new Set(baseCommands.map(c => c.name))
-  const uniqueDynamicSkills = dynamicSkills.filter(
-    s =>
-      !baseCommandNames.has(s.name) &&
-      meetsAvailabilityRequirement(s) &&
-      isCommandEnabled(s),
-  )
-
-  if (uniqueDynamicSkills.length === 0) {
-    return baseCommands
-  }
-
-  // Insert dynamic skills after plugin skills but before built-in commands
-  const builtInNames = new Set(COMMANDS().map(c => c.name))
-  const insertIndex = baseCommands.findIndex(c => builtInNames.has(c.name))
-
-  if (insertIndex === -1) {
-    return [...baseCommands, ...uniqueDynamicSkills]
-  }
-
-  return [
-    ...baseCommands.slice(0, insertIndex),
-    ...uniqueDynamicSkills,
-    ...baseCommands.slice(insertIndex),
-  ]
+  return [...allCommands, ...uniqueDynamicSkills]
 }
 
-/**
- * Clears only the memoization caches for commands, WITHOUT clearing skill caches.
- * Use this when dynamic skills are added to invalidate cached command lists.
- */
 export function clearCommandMemoizationCaches(): void {
   loadAllCommands.cache?.clear?.()
   getSkillToolCommands.cache?.clear?.()
@@ -392,24 +97,14 @@ export function clearCommandsCache(): void {
   clearSkillCaches()
 }
 
-/**
- * Filter AppState.mcp.commands to MCP-provided skills (prompt-type,
- * model-invocable, loaded from MCP). These live outside getCommands() so
- * callers that need MCP skills in their skill index thread them through
- * separately.
- */
-/**
- * MCP skills feature has been removed.
- * Returns empty array unconditionally.
- */
+/** MCP skills feature has been removed. Returns empty array. */
 export function getMcpSkillCommands(
   _mcpCommands: readonly Command[],
 ): readonly Command[] {
   return []
 }
 
-// SkillTool shows ALL prompt-based commands that the model can invoke
-// This includes both skills (from /skills/) and commands (from /commands/)
+/** SkillTool shows ALL prompt-based commands the model can invoke. */
 export const getSkillToolCommands = memoize(
   async (cwd: string): Promise<Command[]> => {
     const allCommands = await getCommands(cwd)
@@ -418,9 +113,6 @@ export const getSkillToolCommands = memoize(
         cmd.type === 'prompt' &&
         !cmd.disableModelInvocation &&
         cmd.source !== 'builtin' &&
-        // Always include skills from /skills/ dirs, bundled skills, and legacy /commands/ entries
-        // (they all get an auto-derived description from the first line if frontmatter is missing).
-        // Plugin/MCP commands still require an explicit description to appear in the listing.
         (cmd.loadedFrom === 'bundled' ||
           cmd.loadedFrom === 'skills' ||
           cmd.loadedFrom === 'commands_DEPRECATED' ||
@@ -430,9 +122,7 @@ export const getSkillToolCommands = memoize(
   },
 )
 
-// Filters commands to include only skills. Skills are commands that provide
-// specialized capabilities for the model to use. They are identified by
-// loadedFrom being 'skills', 'plugin', or 'bundled', or having disableModelInvocation set.
+/** Filters commands to only skills (model-invocable prompt commands). */
 export const getSlashCommandToolSkills = memoize(
   async (cwd: string): Promise<Command[]> => {
     try {
@@ -449,105 +139,25 @@ export const getSlashCommandToolSkills = memoize(
       )
     } catch (error) {
       logError(toError(error))
-      // Return empty array rather than throwing - skills are non-critical
-      // This prevents skill loading failures from breaking the entire system
       logForDebugging('Returning empty skills array due to load failure')
       return []
     }
   },
 )
 
-/**
- * Commands that are safe to use in remote mode (--remote).
- * These only affect local TUI state and don't depend on local filesystem,
- * git, shell, IDE, MCP, or other local execution context.
- *
- * Used in two places:
- * 1. Pre-filtering commands in main.tsx before REPL renders (prevents race with CCR init)
- * 2. Preserving local-only commands in REPL's handleRemoteInit after CCR filters
- */
-export const REMOTE_SAFE_COMMANDS: Set<Command> = new Set([
-  session, // Shows QR code / URL for remote session
-  exit, // Exit the TUI
-  clear, // Clear screen
-  help, // Show help
-  theme, // Change terminal theme
-  color, // Change agent color
-  vim, // Toggle vim mode
-  usage, // Show usage info
-  copy, // Copy last message
-  btw, // Quick note
-  plan, // Plan mode toggle
-  keybindings, // Keybinding management
-  statusline, // Status line toggle
-  stickers, // Stickers
-  mobile, // Mobile QR code
-])
-
-/**
- * Builtin commands of type 'local' that ARE safe to execute when received
- * over the Remote Control bridge. These produce text output that streams
- * back to the mobile/web client and have no terminal-only side effects.
- *
- * 'local-jsx' commands are blocked by type (they render Ink UI) and
- * 'prompt' commands are allowed by type (they expand to text sent to the
- * model) — this set only gates 'local' commands.
- *
- * When adding a new 'local' command that should work from mobile, add it
- * here. Default is blocked.
- */
-export const BRIDGE_SAFE_COMMANDS: Set<Command> = new Set(
-  [
-    compact, // Shrink context — useful mid-session from a phone
-    clear, // Wipe transcript
-    releaseNotes, // Show changelog
-    files, // List tracked files
-  ].filter((c): c is Command => c !== null),
-)
-
-/**
- * Whether a slash command is safe to execute when its input arrived over the
- * Remote Control bridge (mobile/web client).
- *
- * PR #19134 blanket-blocked all slash commands from bridge inbound because
- * `/model` from iOS was popping the local Ink picker. This predicate relaxes
- * that with an explicit allowlist: 'prompt' commands (skills) expand to text
- * and are safe by construction; 'local' commands need an explicit opt-in via
- * BRIDGE_SAFE_COMMANDS; 'local-jsx' commands render Ink UI and stay blocked.
- */
-export function isBridgeSafeCommand(cmd: Command): boolean {
-  if (cmd.type === 'local-jsx') return false
-  if (cmd.type === 'prompt') return true
-  return BRIDGE_SAFE_COMMANDS.has(cmd)
-}
-
-/**
- * Filter commands to only include those safe for remote mode.
- * Used to pre-filter commands when rendering the REPL in --remote mode,
- * preventing local-only commands from being briefly available before
- * the CCR init message arrives.
- */
-export function filterCommandsForRemoteMode(commands: Command[]): Command[] {
-  return commands.filter(cmd => REMOTE_SAFE_COMMANDS.has(cmd))
-}
-
-export function findCommand(
+/** Checks if a command exists by name. */
+export function hasCommand(
   commandName: string,
   commands: Command[],
-): Command | undefined {
-  return commands.find(
-    _ =>
-      _.name === commandName ||
-      getCommandName(_) === commandName ||
-      _.aliases?.includes(commandName),
-  )
-}
-
-export function hasCommand(commandName: string, commands: Command[]): boolean {
+): boolean {
   return findCommand(commandName, commands) !== undefined
 }
 
-export function getCommand(commandName: string, commands: Command[]): Command {
+/** Gets a command by name, throws if not found. */
+export function getCommand(
+  commandName: string,
+  commands: Command[],
+): Command {
   const command = findCommand(commandName, commands)
   if (!command) {
     throw ReferenceError(
@@ -560,26 +170,24 @@ export function getCommand(commandName: string, commands: Command[]): Command {
         .join(', ')}`,
     )
   }
-
   return command
+}
+
+/** All commands are available (no auth gating in open-source build). */
+export function meetsAvailabilityRequirement(_cmd: Command): boolean {
+  return true
 }
 
 /**
  * Formats a command's description with its source annotation for user-facing UI.
- * Use this in typeahead, help screens, and other places where users need to see
- * where a command comes from.
- *
- * For model-facing prompts (like SkillTool), use cmd.description directly.
  */
 export function formatDescriptionWithSource(cmd: Command): string {
   if (cmd.type !== 'prompt') {
     return cmd.description
   }
-
   if (cmd.kind === 'workflow') {
     return `${cmd.description} (workflow)`
   }
-
   if (cmd.source === 'plugin') {
     const pluginName = cmd.pluginInfo?.pluginManifest.name
     if (pluginName) {
@@ -587,14 +195,11 @@ export function formatDescriptionWithSource(cmd: Command): string {
     }
     return `${cmd.description} (plugin)`
   }
-
   if (cmd.source === 'builtin' || cmd.source === 'mcp') {
     return cmd.description
   }
-
   if (cmd.source === 'bundled') {
     return `${cmd.description} (bundled)`
   }
-
-  return `${cmd.description} (${getSettingSourceName(cmd.source)})`
+  return cmd.description
 }

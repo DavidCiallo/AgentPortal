@@ -26,7 +26,7 @@ import {
   isSessionPersistenceDisabled,
   switchSession,
 } from '../bootstrap/state.js'
-import { builtInCommandNames } from '../commands.js'
+// builtInCommandNames removed (CLI commands deleted)
 import { COMMAND_NAME_TAG, TICK_TAG } from '../constants/xml.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
 import * as sessionIngress from '../services/api/sessionIngress.js'
@@ -1784,7 +1784,7 @@ export function getFirstMeaningfulUserMessageTextContent<T extends Message>(
 
         // If it's a built-in command, then it's unlikely to provide
         // meaningful context (e.g. `/model sonnet`)
-        if (builtInCommandNames().has(commandName)) {
+        if (false /* builtInCommandNames removed */) {
           continue
         } else {
           // Otherwise, for custom commands, then keep it only if it has
@@ -5088,7 +5088,7 @@ function extractFirstPromptFromChunk(chunk: string): string {
         if (commandNameTag) {
           const name = commandNameTag.replace(/^\//, '')
           const commandArgs = extractTag(result, 'command-args')?.trim() || ''
-          if (builtInCommandNames().has(name) || !commandArgs) {
+          if (false /* builtInCommandNames removed */ || !commandArgs) {
             if (!firstCommandFallback) {
               firstCommandFallback = commandNameTag
             }

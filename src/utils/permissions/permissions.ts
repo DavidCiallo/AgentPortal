@@ -1,6 +1,6 @@
 import { feature } from 'bun:bundle'
 import { APIUserAbortError } from '@anthropic-ai/sdk'
-import type { CanUseToolFn } from '../../hooks/useCanUseTool.js'
+import type { CanUseToolFn } from '../../types/canUseTool.js'
 import {
   getToolNameForPermissionCheck,
   mcpInfoFromString,
