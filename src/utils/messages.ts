@@ -49,7 +49,6 @@ import type {
   SystemAPIErrorMessage,
   SystemApiMetricsMessage,
   SystemAwaySummaryMessage,
-  SystemBridgeStatusMessage,
   SystemCompactBoundaryMessage,
   SystemInformationalMessage,
   SystemLocalCommandMessage,
@@ -67,7 +66,6 @@ import type {
 } from '../types/message.js'
 import { isAdvisorBlock } from './advisor.js'
 import { isAgentSwarmsEnabled } from './agentSwarmsEnabled.js'
-import { count } from './array.js'
 import {
   type Attachment,
   type HookAttachment,
@@ -1032,108 +1030,6 @@ function isHookAttachmentMessage(
       message.attachment.type === 'hook_system_message' ||
       message.attachment.type === 'hook_additional_context' ||
       message.attachment.type === 'hook_stopped_continuation')
-  )
-}
-
-function getInProgressHookCount(
-  messages: NormalizedMessage[],
-  toolUseID: string,
-  hookEvent: HookEvent,
-): number {
-  return count(
-    messages,
-    _ =>
-      _.type === 'progress' &&
-      _.data.type === 'hook_progress' &&
-      _.data.hookEvent === hookEvent &&
-      _.parentToolUseID === toolUseID,
-  )
-}
-
-function getResolvedHookCount(
-  messages: NormalizedMessage[],
-  toolUseID: string,
-  hookEvent: HookEvent,
-): number {
-  // Count unique hook names, since a single hook can produce multiple
-  // attachment messages (e.g., hook_success + hook_additional_context)
-  const uniqueHookNames = new Set(
-    messages
-      .filter(
-        (_): _ is AttachmentMessage<HookAttachmentWithName> =>
-          isHookAttachmentMessage(_) &&
-          _.attachment.toolUseID === toolUseID &&
-          _.attachment.hookEvent === hookEvent,
-      )
-      .map(_ => _.attachment.hookName),
-  )
-  return uniqueHookNames.size
-}
-
-function hasUnresolvedHooks(
-  messages: NormalizedMessage[],
-  toolUseID: string,
-  hookEvent: HookEvent,
-) {
-  const inProgressHookCount = getInProgressHookCount(
-    messages,
-    toolUseID,
-    hookEvent,
-  )
-  const resolvedHookCount = getResolvedHookCount(messages, toolUseID, hookEvent)
-
-  if (inProgressHookCount > resolvedHookCount) {
-    return true
-  }
-
-  return false
-}
-
-function getToolResultIDs(normalizedMessages: NormalizedMessage[]): {
-  [toolUseID: string]: boolean
-} {
-  return Object.fromEntries(
-    normalizedMessages.flatMap(_ =>
-      _.type === 'user' && _.message.content[0]?.type === 'tool_result'
-        ? [
-            [
-              _.message.content[0].tool_use_id,
-              _.message.content[0].is_error ?? false,
-            ],
-          ]
-        : ([] as [string, boolean][]),
-    ),
-  )
-}
-
-function getSiblingToolUseIDs(
-  message: NormalizedMessage,
-  messages: Message[],
-): Set<string> {
-  const toolUseID = getToolUseID(message)
-  if (!toolUseID) {
-    return new Set()
-  }
-
-  const unnormalizedMessage = messages.find(
-    (_): _ is AssistantMessage =>
-      _.type === 'assistant' &&
-      _.message.content.some(_ => _.type === 'tool_use' && _.id === toolUseID),
-  )
-  if (!unnormalizedMessage) {
-    return new Set()
-  }
-
-  const messageID = unnormalizedMessage.message.id
-  const siblingMessages = messages.filter(
-    (_): _ is AssistantMessage =>
-      _.type === 'assistant' && _.message.id === messageID,
-  )
-
-  return new Set(
-    siblingMessages.flatMap(_ =>
-      _.message.content.filter(_ => _.type === 'tool_use').map(_ => _.id),
-    ),
   )
 }
 
@@ -4357,22 +4253,6 @@ export function createPermissionRetryMessage(
   }
 }
 
-function createBridgeStatusMessage(
-  url: string,
-  upgradeNudge?: string,
-): SystemBridgeStatusMessage {
-  return {
-    type: 'system',
-    subtype: 'bridge_status',
-    content: `/remote-control is active. Code in CLI or at ${url}`,
-    url,
-    upgradeNudge,
-    isMeta: false,
-    timestamp: new Date().toISOString(),
-    uuid: randomUUID(),
-  }
-}
-
 export function createScheduledTaskFireMessage(
   content: string,
 ): SystemScheduledTaskFireMessage {
@@ -5066,23 +4946,6 @@ export function stripSignatureBlocks(messages: Message[]): Message[] {
   })
 
   return changed ? result : messages
-}
-
-/**
- * Creates a tool use summary message for SDK emission.
- * Tool use summaries provide human-readable progress updates after tool batches complete.
- */
-function createToolUseSummaryMessage(
-  summary: string,
-  precedingToolUseIds: string[],
-): ToolUseSummaryMessage {
-  return {
-    type: 'tool_use_summary',
-    summary,
-    precedingToolUseIds,
-    uuid: randomUUID(),
-    timestamp: new Date().toISOString(),
-  }
 }
 
 /**

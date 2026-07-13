@@ -334,7 +334,6 @@ export const FileWriteTool = buildTool({
       isEnvTruthy(process.env.CLAUDE_CODE_REMOTE) &&
       getFeatureValue_CACHED_MAY_BE_STALE('tengu_quartz_lantern', false)
     ) {
-      const startTime = Date.now()
       const diff = await fetchSingleFileGitDiff(fullFilePath)
       if (diff) gitDiff = diff
     }

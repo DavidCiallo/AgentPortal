@@ -17,7 +17,7 @@ import { splitCommand_DEPRECATED, splitCommandWithOperators } from '../../utils/
 import { detectCodeIndexingFromCommand } from '../../utils/codeIndexing.js';
 import { isEnvTruthy } from '../../utils/envUtils.js';
 import { isENOENT, ShellError } from '../../utils/errors.js'
-import { withTransientRetry, isTransientError } from './transientErrors.js';
+import { isTransientError } from './transientErrors.js';
 import { detectFileEncoding, detectLineEndings, getFileModificationTime, writeTextContent } from '../../utils/file.js';
 import { fileHistoryEnabled, fileHistoryTrackEdit } from '../../utils/fileHistory.js';
 import { truncate } from '../../utils/format.js';
@@ -25,7 +25,6 @@ import { getFsImplementation } from '../../utils/fsOperations.js';
 import { lazySchema } from '../../utils/lazySchema.js';
 import { expandPath } from '../../utils/path.js';
 import type { PermissionResult } from '../../utils/permissions/PermissionResult.js';
-import { maybeRecordPluginHint } from '../../utils/plugins/hintRecommendation.js';
 import { exec } from '../../utils/Shell.js';
 import type { ExecResult } from '../../utils/ShellCommand.js';
 import { SandboxManager } from '../../utils/sandbox/sandbox-adapter.js';
@@ -41,7 +40,6 @@ import { bashToolHasPermission, commandHasAnyCd, matchWildcardPattern, permissio
 import { interpretCommandResult } from './commandSemantics.js';
 import { getDefaultTimeoutMs, getMaxTimeoutMs, getSimplePrompt } from './prompt.js';
 import { checkReadOnlyConstraints } from './readOnlyValidation.js';
-import { parseSedEditCommand } from './sedEditParser.js';
 import { shouldUseSandbox } from './shouldUseSandbox.js';
 import { BASH_TOOL_NAME } from './toolName.js';
 import { buildImageToolResult, isImageOutput, resetCwdIfOutsideProject, resizeShellImageOutput, stdErrAppendShellResetMessage, stripEmptyLines } from './utils.js';
@@ -258,20 +256,6 @@ type InputSchema = ReturnType<typeof inputSchema>;
 // Use fullInputSchema for the type to always include run_in_background
 // (even when it's omitted from the schema, the code needs to handle it)
 export type BashToolInput = z.infer<ReturnType<typeof fullInputSchema>>;
-const COMMON_BACKGROUND_COMMANDS = ['npm', 'yarn', 'pnpm', 'node', 'python', 'python3', 'go', 'cargo', 'make', 'docker', 'terraform', 'webpack', 'vite', 'jest', 'pytest', 'curl', 'wget', 'build', 'test', 'serve', 'watch', 'dev'] as const;
-function getCommandTypeForLogging(command: string): AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS {
-  const parts = splitCommand_DEPRECATED(command);
-  if (parts.length === 0) return 'other' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS;
-
-  // Check each part of the command to see if any match common background commands
-  for (const part of parts) {
-    const baseCommand = part.split(' ')[0] || '';
-    if (COMMON_BACKGROUND_COMMANDS.includes(baseCommand as (typeof COMMON_BACKGROUND_COMMANDS)[number])) {
-      return baseCommand as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS;
-    }
-  }
-  return 'other' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS;
-}
 const outputSchema = lazySchema(() => z.object({
   stdout: z.string().describe('The standard output of the command'),
   stderr: z.string().describe('The standard error output of the command'),
@@ -749,13 +733,10 @@ export const BashTool = buildTool({
         // File may already be gone — stdout preview is sufficient
       }
     }
-    const commandType = input.command.split(' ')[0];
-    ;
 
     // Log code indexing tool usage
     const codeIndexingTool = detectCodeIndexingFromCommand(input.command);
     if (codeIndexingTool) {
-      ;
     }
     let strippedStdout = stripEmptyLines(stdout);
 

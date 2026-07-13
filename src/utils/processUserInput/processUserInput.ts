@@ -30,7 +30,6 @@ import {
   type PromptInputMode,
 } from '../../types/textInputTypes.js'
 import {
-  type AgentMentionAttachment,
   createAttachmentMessage,
   getAttachmentMessages,
 } from '../attachments.js'
@@ -545,26 +544,6 @@ async function processUserInputBase(
       canUseTool,
     )
     return addImageMetadataMessage(slashResult, imageMetadataTexts)
-  }
-
-  // Log agent mention queries for analysis
-  if (inputString !== null && mode === 'prompt') {
-    const trimmedInput = inputString.trim()
-
-    const agentMention = attachmentMessages.find(
-      (m): m is AttachmentMessage<AgentMentionAttachment> =>
-        m.attachment.type === 'agent_mention',
-    )
-
-    if (agentMention) {
-      const agentMentionString = `@agent-${agentMention.attachment.agentType}`
-      const isSubagentOnly = trimmedInput === agentMentionString
-      const isPrefix =
-        trimmedInput.startsWith(agentMentionString) && !isSubagentOnly
-
-      // Log whenever users use @agent-<name> syntax
-
-    }
   }
 
   // Regular user prompt

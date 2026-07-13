@@ -7,13 +7,11 @@ import { mkdir, writeFile } from 'fs/promises'
 import { join } from 'path'
 import { getOriginalCwd, getSessionId } from '../bootstrap/state.js'
 import {
-  BYTES_PER_TOKEN,
   DEFAULT_MAX_RESULT_SIZE_CHARS,
   MAX_TOOL_RESULT_BYTES,
   MAX_TOOL_RESULTS_PER_MESSAGE_CHARS,
 } from '../constants/toolLimits.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
-import { sanitizeToolNameForAnalytics } from '../services/analytics/metadata.js'
 import type { Message } from '../types/message.js'
 import { logForDebugging } from './debug.js'
 import { getErrnoCode, toError } from './errors.js'

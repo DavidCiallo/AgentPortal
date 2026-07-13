@@ -1,4 +1,3 @@
-import { sanitizeToolNameForAnalytics } from 'src/services/analytics/metadata.js'
 import type z from 'zod/v4'
 import type { CanUseToolFn } from '../../types/canUseTool.js'
 import type { AnyObject, Tool, ToolUseContext } from '../../Tool.js'
@@ -50,7 +49,6 @@ export async function* runPostToolUseHooks<Input extends AnyObject, Output>(
   mcpServerType: McpServerType,
   mcpServerBaseUrl: string | undefined,
 ): AsyncGenerator<PostToolUseHooksResult<Output>> {
-  const postToolStartTime = Date.now()
   try {
     const appState = toolUseContext.getAppState()
     const permissionMode = appState.toolPermissionContext.mode
@@ -146,7 +144,6 @@ export async function* runPostToolUseHooks<Input extends AnyObject, Output>(
           }
         }
       } catch (error) {
-        const postToolDurationMs = Date.now() - postToolStartTime
         yield {
           message: createAttachmentMessage({
             type: 'hook_error_during_execution',
@@ -236,7 +233,6 @@ export async function* runPostToolUseFailureHooks<Input extends AnyObject>(
 ): AsyncGenerator<
   MessageUpdateLazy<AttachmentMessage | ProgressMessage<HookProgress>>
 > {
-  const postToolStartTime = Date.now()
   try {
     const appState = toolUseContext.getAppState()
     const permissionMode = appState.toolPermissionContext.mode
@@ -305,7 +301,6 @@ export async function* runPostToolUseFailureHooks<Input extends AnyObject>(
           }
         }
       } catch (hookError) {
-        const postToolDurationMs = Date.now() - postToolStartTime
         yield {
           message: createAttachmentMessage({
             type: 'hook_error_during_execution',
@@ -463,7 +458,6 @@ export async function* runPreToolUseHooks(
   // stop execution
   | { type: 'stop' }
 > {
-  const hookStartTime = Date.now()
   try {
     const appState = toolUseContext.getAppState()
 
@@ -600,7 +594,6 @@ export async function* runPreToolUseHooks(
         }
       } catch (error) {
         logError(error)
-        const durationMs = Date.now() - hookStartTime
         yield {
           type: 'message',
           message: {

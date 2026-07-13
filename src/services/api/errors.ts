@@ -30,7 +30,6 @@ import {
   API_PDF_MAX_PAGES,
   PDF_TARGET_RAW_SIZE,
 } from '../../constants/apiLimits.js'
-import { isEnvTruthy } from '../../utils/envUtils.js'
 import { formatFileSize } from '../../utils/format.js'
 import { ImageResizeError } from '../../utils/imageResizer.js'
 import { ImageSizeError } from '../../utils/imageValidation.js'

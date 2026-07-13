@@ -1,16 +1,14 @@
 import Anthropic, { type ClientOptions } from '@anthropic-ai/sdk'
-import { randomUUID } from 'crypto'
 import {
   checkAndRefreshOAuthTokenIfNeeded,
   getApiKeyFromApiKeyHelper,
 } from 'src/utils/auth.js'
 import { getUserAgent } from 'src/utils/http.js'
-import { getProxyFetchOptions } from 'src/utils/proxy.js'
 import {
   getIsNonInteractiveSession,
   getSessionId,
 } from '../../bootstrap/state.js'
-import { isDebugToStdErr, logForDebugging } from '../../utils/debug.js'
+import { logForDebugging } from '../../utils/debug.js'
 import { isEnvTruthy } from '../../utils/envUtils.js'
 
 /**
@@ -21,21 +19,6 @@ import { isEnvTruthy } from '../../utils/envUtils.js'
  * - API_TIMEOUT_MS: Request timeout in milliseconds (default: 600000)
  * - ANTHROPIC_CUSTOM_HEADERS: Custom headers (newline-separated, "Name: Value" format)
  */
-
-function createStderrLogger(): ClientOptions['logger'] {
-  return {
-    error: (msg, ...args) =>
-      // biome-ignore lint/suspicious/noConsole:: intentional console output -- SDK logger must use console
-      console.error('[API ERROR]', msg, ...args),
-    // biome-ignore lint/suspicious/noConsole:: intentional console output -- SDK logger must use console
-    warn: (msg, ...args) => console.error('[API WARN]', msg, ...args),
-    // biome-ignore lint/suspicious/noConsole:: intentional console output -- SDK logger must use console
-    info: (msg, ...args) => console.error('[API INFO]', msg, ...args),
-    debug: (msg, ...args) =>
-      // biome-ignore lint/suspicious/noConsole:: intentional console output -- SDK logger must use console
-      console.error('[API DEBUG]', msg, ...args),
-  }
-}
 
 export async function getAnthropicClient({
   apiKey,
@@ -87,21 +70,6 @@ export async function getAnthropicClient({
   logForDebugging('[API:auth] OAuth token check complete')
 
   await configureApiKeyHeaders(defaultHeaders, getIsNonInteractiveSession())
-
-  const resolvedFetch = buildFetch(fetchOverride, source)
-
-  const ARGS = {
-    defaultHeaders,
-    maxRetries,
-    timeout: parseInt(process.env.API_TIMEOUT_MS || String(600 * 1000), 10),
-    dangerouslyAllowBrowser: true,
-    fetchOptions: getProxyFetchOptions({
-      forAnthropicAPI: true,
-    }) as ClientOptions['fetchOptions'],
-    ...(resolvedFetch && {
-      fetch: resolvedFetch,
-    }),
-  }
 
   // Agent routing override: use per-agent provider when configured.
   // Strip auth-related headers to prevent leaking credentials
@@ -170,32 +138,3 @@ function getCustomHeaders(): Record<string, string> {
 }
 
 export const CLIENT_REQUEST_ID_HEADER = 'x-client-request-id'
-
-function buildFetch(
-  fetchOverride: ClientOptions['fetch'],
-  source: string | undefined,
-): ClientOptions['fetch'] {
-  // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
-  const inner = fetchOverride ?? globalThis.fetch
-  return (input, init) => {
-    // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
-    const headers = new Headers(init?.headers)
-    // Generate a client-side request ID so timeouts (which return no server
-    // request ID) can still be correlated with server logs.
-    // Callers that want to track the ID themselves can pre-set the header.
-    if (!headers.has(CLIENT_REQUEST_ID_HEADER)) {
-      headers.set(CLIENT_REQUEST_ID_HEADER, randomUUID())
-    }
-    try {
-      // eslint-disable-next-line eslint-plugin-n/no-unsupported-features/node-builtins
-      const url = input instanceof Request ? input.url : String(input)
-      const id = headers.get(CLIENT_REQUEST_ID_HEADER)
-      logForDebugging(
-        `[API REQUEST] ${new URL(url).pathname}${id ? ` ${CLIENT_REQUEST_ID_HEADER}=${id}` : ''} source=${source ?? 'unknown'}`,
-      )
-    } catch {
-      // never let logging crash the fetch
-    }
-    return inner(input, { ...init, headers })
-  }
-}

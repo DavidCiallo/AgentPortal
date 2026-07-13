@@ -9,10 +9,6 @@ import type {
 import type { PermissionMode } from '../../types/permissions.js'
 import { createUserMessage } from '../messages.js'
 import { startInteractionSpan } from '../telemetry/sessionTracing.js'
-import {
-  matchesKeepGoingKeyword,
-  matchesNegativeKeyword,
-} from '../userPromptKeywords.js'
 
 export function processTextPrompt(
   input: string | Array<ContentBlockParam>,
@@ -41,9 +37,6 @@ export function processTextPrompt(
   // For array input, use the LAST text block: createUserContent pushes the
   // user's message last (after any <ide_selection>/attachment context blocks),
   // so .findLast gets the actual prompt. userPromptText (first block) is kept
-  const isNegative = matchesNegativeKeyword(userPromptText)
-  const isKeepGoing = matchesKeepGoingKeyword(userPromptText)
-
   // If we have pasted images, create a message with image content
   if (imageContentBlocks.length > 0) {
     // Build content: text first, then images below

@@ -2,7 +2,6 @@
 import { getGlobalConfig } from './config.js'
 import { isEnvTruthy } from './envUtils.js'
 import { getCanonicalName } from './model/model.js'
-import { getModelCapability } from './model/modelCapabilities.js'
 
 // Model context window size (200k tokens for all models right now)
 export const MODEL_CONTEXT_WINDOW_DEFAULT = 200_000
@@ -14,10 +13,6 @@ export const OPENAI_FALLBACK_CONTEXT_WINDOW = 128_000
 
 // Maximum output tokens for compact operations
 export const COMPACT_MAX_OUTPUT_TOKENS = 20_000
-
-// Default max output tokens
-const MAX_OUTPUT_TOKENS_DEFAULT = 32_000
-const MAX_OUTPUT_TOKENS_UPPER_LIMIT = 64_000
 
 // Capped default for slot-reservation optimization. BQ p99 output = 4,911
 // tokens, so 32k/64k defaults over-reserve 8-16× slot capacity. With the cap
@@ -134,10 +129,6 @@ export function getModelMaxOutputTokens(model: string): {
   default: number
   upperLimit: number
 } {
-  let defaultTokens: number
-  let upperLimit: number
-
-
     return { default: 128_000, upperLimit:128_000 }
 }
 

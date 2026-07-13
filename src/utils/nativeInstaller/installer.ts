@@ -465,7 +465,6 @@ async function updateLatest(
   lockFailed?: boolean
   lockHolderPid?: number
 }> {
-  const startTime = Date.now()
   let version = await getLatestVersion(channelOrVersion)
   const { executable: executablePath } = getBaseDirectories()
 
@@ -507,14 +506,9 @@ async function updateLatest(
     return { success: true, latestVersion: version }
   }
 
-  // Track if we're actually installing or just symlinking
-  let wasNewInstall = false
-  let latencyMs: number
-
   if (isEnvTruthy(process.env.ENABLE_LOCKLESS_UPDATES)) {
     // Lockless: rely on atomic operations, errors propagate
-    wasNewInstall = await performVersionUpdate(version, forceReinstall)
-    latencyMs = Date.now() - startTime
+    await performVersionUpdate(version, forceReinstall)
   } else {
     // Lock-based updates
     const { installPath } = await getVersionPaths(version)
@@ -526,12 +520,10 @@ async function updateLatest(
     const lockAcquired = await tryWithVersionLock(
       installPath,
       async () => {
-        wasNewInstall = await performVersionUpdate(version, forceReinstall)
+        await performVersionUpdate(version, forceReinstall)
       },
       3, // retries
     )
-
-    latencyMs = Date.now() - startTime
 
     // Lock acquisition failed - get lock holder PID for error message
     if (!lockAcquired) {

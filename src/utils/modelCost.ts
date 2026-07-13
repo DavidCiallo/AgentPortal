@@ -1,5 +1,4 @@
 import type { BetaUsage as Usage } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
-import type { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from 'src/services/analytics/index.js'
 import { isFastModeEnabled } from './fastMode.js'
 import {
   CLAUDE_3_5_HAIKU_CONFIG,

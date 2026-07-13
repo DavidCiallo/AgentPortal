@@ -306,9 +306,6 @@ export function initExtractMemories(): void {
    *  considers messages added since the previous extraction. */
   let lastMemoryMessageUuid: string | undefined
 
-  /** One-shot flag: once we log that the gate is disabled, don't repeat. */
-  let hasLoggedGateFailure = false
-
   /** True while runExtraction is executing — prevents overlapping runs. */
   let inProgress = false
 

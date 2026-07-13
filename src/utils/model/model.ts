@@ -7,9 +7,6 @@
  */
 import { getMainLoopModelOverride } from '../../bootstrap/state.js'
 import {
-  isClaudeAISubscriber,
-} from '../auth.js'
-import {
   has1mContext,
   modelSupports1M,
 } from '../context.js'
@@ -19,7 +16,6 @@ import { getSettings_DEPRECATED } from '../settings/settings.js'
 import type { PermissionMode } from '../permissions/PermissionMode.js'
 import { isModelAllowed } from './modelAllowlist.js'
 import { type ModelAlias, isModelAlias } from './aliases.js'
-import { resolveAntModel } from './antModels.js'
 import { capitalize } from '../stringUtils.js'
 
 export type ModelShortName = string
@@ -325,15 +321,6 @@ export function getPublicModelDisplayName(model: ModelName): string | null {
   return null
 }
 
-function maskModelCodename(baseName: string): string {
-  // Mask only the first dash-separated segment (the codename), preserve the rest
-  // e.g. capybara-v2-fast → cap*****-v2-fast
-  const [codename = '', ...rest] = baseName.split('-')
-  const masked =
-    codename.slice(0, 3) + '*'.repeat(Math.max(0, codename.length - 3))
-  return [masked, ...rest].join('-')
-}
-
 export function renderModelName(model: ModelName): string {
   const publicName = getPublicModelDisplayName(model)
   if (publicName) {
@@ -446,17 +433,6 @@ export function resolveSkillModelOverride(
     return skillModel + '[1m]'
   }
   return skillModel
-}
-
-const LEGACY_OPUS_FIRSTPARTY = [
-  'claude-opus-4-20250514',
-  'claude-opus-4-1-20250805',
-  'claude-opus-4-0',
-  'claude-opus-4-1',
-]
-
-function isLegacyOpusFirstParty(model: string): boolean {
-  return LEGACY_OPUS_FIRSTPARTY.includes(model)
 }
 
 /**

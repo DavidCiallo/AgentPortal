@@ -473,10 +473,6 @@ export function useManageMCPConnections(
             // names are MCP-server-name tier; those are opt-in-only elsewhere
             // (see isAnalyticsToolDetailsLoggingEnabled in metadata.ts) and
             // stay unlogged here. is_dev/entry_kind segment the rest.
-            const pluginId =
-              entry?.kind === 'plugin'
-                ? (`${entry.name}@${entry.marketplace}` as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS)
-                : undefined
             // Skip capability-miss — every non-channel MCP server trips it.
             if (gate.action === 'register' || gate.kind !== 'capability') {
             }
@@ -601,7 +597,6 @@ export function useManageMCPConnections(
                   )
                   fetchToolsForClient.cache.delete(client.name)
                   const newTools = await fetchToolsForClient(client)
-                  const newCount = newTools.length
                   if (previousToolsPromise) {
                     previousToolsPromise.then(
                       (previousTools: Tool[]) => {

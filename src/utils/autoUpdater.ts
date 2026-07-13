@@ -11,9 +11,8 @@ import { getClaudeConfigHomeDir } from './envUtils.js'
 import { ClaudeError, getErrnoCode, isENOENT } from './errors.js'
 import { execFileNoThrowWithCwd } from './execFileNoThrow.js'
 import { getFsImplementation } from './fsOperations.js'
-import { gracefulShutdownSync } from './gracefulShutdown.js'
 import { logError } from './log.js'
-import { gte, lt } from './semver.js'
+import { gte } from './semver.js'
 import { getInitialSettings } from './settings/settings.js'
 import {
   filterClaudeAliases,

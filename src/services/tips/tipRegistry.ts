@@ -1,5 +1,4 @@
 import chalk from 'chalk'
-import { logForDebugging } from 'src/utils/debug.js'
 import { fileHistoryEnabled } from 'src/utils/fileHistory.js'
 import {
   getInitialSettings,
@@ -33,7 +32,6 @@ import {
 } from '../../utils/ide.js'
 import {
   getMainLoopModel,
-  getUserSpecifiedModelSetting,
 } from '../../utils/model/model.js'
 import { getPlatform } from '../../utils/platform.js'
 import { isPluginInstalled } from '../../utils/plugins/installedPluginsManager.js'

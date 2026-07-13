@@ -35,7 +35,7 @@ import {
   PROMPT_TOO_LONG_ERROR_MESSAGE,
   isPromptTooLongMessage,
 } from './services/api/errors.js'
-import { logAntError, logForDebugging } from './utils/debug.js'
+import { logAntError } from './utils/debug.js'
 import {
   createUserMessage,
   createUserInterruptionMessage,
@@ -43,7 +43,6 @@ import {
   createSystemMessage,
   createAssistantAPIErrorMessage,
   getMessagesAfterCompactBoundary,
-  createMicrocompactBoundaryMessage,
 } from './utils/messages.js'
 import { prependUserContext, appendSystemContext } from './utils/api.js'
 import {
@@ -55,9 +54,6 @@ import {
 /* eslint-disable @typescript-eslint/no-require-imports */
 const skillPrefetch = feature('EXPERIMENTAL_SKILL_SEARCH')
   ? (require('./services/skillSearch/prefetch.js') as typeof import('./services/skillSearch/prefetch.js'))
-  : null
-const jobClassifier = feature('TEMPLATES')
-  ? (require('./jobs/classifier.js') as typeof import('./jobs/classifier.js'))
   : null
 /* eslint-enable @typescript-eslint/no-require-imports */
 import {
@@ -92,7 +88,6 @@ import { buildQueryConfig } from './query/config.js'
 import { productionDeps, type QueryDeps } from './query/deps.js'
 import type { Terminal, Continue } from './query/transitions.js'
 import { feature } from 'bun:bundle'
-import { count } from './utils/array.js'
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const snipModule = feature('HISTORY_SNIP')
@@ -334,9 +329,6 @@ async function* queryLoop(
           depth: 0,
         }
 
-    const queryChainIdForAnalytics =
-      queryTracking.chainId as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS
-
     toolUseContext = {
       ...toolUseContext,
       queryTracking,
@@ -405,9 +397,6 @@ async function* queryLoop(
     // For cached microcompact (cache editing), defer boundary message until after
     // the API response so we can use actual cache_deleted_input_tokens.
     // Gated behind feature() so the string is eliminated from external builds.
-    const pendingCacheEdits = feature('CACHED_MICROCOMPACT')
-      ? microcompactResult.compactionInfo?.pendingCacheEdits
-      : undefined
     queryCheckpoint('query_microcompact_end')
 
     // Project the collapsed context view and maybe commit more collapses.
@@ -1386,13 +1375,6 @@ async function* queryLoop(
       }
       removeFromQueue(consumedCommands)
     }
-
-    // Instrumentation: Track file change attachments after they're added
-    const fileChangeAttachmentCount = count(
-      toolResults,
-      tr =>
-        tr.type === 'attachment' && tr.attachment.type === 'edited_text_file',
-    )
 
     // Refresh tools between turns so newly-connected MCP servers become available
     if (updatedToolUseContext.options.refreshTools) {

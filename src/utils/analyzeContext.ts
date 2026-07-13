@@ -27,7 +27,6 @@ import {
   type ToolPermissionContext,
   type Tools,
   type ToolUseContext,
-  toolMatchesName,
 } from '../Tool.js'
 import type {
   AgentDefinition,
@@ -927,13 +926,11 @@ export async function analyzeContextUsage(
 
   // Critical operations that should not fail due to skills
   const [
-    { systemPromptTokens, systemPromptSections },
+    { systemPromptTokens },
     { claudeMdTokens, memoryFileDetails },
     {
       builtInToolTokens,
-      deferredBuiltinDetails,
       deferredBuiltinTokens,
-      systemToolDetails,
     },
     { mcpToolTokens, mcpToolDetails, deferredToolTokens },
     { agentTokens, agentDetails },

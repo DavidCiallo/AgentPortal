@@ -1104,7 +1104,6 @@ async function cacheMarketplaceFromGit(
   // to the rm+clone fallback.
   const reconcileResult = await reconcileSparseCheckout(cachePath, sparsePaths)
   if (reconcileResult.code === 0) {
-    const pullStarted = performance.now()
     const pullResult = await gitPull(cachePath, ref, {
       disableCredentialHelper: options?.disableCredentialHelper,
       sparsePaths,
@@ -1146,7 +1145,6 @@ async function cacheMarketplaceFromGit(
     onProgress,
     `Cloning repository (timeout: ${timeoutSec}s): ${redactUrlCredentials(gitUrl)}${refMessage}`,
   )
-  const cloneStarted = performance.now()
   const result = await gitClone(gitUrl, cachePath, ref, sparsePaths)
   if (result.code !== 0) {
     // Clean up any partial directory created by the failed clone so the next
@@ -1262,7 +1260,6 @@ async function cacheMarketplaceFromUrl(
   }
 
   let response
-  const fetchStarted = performance.now()
   try {
     response = await axios.get(url, {
       timeout: 10000,

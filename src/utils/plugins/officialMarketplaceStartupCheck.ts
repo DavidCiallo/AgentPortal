@@ -315,8 +315,6 @@ export async function checkAndInstallOfficialMarketplace(): Promise<OfficialMark
 
     // Success
     logForDebugging('Successfully auto-installed official marketplace')
-    const previousRetryCount =
-      config.officialMarketplaceAutoInstallRetryCount || 0
     saveGlobalConfig(current => ({
       ...current,
       officialMarketplaceAutoInstallAttempted: true,

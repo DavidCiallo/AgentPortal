@@ -4,25 +4,22 @@ import {
   checkStatsigFeatureGate_CACHED_MAY_BE_STALE,
   getFeatureValue_CACHED_MAY_BE_STALE,
 } from 'src/services/analytics/growthbook.js'
-import { getIsNonInteractiveSession, getSdkBetas } from '../bootstrap/state.js'
+import { getIsNonInteractiveSession } from '../bootstrap/state.js'
 import {
   CLAUDE_CODE_20250219_BETA_HEADER,
-  CLI_INTERNAL_BETA_HEADER,
   CONTEXT_1M_BETA_HEADER,
   CONTEXT_MANAGEMENT_BETA_HEADER,
   INTERLEAVED_THINKING_BETA_HEADER,
   PROMPT_CACHING_SCOPE_BETA_HEADER,
   REDACT_THINKING_BETA_HEADER,
   STRUCTURED_OUTPUTS_BETA_HEADER,
-  SUMMARIZE_CONNECTOR_TEXT_BETA_HEADER,
-  TOKEN_EFFICIENT_TOOLS_BETA_HEADER,
   TOOL_SEARCH_BETA_HEADER_1P,
   WEB_SEARCH_BETA_HEADER,
 } from '../constants/betas.js'
 import { OAUTH_BETA_HEADER } from '../constants/oauth.js'
 import { isClaudeAISubscriber } from './auth.js'
 import { has1mContext } from './context.js'
-import { isEnvDefinedFalsy, isEnvTruthy } from './envUtils.js'
+import { isEnvTruthy } from './envUtils.js'
 import { getCanonicalName } from './model/model.js'
 import { get3PModelCapabilityOverride } from './model/modelSupportOverrides.js'
 import { getInitialSettings } from './settings/settings.js'
@@ -214,9 +211,6 @@ export const getAllModelBetas = memoize((model: string): string[] => {
   // Strict tool use beta
   const strictToolsEnabled =
     checkStatsigFeatureGate_CACHED_MAY_BE_STALE('tengu_tool_pear')
-  const tokenEfficientToolsEnabled =
-    !strictToolsEnabled &&
-    getFeatureValue_CACHED_MAY_BE_STALE('tengu_amber_json_tools', false)
   if (
     includeFirstPartyOnlyBetas &&
     modelSupportsStructuredOutputs(model) &&

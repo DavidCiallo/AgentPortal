@@ -11,7 +11,6 @@ import {
   setLastClassifierRequests,
 } from '../../bootstrap/state.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
-import type { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from '../../services/analytics/metadata.js'
 import { parsePromptTooLongTokenCounts } from '../../services/api/errors.js'
 import { getDefaultMaxRetries } from '../../services/api/withRetry.js'
 import type { Tool, ToolPermissionContext, Tools } from '../../Tool.js'
@@ -21,11 +20,10 @@ import type {
   YoloClassifierResult,
 } from '../../types/permissions.js'
 import { isDebugMode, logForDebugging } from '../debug.js'
-import { isEnvDefinedFalsy, isEnvTruthy } from '../envUtils.js'
+import { isEnvTruthy } from '../envUtils.js'
 import { errorMessage } from '../errors.js'
 import { lazySchema } from '../lazySchema.js'
 import { extractTextContent } from '../messages.js'
-import { resolveAntModel } from '../model/antModels.js'
 import { getMainLoopModel } from '../model/model.js'
 import { getAutoModeConfig } from '../settings/settings.js'
 import { sideQuery } from '../sideQuery.js'
@@ -1513,7 +1511,6 @@ function logAutoModeOutcome(
     transcriptLimitTokens?: number
   },
 ): void {
-  const { classifierType, failureKind, ...rest } = extra ?? {}
 }
 
 /**

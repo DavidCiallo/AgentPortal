@@ -188,7 +188,6 @@ async function getCommandPrefixImpl(
   }
 
   let preflightCheckTimeoutId: NodeJS.Timeout | undefined
-  const startTime = Date.now()
   let result: CommandPrefixResult | null = null
 
   try {
@@ -239,7 +238,6 @@ async function getCommandPrefixImpl(
 
     // Clear the timeout since the query completed
     clearTimeout(preflightCheckTimeoutId)
-    const durationMs = Date.now() - startTime
 
     const prefix =
       typeof response.message.content === 'string'

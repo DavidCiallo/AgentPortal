@@ -493,9 +493,7 @@ export async function runForkedAgent({
   skipTranscript,
   skipCacheWrite,
 }: ForkedAgentParams): Promise<ForkedAgentResult> {
-  const startTime = Date.now()
   const outputMessages: Message[] = []
-  let totalUsage: { tokens: number, turns: number } = { tokens: 0, turns: 0 }
 
   const {
     systemPrompt,

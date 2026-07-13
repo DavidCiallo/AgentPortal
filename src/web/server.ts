@@ -1,6 +1,6 @@
 import { createServer } from 'node:http'
 import { readFile, readdir, mkdir, stat, unlink } from 'node:fs/promises'
-import { join, extname, basename, resolve, win32 } from 'node:path'
+import { join, extname, resolve, win32 } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
 import { createReadStream, readFileSync } from 'node:fs'
@@ -20,7 +20,6 @@ import {
   loadProfileFile,
   saveProfileFile,
   createProfileFile,
-  type ProfileFile,
   type ProviderProfile,
   type ProfileEnv,
 } from '../utils/providerProfile.js'

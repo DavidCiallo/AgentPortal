@@ -14,7 +14,6 @@ import { getSystemContext, getUserContext } from '../../context.js'
 import type { CanUseToolFn } from '../../types/canUseTool.js'
 import { query } from '../../query.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
-import { getDumpPromptsPath } from '../../services/api/dumpPrompts.js'
 import { cleanupAgentTracking } from '../../services/api/promptCacheBreakDetection.js'
 import {
   connectToServer,
@@ -42,7 +41,6 @@ import type {
 } from '../../types/message.js'
 import { createAttachmentMessage } from '../../utils/attachments.js'
 import { AbortError } from '../../utils/errors.js'
-import { getDisplayPath } from '../../utils/file.js'
 import {
   cloneFileStateCache,
   createFileStateCacheWithSizeLimit,

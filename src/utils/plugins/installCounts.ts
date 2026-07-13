@@ -185,7 +185,6 @@ async function fetchInstallCountsFromGitHub(): Promise<
 > {
   logForDebugging(`Fetching install counts from ${INSTALL_COUNTS_URL}`)
 
-  const started = performance.now()
   try {
     const response = await axios.get<GitHubStatsResponse>(INSTALL_COUNTS_URL, {
       timeout: 10000,

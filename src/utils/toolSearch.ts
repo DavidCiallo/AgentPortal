@@ -25,7 +25,6 @@ import {
   countToolDefinitionTokens,
   TOOL_TOKEN_COUNT_OVERHEAD,
 } from './analyzeContext.js'
-import { count } from './array.js'
 import { getMergedBetas } from './betas.js'
 import { getContextWindowForModel } from './context.js'
 import { logForDebugging } from './debug.js'
@@ -350,8 +349,6 @@ export async function isToolSearchEnabled(
   agents: AgentDefinition[],
   source?: string,
 ): Promise<boolean> {
-  const mcpToolCount = count(tools, t => t.isMcp)
-
   // Helper to log the mode decision event
   function logModeDecision(
     enabled: boolean,

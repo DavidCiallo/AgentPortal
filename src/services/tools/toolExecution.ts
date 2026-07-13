@@ -8,10 +8,7 @@ import {
   extractMcpToolDetails,
   extractSkillName,
   extractToolInputForTelemetry,
-  getFileExtensionForAnalytics,
-  getFileExtensionsFromBashCommand,
   isToolDetailsLoggingEnabled,
-  mcpToolDetailsForAnalytics,
   sanitizeToolNameForAnalytics,
 } from 'src/services/analytics/metadata.js'
 import {
@@ -37,7 +34,6 @@ import { BASH_TOOL_NAME } from '../../tools/BashTool/toolName.js'
 import { FILE_EDIT_TOOL_NAME } from '../../tools/FileEditTool/constants.js'
 import { FILE_READ_TOOL_NAME } from '../../tools/FileReadTool/prompt.js'
 import { FILE_WRITE_TOOL_NAME } from '../../tools/FileWriteTool/prompt.js'
-import { NOTEBOOK_EDIT_TOOL_NAME } from '../../tools/NotebookEditTool/constants.js'
 import { POWERSHELL_TOOL_NAME } from '../../tools/PowerShellTool/toolName.js'
 import { SKILL_TOOL_NAME } from '../../tools/SkillTool/constants.js'
 import { parseGitCommitId } from '../../tools/shared/gitOperationTracking.js'
@@ -69,7 +65,6 @@ import { logError } from '../../utils/log.js'
 import {
   CANCEL_MESSAGE,
   createProgressMessage,
-  createStopHookSummaryMessage,
   createToolResultStopMessage,
   createUserMessage,
   withMemoryCorrectionHint,
@@ -239,10 +234,8 @@ function decisionReasonToOTelSource(
     case 'safetyCheck':
     case 'other':
       return 'config'
-    default: {
-      const _exhaustive: never = reason
+    default:
       return 'config'
-    }
   }
 }
 
@@ -364,7 +357,6 @@ export async function* runToolUse(
 
   // Check if the tool exists
   if (!tool) {
-    const sanitizedToolName = sanitizeToolNameForAnalytics(toolName)
     logForDebugging(`Unknown tool ${toolName}: ${toolUse.id}`)
     yield {
       message: createUserMessage({
@@ -1127,35 +1119,6 @@ async function checkPermissionsAndCallTool(
       : typeof mappedContent === 'string'
         ? mappedContent.length
         : jsonStringify(mappedContent).length
-
-    // Extract file extension for file-related tools
-    let fileExtension: ReturnType<typeof getFileExtensionForAnalytics>
-    if (processedInput && typeof processedInput === 'object') {
-      if (
-        (tool.name === FILE_READ_TOOL_NAME ||
-          tool.name === FILE_EDIT_TOOL_NAME ||
-          tool.name === FILE_WRITE_TOOL_NAME) &&
-        'file_path' in processedInput
-      ) {
-        fileExtension = getFileExtensionForAnalytics(
-          String(processedInput.file_path),
-        )
-      } else if (
-        tool.name === NOTEBOOK_EDIT_TOOL_NAME &&
-        'notebook_path' in processedInput
-      ) {
-        fileExtension = getFileExtensionForAnalytics(
-          String(processedInput.notebook_path),
-        )
-      } else if (tool.name === BASH_TOOL_NAME && 'command' in processedInput) {
-        const bashInput = processedInput as BashToolInput
-        fileExtension = getFileExtensionsFromBashCommand(
-          bashInput.command,
-          bashInput._simulatedSedEdit?.filePath,
-        )
-      }
-    }
-
 
     // Enrich tool parameters with git commit ID from successful git commit output
     if (

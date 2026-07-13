@@ -314,7 +314,6 @@ async function handleShutdownApproval(
     `[SendMessageTool] handleShutdownApproval: teamName=${teamName}, agentId=${agentId}, agentName=${agentName}`,
   )
 
-  let ownPaneId: string | undefined
   let ownBackendType: BackendType | undefined
   if (teamName) {
     const teamFile = await readTeamFileAsync(teamName)

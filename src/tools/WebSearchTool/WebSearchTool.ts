@@ -1,18 +1,13 @@
 import type {
   BetaContentBlock,
-  BetaWebSearchTool20250305,
 } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
 import type { PermissionResult } from 'src/utils/permissions/PermissionResult.js'
 
 import { z } from 'zod/v4'
-import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
 import { buildTool, type ToolDef } from '../../Tool.js'
 import { lazySchema } from '../../utils/lazySchema.js'
 import { logError } from '../../utils/log.js'
-import { createUserMessage } from '../../utils/messages.js'
-import { getSmallFastModel } from '../../utils/model/model.js'
-import { jsonParse, jsonStringify } from '../../utils/slowOperations.js'
-import { asSystemPrompt } from '../../utils/systemPromptType.js'
+import { jsonStringify } from '../../utils/slowOperations.js'
 import { getWebSearchPrompt, WEB_SEARCH_TOOL_NAME } from './prompt.js'
 
 
@@ -37,8 +32,6 @@ const inputSchema = lazySchema(() =>
   }),
 )
 type InputSchema = ReturnType<typeof inputSchema>
-
-type Input = z.infer<InputSchema>
 
 const searchResultSchema = lazySchema(() => {
   const searchHitSchema = z.object({
@@ -106,20 +99,6 @@ function formatProviderOutput(po: ProviderOutput, query: string): Output {
 // ---------------------------------------------------------------------------
 // Native Anthropic path (tightly coupled to SDK)
 // ---------------------------------------------------------------------------
-
-function makeToolSchema(input: Input): BetaWebSearchTool20250305 {
-  return {
-    type: 'web_search_20250305',
-    name: 'web_search',
-    allowed_domains: input.allowed_domains,
-    blocked_domains: input.blocked_domains,
-    max_uses: 8, // Hardcoded to 8 searches maximum
-  }
-}
-
-function isClaudeModel(model: string): boolean {
-  return /claude/i.test(model)
-}
 
 function makeOutputFromSearchResponse(
   result: BetaContentBlock[],

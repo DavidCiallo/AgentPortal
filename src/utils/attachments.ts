@@ -14,7 +14,7 @@ import {
 import { FileTooLargeError, readFileInRange } from './readFileInRange.js'
 import { expandPath } from './path.js'
 import { countCharInString } from './stringUtils.js'
-import { count, uniq } from './array.js'
+import { uniq } from './array.js'
 import { getFsImplementation } from './fsOperations.js'
 import { readdir, stat } from 'fs/promises'
 import type { IDESelection } from '../hooks/useIdeSelection.js'
@@ -33,9 +33,7 @@ import {
 import { getPlanFilePath, getPlan } from './plans.js'
 import { getConnectedIdeName } from './ide.js'
 import {
-  filterInjectedMemoryFiles,
   getManagedAndUserConditionalRules,
-  getMemoryFiles,
   getMemoryFilesForNestedDirectory,
   getConditionalRulesForCwdLevelDirectory,
   type MemoryFileInfo,
@@ -68,7 +66,6 @@ import type {
 } from '@anthropic-ai/sdk/resources/messages.mjs'
 import { maybeResizeAndDownsampleImageBlock } from './imageResizer.js'
 import type { PastedContent } from './config.js'
-import { getGlobalConfig } from './config.js'
 import {
   getDefaultSonnetModel,
   getDefaultHaikuModel,
@@ -77,8 +74,6 @@ import {
 import type { ReadResourceResult } from '@modelcontextprotocol/sdk/types.js'
 // getSkillToolCommands removed (SkillTool deleted)
 import type { Command } from '../types/command.js'
-import uniqBy from 'lodash-es/uniqBy.js'
-import { getProjectRoot } from '../bootstrap/state.js'
 import { formatCommandsWithinBudget } from '../tools/SkillTool/prompt.js'
 import { getContextWindowForModel } from './context.js'
 import type { DiscoverySignal } from '../services/skillSearch/signals.js'
@@ -978,27 +973,10 @@ export async function getAttachments(
 }
 
 async function maybe<A>(label: string, f: () => Promise<A[]>): Promise<A[]> {
-  const startTime = Date.now()
   try {
     const result = await f()
-    const duration = Date.now() - startTime
-    // Log only 5% of events to reduce volume
-    if (Math.random() < 0.05) {
-      // jsonStringify(undefined) returns undefined, so .length would throw
-      const attachmentSizeBytes = result
-        .filter(a => a !== undefined && a !== null)
-        .reduce((total, attachment) => {
-          return total + jsonStringify(attachment).length
-        }, 0)
-
-    }
     return result
   } catch (e) {
-    const duration = Date.now() - startTime
-    // Log only 5% of events to reduce volume
-    if (Math.random() < 0.05) {
-
-    }
     logError(e)
     // For Ant users, log the full error to help with debugging
     logAntError(`Attachment error in ${label}`, e)
@@ -2333,7 +2311,6 @@ export function startRelevantMemoryPrefetch(
   // Chained to the turn-level abort so user Escape cancels the sideQuery
   // immediately, not just on [Symbol.dispose] when queryLoop exits.
   const controller = createChildAbortController(toolUseContext.abortController)
-  const firedAt = Date.now()
   const promise = getRelevantMemoryAttachments(
     input,
     toolUseContext.options.agentDefinitions.activeAgents,
@@ -2610,7 +2587,6 @@ async function getSkillListingAttachments(
     return []
   }
 
-  const cwd = getProjectRoot()
   const localCommands: any[] = [] // SkillTool removed
   let allCommands = localCommands
 
@@ -2994,7 +2970,7 @@ export async function generateFileAttachment(
     const ext = parse(filename).ext.toLowerCase()
     if (!isPDFExtension(ext)) {
       try {
-        const stats = await getFsImplementation().stat(filename)
+        await getFsImplementation().stat(filename)
 
         return null
       } catch {

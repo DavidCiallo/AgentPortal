@@ -5,7 +5,7 @@
  */
 
 import type { SearchInput, SearchProvider } from './types.js'
-import { applyDomainFilters, safeHostname, type ProviderOutput } from './types.js'
+import { safeHostname, type ProviderOutput } from './types.js'
 
 export const exaProvider: SearchProvider = {
   name: 'exa',

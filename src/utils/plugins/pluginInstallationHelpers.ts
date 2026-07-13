@@ -8,7 +8,6 @@
 import { randomBytes } from 'crypto'
 import { rename, rm } from 'fs/promises'
 import { dirname, join, resolve, sep } from 'path'
-import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED } from '../../services/analytics/index.js';
 import { getCwd } from '../cwd.js'
 import { toError } from '../errors.js'
 import { getFsImplementation } from '../fsOperations.js'
@@ -17,7 +16,6 @@ import {
   getSettingsForSource,
   updateSettingsForSource,
 } from '../settings/settings.js'
-import { buildPluginTelemetryFields } from '../telemetry/pluginTelemetry.js'
 import { clearAllCaches } from './cacheUtils.js'
 import {
   formatDependencyCountSuffix,
@@ -29,10 +27,8 @@ import {
   addInstalledPlugin,
   getGitCommitSha,
 } from './installedPluginsManager.js'
-import { getManagedPluginNames } from './managedPlugins.js'
 import { getMarketplaceCacheOnly, getPluginById } from './marketplaceManager.js'
 import {
-  isOfficialMarketplaceName,
   parsePluginIdentifier,
   scopeToSettingSource,
 } from './pluginIdentifier.js'

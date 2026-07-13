@@ -1,7 +1,6 @@
 import type Anthropic from '@anthropic-ai/sdk'
 import type { BetaToolUnion } from '@anthropic-ai/sdk/resources/beta/messages.js'
 import {
-  getLastApiCompletionTimestamp,
   setLastApiCompletionTimestamp,
 } from '../bootstrap/state.js'
 import { STRUCTURED_OUTPUTS_BETA_HEADER } from '../constants/betas.js'
@@ -10,7 +9,6 @@ import {
   getAttributionHeader,
   getCLISyspromptPrefix,
 } from '../constants/system.js'
-import type { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from '../services/analytics/metadata.js'
 import { getAPIMetadata } from '../services/api/claude.js'
 import { getAnthropicClient } from '../services/api/client.js'
 import { getModelBetas, modelSupportsStructuredOutputs } from './betas.js'
@@ -176,7 +174,6 @@ export async function sideQuery(opts: SideQueryOptions): Promise<BetaMessage> {
   }
 
   const normalizedModel = normalizeModelStringForAPI(model)
-  const start = Date.now()
   // biome-ignore lint/plugin: this IS the wrapper that handles OAuth attribution
   const response = await client.beta.messages.create(
     {
@@ -196,10 +193,7 @@ export async function sideQuery(opts: SideQueryOptions): Promise<BetaMessage> {
     { signal },
   )
 
-  const requestId =
-    (response as { _request_id?: string | null })._request_id ?? undefined
   const now = Date.now()
-  const lastCompletion = getLastApiCompletionTimestamp()
 
   setLastApiCompletionTimestamp(now)
 

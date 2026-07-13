@@ -16,7 +16,6 @@ import {
 } from '../types/logs.js'
 import { CACHE_PATHS } from './cachePaths.js'
 import { stripDisplayTags, stripDisplayTagsAllowEmpty } from './displayTags.js'
-import { isEnvTruthy } from './envUtils.js'
 import { toError } from './errors.js'
 import { isEssentialTrafficOnly } from './privacyLevel.js'
 import { jsonParse } from './slowOperations.js'

@@ -3,9 +3,7 @@ import { logForDebugging } from '../debug.js'
 import { updateHooksConfigSnapshot } from '../hooks/hooksConfigSnapshot.js'
 import {
   createDisabledBypassPermissionsContext,
-  findOverlyBroadBashPermissions,
   isBypassPermissionsModeDisabled,
-  removeDangerousPermissions,
   transitionPlanAutoMode,
 } from '../permissions/permissionSetup.js'
 import { syncPermissionRulesFromDisk } from '../permissions/permissions.js'

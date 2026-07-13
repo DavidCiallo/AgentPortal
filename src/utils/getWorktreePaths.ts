@@ -15,8 +15,6 @@ import { gitExe } from './git.js'
  * @returns Array of absolute worktree paths
  */
 export async function getWorktreePaths(cwd: string): Promise<string[]> {
-  const startTime = Date.now()
-
   const { stdout, code } = await execFileNoThrowWithCwd(
     gitExe(),
     ['worktree', 'list', '--porcelain'],
@@ -25,8 +23,6 @@ export async function getWorktreePaths(cwd: string): Promise<string[]> {
       preserveOutputOnError: false,
     },
   )
-
-  const durationMs = Date.now() - startTime
 
   if (code !== 0) {
 

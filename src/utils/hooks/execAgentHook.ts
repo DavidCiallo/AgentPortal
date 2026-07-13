@@ -1,7 +1,6 @@
 import { randomUUID } from 'crypto'
 import type { HookEvent } from 'src/entrypoints/agentSdkTypes.js'
 import { query } from '../../query.js'
-import type { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from '../../services/analytics/metadata.js'
 import type { ToolUseContext } from '../../Tool.js'
 import { type Tool, toolMatchesName } from '../../Tool.js'
 import { SYNTHETIC_OUTPUT_TOOL_NAME } from '../../tools/SyntheticOutputTool/SyntheticOutputTool.js'
@@ -53,7 +52,6 @@ export async function execAgentHook(
   const transcriptPath = toolUseContext.agentId
     ? getAgentTranscriptPath(toolUseContext.agentId)
     : getTranscriptPath()
-  const hookStartTime = Date.now()
   try {
     // Replace $ARGUMENTS with the JSON input
     const processedPrompt = addArgumentsToPrompt(hook.prompt, jsonInput)

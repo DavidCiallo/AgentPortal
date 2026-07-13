@@ -3,12 +3,10 @@ import { writeFile } from 'fs/promises'
 import { z } from 'zod/v4'
 import {
   getAllowedChannels,
-  hasExitedPlanModeInSession,
   setHasExitedPlanMode,
   setNeedsAutoModeExitAttachment,
   setNeedsPlanModeExitAttachment,
 } from '../../bootstrap/state.js'
-import type { AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS } from '../../services/analytics/metadata.js'
 import {
   buildTool,
   type Tool,
@@ -29,7 +27,6 @@ import {
   getPlanFilePath,
   persistFileSnapshotIfRemote,
 } from '../../utils/plans.js'
-import { jsonStringify } from '../../utils/slowOperations.js'
 import { AGENT_TOOL_NAME } from '../AgentTool/constants.js'
 import { EXIT_PLAN_MODE_V2_TOOL_NAME } from './constants.js'
 import { EXIT_PLAN_MODE_V2_TOOL_PROMPT } from './prompt.js'

@@ -263,7 +263,6 @@ function convertMessages(
       // Check for tool_use blocks
       if (Array.isArray(content)) {
         const toolUses = content.filter((b: { type?: string }) => b.type === 'tool_use')
-        const thinkingBlock = content.find((b: { type?: string }) => b.type === 'thinking')
         const textContent = content.filter(
           (b: { type?: string }) => b.type !== 'tool_use' && b.type !== 'thinking',
         )

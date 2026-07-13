@@ -488,8 +488,6 @@ async function downloadMcpb(
     onProgress(`Downloading ${url}...`)
   }
 
-  const started = performance.now()
-  let fetchTelemetryFired = false
   try {
     const response = await axios.get(url, {
       timeout: 120000, // 2 minute timeout
