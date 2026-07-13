@@ -3,8 +3,7 @@ import { join } from 'path'
 import { clearCommandsCache } from '../../commands.js'
 import { clearAllOutputStylesCache } from '../../constants/outputStyles.js'
 import { clearAgentDefinitionsCache } from '../../tools/AgentTool/loadAgentsDir.js'
-// SkillTool removed — no-op prompt cache clear.
-function clearPromptCache(): void { /* no-op */ }
+import { clearPromptCache } from '../../tools/SkillTool/prompt.js'
 import { resetSentSkillNames } from '../attachments.js'
 import { logForDebugging } from '../debug.js'
 import { getErrnoCode } from '../errors.js'
