@@ -5,8 +5,13 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { useNotifications } from 'src/context/notifications.js';
 import { useAppState, useAppStateStore, useSetAppState } from 'src/state/AppState.js';
 import { getSdkBetas, getSessionId, isSessionPersistenceDisabled, setHasExitedPlanMode, setNeedsAutoModeExitAttachment, setNeedsPlanModeExitAttachment } from '../../../bootstrap/state.js';
-import { generateSessionName } from '../../../commands/rename/generateSessionName.js';
-import { launchUltraplan } from '../../../commands/ultraplan.js';
+// generateSessionName and launchUltraplan removed — commands were deleted.
+function generateSessionName(_messages: unknown[], _signal: AbortSignal): Promise<string | null> {
+  return Promise.resolve(null);
+}
+function launchUltraplan(_opts: unknown): Promise<string> {
+  return Promise.resolve('Ultraplan is not available');
+}
 import type { KeyboardEvent } from '../../../ink/events/keyboard-event.js';
 import { Box, Text } from '../../../ink.js';
 import type { AppState } from '../../../state/AppStateStore.js';
@@ -347,7 +352,7 @@ export function ExitPlanModePermissionRequest({
       // Log plan exit event
 
       // Set initial message - REPL will handle context clear and fresh query
-      // Add verification instruction if the feature is enabled
+      // Add verification instruction if the feature is enabled
       const verificationInstruction = undefined === 'true' ? `\n\nIMPORTANT: When you have finished implementing the plan, you MUST call the "VerifyPlanExecution" tool directly (NOT the ${AGENT_TOOL_NAME} tool or an agent) to trigger background verification.` : '';
 
       // Capture the transcript path before context is cleared (session ID will be regenerated)

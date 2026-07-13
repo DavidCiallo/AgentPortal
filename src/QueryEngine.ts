@@ -55,11 +55,12 @@ import {
   type ThinkingConfig,
 } from './utils/thinking.js'
 
-// Lazy: MessageSelector.tsx pulls React/ink; only needed for message filtering at query time
-/* eslint-disable @typescript-eslint/no-require-imports */
-const messageSelector =
-  (): typeof import('src/components/MessageSelector.js') =>
-    require('src/components/MessageSelector.js')
+// Lazy: MessageSelector.tsx pulls React/ink; only needed for message filtering at query time.
+// Use dynamic import() instead of require() to avoid ESM circular-dependency
+// "Requested module is not instantiated yet" errors.
+const messageSelector = async (): Promise<
+  typeof import('src/components/MessageSelector.js')
+> => import('src/components/MessageSelector.js')
 
 import {
   localCommandOutputToSDKAssistantMessage,
@@ -72,7 +73,6 @@ import {
   getScratchpadDir,
   isScratchpadEnabled,
 } from './utils/permissions/filesystem.js'
-/* eslint-enable @typescript-eslint/no-require-imports */
 import {
   handleOrphanedPermission,
   isResultSuccessful,
@@ -417,12 +417,13 @@ export class QueryEngine {
     }
 
     // Filter messages that should be acknowledged after transcript
+    const { selectableUserMessagesFilter } = await messageSelector()
     const replayableMessages = messagesFromUserInput.filter(
       msg =>
         (msg.type === 'user' &&
           !msg.isMeta && // Skip synthetic caveat messages
           !msg.toolUseResult && // Skip tool results (they'll be acked from query)
-          messageSelector().selectableUserMessagesFilter(msg)) || // Skip non-user-authored messages (task notifications, etc.)
+          selectableUserMessagesFilter(msg)) || // Skip non-user-authored messages (task notifications, etc.)
         (msg.type === 'system' && msg.subtype === 'compact_boundary'), // Always ack compact boundaries
     )
     const messagesToAck = replayUserMessages ? replayableMessages : []
