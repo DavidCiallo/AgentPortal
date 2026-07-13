@@ -1,5 +1,5 @@
-import { WebServer } from '../src/web/server.ts'
-import { init } from '../src/entrypoints/init.ts'
+import { WebServer } from '../src/web/server'
+import { init } from '../src/entrypoints/init'
 
 // Polyfill MACRO which is normally injected by the bundler
 Object.assign(globalThis, {

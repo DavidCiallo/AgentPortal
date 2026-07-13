@@ -429,6 +429,7 @@ class SessionRunner {
         } else {
           // console.log('[web] unhandled event:', event)
         }
+        console.log(new Date(), '[web] event:', event.type)
       }
 
       if (!this.interrupted) {
