@@ -10,7 +10,7 @@ import { logMCPError } from '../../utils/log.js'
 import { jsonStringify } from '../../utils/slowOperations.js'
 import { isOutputLineTruncated } from '../../utils/terminal.js'
 import { DESCRIPTION, LIST_MCP_RESOURCES_TOOL_NAME, PROMPT } from './prompt.js'
-import { renderToolResultMessage, renderToolUseMessage } from './UI.js'
+
 
 const inputSchema = lazySchema(() =>
   z.object({
@@ -99,9 +99,7 @@ export const ListMcpResourcesTool = buildTool({
       data: results.flat(),
     }
   },
-  renderToolUseMessage,
   userFacingName: () => 'listMcpResources',
-  renderToolResultMessage,
   isResultTruncated(output: Output): boolean {
     return isOutputLineTruncated(jsonStringify(output))
   },

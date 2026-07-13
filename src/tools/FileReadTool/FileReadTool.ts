@@ -79,14 +79,7 @@ import {
   OFFSET_INSTRUCTION_TARGETED,
   renderPromptTemplate,
 } from './prompt.js'
-import {
-  getToolUseSummary,
-  renderToolResultMessage,
-  renderToolUseErrorMessage,
-  renderToolUseMessage,
-  renderToolUseTag,
-  userFacingName,
-} from './UI.js'
+
 
 // Device files that would hang the process: infinite output or blocking input.
 // Checked by path only (no I/O). Safe devices like /dev/null are intentionally omitted.
@@ -359,11 +352,8 @@ export const FileReadTool = buildTool({
   get outputSchema(): OutputSchema {
     return outputSchema()
   },
-  userFacingName,
-  getToolUseSummary,
-  getActivityDescription(input) {
-    const summary = getToolUseSummary(input)
-    return summary ? `Reading ${summary}` : 'Reading file'
+  getActivityDescription() {
+    return 'Reading file'
   },
   isConcurrencySafe() {
     return true
@@ -398,9 +388,7 @@ export const FileReadTool = buildTool({
       appState.toolPermissionContext,
     )
   },
-  renderToolUseMessage,
-  renderToolUseTag,
-  renderToolResultMessage,
+
   // UI.tsx:140 — ALL types render summary chrome only: "Read N lines",
   // "Read image (42KB)". Never the content itself. The model-facing
   // serialization (below) sends content + CYBER_RISK_MITIGATION_REMINDER
@@ -409,7 +397,7 @@ export const FileReadTool = buildTool({
   extractSearchText() {
     return ''
   },
-  renderToolUseErrorMessage,
+
   async validateInput({ file_path, pages }, toolUseContext: ToolUseContext) {
     // Validate pages parameter (pure string parsing, no I/O)
     if (pages !== undefined) {

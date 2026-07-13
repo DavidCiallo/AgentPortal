@@ -42,15 +42,7 @@ import { matchWildcardPattern } from '../../utils/permissions/shellRuleMatching.
 import { FILE_UNEXPECTEDLY_MODIFIED_ERROR } from '../FileEditTool/constants.js'
 import { gitDiffSchema, hunkSchema } from '../FileEditTool/types.js'
 import { FILE_WRITE_TOOL_NAME, getWriteToolDescription } from './prompt.js'
-import {
-  getToolUseSummary,
-  isResultTruncated,
-  renderToolResultMessage,
-  renderToolUseErrorMessage,
-  renderToolUseMessage,
-  renderToolUseRejectedMessage,
-  userFacingName,
-} from './UI.js'
+
 
 const inputSchema = lazySchema(() =>
   z.strictObject({
@@ -98,17 +90,13 @@ export const FileWriteTool = buildTool({
   async description() {
     return 'Write a file to the local filesystem.'
   },
-  userFacingName,
-  getToolUseSummary,
-  getActivityDescription(input) {
-    const summary = getToolUseSummary(input)
-    return summary ? `Writing ${summary}` : 'Writing file'
+  getActivityDescription() {
+    return 'Writing file'
   },
   async prompt() {
     return getWriteToolDescription()
   },
-  renderToolUseMessage,
-  isResultTruncated,
+
   get inputSchema(): InputSchema {
     return inputSchema()
   },
@@ -139,9 +127,7 @@ export const FileWriteTool = buildTool({
       appState.toolPermissionContext,
     )
   },
-  renderToolUseRejectedMessage,
-  renderToolUseErrorMessage,
-  renderToolResultMessage,
+
   extractSearchText() {
     // Transcript render shows either content (create, via HighlightedCode)
     // or a structured diff (update). The heuristic's 'content' allowlist key

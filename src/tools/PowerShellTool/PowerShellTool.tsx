@@ -33,7 +33,7 @@ import { TaskOutput } from '../../utils/task/TaskOutput.js';
 import { isOutputLineTruncated } from '../../utils/terminal.js';
 import { buildLargeToolResultMessage, ensureToolResultsDir, generatePreview, getToolResultPath, PREVIEW_SIZE_BYTES } from '../../utils/toolResultStorage.js';
 import { shouldUseSandbox } from '../BashTool/shouldUseSandbox.js';
-import { BackgroundHint } from '../BashTool/UI.js';
+
 import { buildImageToolResult, isImageOutput, resetCwdIfOutsideProject, resizeShellImageOutput, stdErrAppendShellResetMessage, stripEmptyLines } from '../BashTool/utils.js';
 import { trackGitOperations } from '../shared/gitOperationTracking.js';
 import { interpretCommandResult } from './commandSemantics.js';
@@ -41,7 +41,7 @@ import { powershellToolHasPermission } from './powershellPermissions.js';
 import { getDefaultTimeoutMs, getMaxTimeoutMs, getPrompt } from './prompt.js';
 import { hasSyncSecurityConcerns, isReadOnlyCommand, resolveToCanonical } from './readOnlyValidation.js';
 import { POWERSHELL_TOOL_NAME } from './toolName.js';
-import { renderToolResultMessage, renderToolUseErrorMessage, renderToolUseMessage, renderToolUseProgressMessage, renderToolUseQueuedMessage } from './UI.js';
+
 
 // Never use os.EOL for terminal output — \r\n on Windows breaks Ink rendering
 const EOL = '\n';
@@ -374,11 +374,7 @@ export const PowerShellTool = buildTool({
   async checkPermissions(input: PowerShellToolInput, context: Parameters<Tool['checkPermissions']>[1]): Promise<PermissionResult> {
     return await powershellToolHasPermission(input, context);
   },
-  renderToolUseMessage,
-  renderToolUseProgressMessage,
-  renderToolUseQueuedMessage,
-  renderToolResultMessage,
-  renderToolUseErrorMessage,
+
   mapToolResultToToolResultBlockParam({
     interrupted,
     stdout,
@@ -955,7 +951,7 @@ async function* runPowerShellCommand({
           }, setAppState, toolUseId);
         }
         setToolJSX({
-          jsx: <BackgroundHint />,
+          jsx: null,
           shouldHidePromptInput: false,
           shouldContinueAnimation: true,
           showSpinner: true

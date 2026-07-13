@@ -36,7 +36,6 @@ import { getTaskOutputPath } from '../../utils/task/diskOutput.js';
 import { TaskOutput } from '../../utils/task/TaskOutput.js';
 import { isOutputLineTruncated } from '../../utils/terminal.js';
 import { buildLargeToolResultMessage, ensureToolResultsDir, generatePreview, getToolResultPath, PREVIEW_SIZE_BYTES } from '../../utils/toolResultStorage.js';
-import { userFacingName as fileEditUserFacingName } from '../FileEditTool/UI.js';
 import { trackGitOperations } from '../shared/gitOperationTracking.js';
 import { bashToolHasPermission, commandHasAnyCd, matchWildcardPattern, permissionRuleExtractPrefix } from './bashPermissions.js';
 import { interpretCommandResult } from './commandSemantics.js';
@@ -45,7 +44,6 @@ import { checkReadOnlyConstraints } from './readOnlyValidation.js';
 import { parseSedEditCommand } from './sedEditParser.js';
 import { shouldUseSandbox } from './shouldUseSandbox.js';
 import { BASH_TOOL_NAME } from './toolName.js';
-import { BackgroundHint, renderToolResultMessage, renderToolUseErrorMessage, renderToolUseMessage, renderToolUseProgressMessage, renderToolUseQueuedMessage } from './UI.js';
 import { buildImageToolResult, isImageOutput, resetCwdIfOutsideProject, resizeShellImageOutput, stdErrAppendShellResetMessage, stripEmptyLines } from './utils.js';
 const EOL = '\n';
 
@@ -483,20 +481,6 @@ export const BashTool = buildTool({
     if (!input) {
       return 'Bash';
     }
-    // Render sed in-place edits as file edits
-    if (input.command) {
-      const sedInfo = parseSedEditCommand(input.command);
-      if (sedInfo) {
-        return fileEditUserFacingName({
-          file_path: sedInfo.filePath,
-          old_string: 'x'
-        });
-      }
-    }
-    // Env var FIRST: shouldUseSandbox → splitCommand_DEPRECATED → shell-quote's
-    // `new RegExp` per call. userFacingName runs per-render for every bash
-    // message in history; with ~50 msgs + one slow-to-tokenize command, this
-    // exceeds the shimmer tick → transition abort → infinite retry (#21605).
     return isEnvTruthy(process.env.CLAUDE_CODE_BASH_SANDBOX_SHOW_INDICATOR) && shouldUseSandbox(input) ? 'SandboxedBash' : 'Bash';
   },
   getToolUseSummary(input) {
@@ -537,10 +521,6 @@ export const BashTool = buildTool({
   async checkPermissions(input, context): Promise<PermissionResult> {
     return bashToolHasPermission(input, context);
   },
-  renderToolUseMessage,
-  renderToolUseProgressMessage,
-  renderToolUseQueuedMessage,
-  renderToolResultMessage,
   // BashToolResultMessage shows <OutputLine content={stdout}> + stderr.
   // UI never shows persistedOutputPath wrapper, backgroundInfo — those are
   // model-facing (mapToolResult... below).
@@ -820,7 +800,6 @@ export const BashTool = buildTool({
       data
     };
   },
-  renderToolUseErrorMessage,
   isResultTruncated(output: Out): boolean {
     return isOutputLineTruncated(output.stdout) || isOutputLineTruncated(output.stderr);
   }
@@ -1114,7 +1093,7 @@ async function* runShellCommand({
           }, setAppState, toolUseId);
         }
         setToolJSX({
-          jsx: <BackgroundHint />,
+          jsx: null,
           shouldHidePromptInput: false,
           shouldContinueAnimation: true,
           showSpinner: true

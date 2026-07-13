@@ -611,7 +611,7 @@ export type Tool<
    * the message as soon as possible, possibly before tool parameters have fully
    * streamed in.
    */
-  renderToolUseMessage(
+  renderToolUseMessage?(
     input: Partial<z.infer<Input>>,
     options: { theme: ThemeName; verbose: boolean; commands?: Command[] },
   ): React.ReactNode

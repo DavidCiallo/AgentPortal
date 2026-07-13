@@ -17,7 +17,7 @@ import {
 } from '../../utils/worktree.js'
 import { ENTER_WORKTREE_TOOL_NAME } from './constants.js'
 import { getEnterWorktreeToolPrompt } from './prompt.js'
-import { renderToolResultMessage, renderToolUseMessage } from './UI.js'
+
 
 const inputSchema = lazySchema(() =>
   z.strictObject({
@@ -71,8 +71,7 @@ export const EnterWorktreeTool: Tool<InputSchema, Output> = buildTool({
   toAutoClassifierInput(input) {
     return input.name ?? ''
   },
-  renderToolUseMessage,
-  renderToolResultMessage,
+
   async call(input) {
     // Validate not already in a worktree created by this session
     if (getCurrentWorktreeSession()) {

@@ -33,11 +33,7 @@ import { jsonStringify } from '../../utils/slowOperations.js'
 import { AGENT_TOOL_NAME } from '../AgentTool/constants.js'
 import { EXIT_PLAN_MODE_V2_TOOL_NAME } from './constants.js'
 import { EXIT_PLAN_MODE_V2_TOOL_PROMPT } from './prompt.js'
-import {
-  renderToolResultMessage,
-  renderToolUseMessage,
-  renderToolUseRejectedMessage,
-} from './UI.js'
+
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const autoModeStateModule = feature('TRANSCRIPT_CLASSIFIER')
@@ -204,9 +200,7 @@ export const ExitPlanModeV2Tool: Tool<InputSchema, Output> = buildTool({
       updatedInput: input,
     }
   },
-  renderToolUseMessage,
-  renderToolResultMessage,
-  renderToolUseRejectedMessage,
+
   async call(input, context) {
     const isAgent = !!context.agentId
 

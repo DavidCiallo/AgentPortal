@@ -12,11 +12,7 @@ import { prepareContextForPlanMode } from '../../utils/permissions/permissionSet
 import { isPlanModeInterviewPhaseEnabled } from '../../utils/planModeV2.js'
 import { ENTER_PLAN_MODE_TOOL_NAME } from './constants.js'
 import { getEnterPlanModeToolPrompt } from './prompt.js'
-import {
-  renderToolResultMessage,
-  renderToolUseMessage,
-  renderToolUseRejectedMessage,
-} from './UI.js'
+
 
 const inputSchema = lazySchema(() =>
   z.strictObject({
@@ -71,9 +67,7 @@ export const EnterPlanModeTool: Tool<InputSchema, Output> = buildTool({
   isReadOnly() {
     return true
   },
-  renderToolUseMessage,
-  renderToolResultMessage,
-  renderToolUseRejectedMessage,
+
   async call(_input, context) {
     if (context.agentId) {
       throw new Error('EnterPlanMode tool cannot be used in agent contexts')

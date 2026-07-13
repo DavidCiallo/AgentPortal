@@ -58,13 +58,7 @@ import {
 } from '../utils.js'
 import { SKILL_TOOL_NAME } from './constants.js'
 import { getPrompt } from './prompt.js'
-import {
-  renderToolResultMessage,
-  renderToolUseErrorMessage,
-  renderToolUseMessage,
-  renderToolUseProgressMessage,
-  renderToolUseRejectedMessage,
-} from './UI.js'
+
 
 /**
  * Gets all commands including MCP skills/prompts from AppState.
@@ -662,11 +656,7 @@ export const SkillTool: Tool<InputSchema, Output, Progress> = buildTool({
     }
   },
 
-  renderToolResultMessage,
-  renderToolUseMessage,
-  renderToolUseProgressMessage,
-  renderToolUseRejectedMessage,
-  renderToolUseErrorMessage,
+
 } satisfies ToolDef<InputSchema, Output, Progress>)
 
 // Allowlist of PromptCommand property keys that are safe and don't require permission.

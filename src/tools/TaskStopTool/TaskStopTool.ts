@@ -5,7 +5,7 @@ import { stopTask } from '../../tasks/stopTask.js'
 import { lazySchema } from '../../utils/lazySchema.js'
 import { jsonStringify } from '../../utils/slowOperations.js'
 import { DESCRIPTION, TASK_STOP_TOOL_NAME } from './prompt.js'
-import { renderToolResultMessage, renderToolUseMessage } from './UI.js'
+
 
 const inputSchema = lazySchema(() =>
   z.strictObject({
@@ -102,8 +102,7 @@ export const TaskStopTool = buildTool({
       content: jsonStringify(output),
     }
   },
-  renderToolUseMessage,
-  renderToolResultMessage,
+
   async call(
     { task_id, shell_id },
     { getAppState, setAppState, abortController },

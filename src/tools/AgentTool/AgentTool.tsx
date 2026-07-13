@@ -36,7 +36,7 @@ import { getAssistantMessageContentLength } from '../../utils/tokens.js';
 import { createAgentId } from '../../utils/uuid.js';
 import { createAgentWorktree, hasWorktreeChanges, removeAgentWorktree } from '../../utils/worktree.js';
 import { BASH_TOOL_NAME } from '../BashTool/toolName.js';
-import { BackgroundHint } from '../BashTool/UI.js';
+
 import { FILE_READ_TOOL_NAME } from '../FileReadTool/prompt.js';
 import { spawnTeammate } from '../shared/spawnMultiAgent.js';
 import { setAgentColor } from './agentColorManager.js';
@@ -48,7 +48,7 @@ import type { AgentDefinition } from './loadAgentsDir.js';
 import { filterAgentsByMcpRequirements, hasRequiredMcpServers, isBuiltInAgent } from './loadAgentsDir.js';
 import { getPrompt } from './prompt.js';
 import { runAgent } from './runAgent.js';
-import { renderGroupedAgentToolUse, renderToolResultMessage, renderToolUseErrorMessage, renderToolUseMessage, renderToolUseProgressMessage, renderToolUseRejectedMessage, renderToolUseTag, userFacingName, userFacingNameBackgroundColor } from './UI.js';
+
 
 /* eslint-disable @typescript-eslint/no-require-imports */
 const proactiveModule = feature('PROACTIVE') || feature('KAIROS') ? require('../../proactive/index.js') as typeof import('../../proactive/index.js') : null;
@@ -798,7 +798,7 @@ export const AgentTool = buildTool({
             if (!isBackgroundTasksDisabled && !backgroundHintShown && elapsed >= PROGRESS_THRESHOLD_MS && toolUseContext.setToolJSX) {
               backgroundHintShown = true;
               toolUseContext.setToolJSX({
-                jsx: <BackgroundHint />,
+                jsx: null,
                 shouldHidePromptInput: false,
                 shouldContinueAnimation: true,
                 showSpinner: true
@@ -1174,8 +1174,7 @@ export const AgentTool = buildTool({
   isConcurrencySafe() {
     return true;
   },
-  userFacingName,
-  userFacingNameBackgroundColor,
+
   getActivityDescription(input) {
     return input?.description ?? 'Running task';
   },
@@ -1267,13 +1266,8 @@ duration_ms: ${data.totalDurationMs}</usage>`
       status: string;
     }).status}`);
   },
-  renderToolResultMessage,
-  renderToolUseMessage,
-  renderToolUseTag,
-  renderToolUseProgressMessage,
-  renderToolUseRejectedMessage,
-  renderToolUseErrorMessage,
-  renderGroupedToolUse: renderGroupedAgentToolUse
+
+
 } satisfies ToolDef<InputSchema, Output, Progress>);
 function resolveTeamName(input: {
   team_name?: string;
