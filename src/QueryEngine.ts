@@ -1,5 +1,5 @@
 import { feature } from 'bun:bundle'
-import type { ContentBlockParam } from '@anthropic-ai/sdk/resources/messages.mjs'
+import type { ContentBlockParam, TextBlockParam } from '@anthropic-ai/sdk/resources/messages.mjs'
 import type { SDKMessage, SDKStatus } from './entrypoints/agentSdkTypes.js'
 import { randomUUID } from 'crypto'
 import last from 'lodash-es/last.js'
@@ -7,8 +7,13 @@ import { getSessionId, isSessionPersistenceDisabled, } from 'src/bootstrap/state
 import stripAnsi from 'strip-ansi'
 import type { Command } from './types/command.js'
 import {
+  BASH_STDERR_TAG,
+  BASH_STDOUT_TAG,
   LOCAL_COMMAND_STDERR_TAG,
   LOCAL_COMMAND_STDOUT_TAG,
+  TASK_NOTIFICATION_TAG,
+  TEAMMATE_MESSAGE_TAG,
+  TICK_TAG,
 } from './constants/xml.js'
 import {
   getTotalAPIDuration,
@@ -41,7 +46,7 @@ import { cloneFileStateCache, type FileStateCache, } from './utils/fileStateCach
 import { headlessProfilerCheckpoint } from './utils/headlessProfiler.js'
 import { registerStructuredOutputEnforcement } from './utils/hooks/hookHelpers.js'
 import { getInMemoryErrors } from './utils/log.js'
-import { countToolCalls, SYNTHETIC_MESSAGES } from './utils/messages.js'
+import { countToolCalls, isSyntheticMessage, SYNTHETIC_MESSAGES } from './utils/messages.js'
 import { getMainLoopModel, parseUserSpecifiedModel, } from './utils/model/model.js'
 import { loadAllPluginsCacheOnly } from './utils/plugins/pluginLoader.js'
 import { type ProcessUserInputContext, processUserInput, } from './utils/processUserInput/processUserInput.js'
@@ -55,12 +60,53 @@ import {
   type ThinkingConfig,
 } from './utils/thinking.js'
 
-// Lazy: MessageSelector.tsx pulls React/ink; only needed for message filtering at query time.
-// Use dynamic import() instead of require() to avoid ESM circular-dependency
-// "Requested module is not instantiated yet" errors.
-const messageSelector = async (): Promise<
-  typeof import('src/components/MessageSelector.js')
-> => import('src/components/MessageSelector.js')
+function isTextBlock(block: ContentBlockParam): block is TextBlockParam {
+  return block.type === 'text'
+}
+
+/**
+ * Filter for user messages that are selectable in the message selector UI.
+ * Excludes tool results, synthetic messages, meta messages, compact summaries,
+ * and messages containing command output / task notification tags.
+ * (Extracted from deleted MessageSelector.tsx)
+ */
+export function selectableUserMessagesFilter(message: Message): boolean {
+  if (message.type !== 'user') {
+    return false
+  }
+  if (Array.isArray(message.message.content) && message.message.content[0]?.type === 'tool_result') {
+    return false
+  }
+  if (isSyntheticMessage(message)) {
+    return false
+  }
+  if (message.isMeta) {
+    return false
+  }
+  if (message.isCompactSummary || message.isVisibleInTranscriptOnly) {
+    return false
+  }
+  const content = message.message.content
+  const lastBlock = typeof content === 'string' ? null : content[content.length - 1]
+  const messageText = typeof content === 'string'
+    ? content.trim()
+    : lastBlock && isTextBlock(lastBlock)
+      ? lastBlock.text.trim()
+      : ''
+
+  if (
+    messageText.indexOf(`<${LOCAL_COMMAND_STDOUT_TAG}>`) !== -1 ||
+    messageText.indexOf(`<${LOCAL_COMMAND_STDERR_TAG}>`) !== -1 ||
+    messageText.indexOf(`<${BASH_STDOUT_TAG}>`) !== -1 ||
+    messageText.indexOf(`<${BASH_STDERR_TAG}>`) !== -1 ||
+    messageText.indexOf(`<${TASK_NOTIFICATION_TAG}>`) !== -1 ||
+    messageText.indexOf(`<${TICK_TAG}>`) !== -1 ||
+    messageText.indexOf(`<${TEAMMATE_MESSAGE_TAG}`) !== -1
+  ) {
+    return false
+  }
+  return true
+}
 
 import {
   localCommandOutputToSDKAssistantMessage,
@@ -417,7 +463,6 @@ export class QueryEngine {
     }
 
     // Filter messages that should be acknowledged after transcript
-    const { selectableUserMessagesFilter } = await messageSelector()
     const replayableMessages = messagesFromUserInput.filter(
       msg =>
         (msg.type === 'user' &&
@@ -589,7 +634,7 @@ export class QueryEngine {
 
     if (fileHistoryEnabled() && persistSession) {
       messagesFromUserInput
-        .filter(messageSelector().selectableUserMessagesFilter)
+        .filter(selectableUserMessagesFilter)
         .forEach(message => {
           void fileHistoryMakeSnapshot(
             (updater: (prev: FileHistoryState) => FileHistoryState) => {
