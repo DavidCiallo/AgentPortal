@@ -1,5 +1,5 @@
 import { createServer } from 'node:http'
-import { readFile, readdir, mkdir, stat, unlink } from 'node:fs/promises'
+import { readFile, readdir, mkdir, stat, unlink, appendFile } from 'node:fs/promises'
 import { join, extname, resolve, win32 } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
@@ -35,6 +35,7 @@ import {
   sanitizePath,
 } from '../utils/sessionStoragePortable.js'
 import { listOpenAICompatibleModels } from '../utils/providerDiscovery.js'
+import { getInitialSettings, updateSettingsForSource } from '../utils/settings/settings.js'
 
 /**
  * Format tool use input into human-readable display text (matching CLI output style)
@@ -256,6 +257,10 @@ class SessionRunner {
       projectId: sanitizePath(effectiveCwd),
     })
 
+    // Update the session title in the JSONL file so the sidebar shows
+    // a meaningful label based on the user's message.
+    this.updateSessionTitle(userMessage, effectiveCwd)
+
     // Load history from in-memory cache or JSONL file
     if (this.messages.length === 0) {
       const cached = this.server.getSessionMessages(this.sessionId)
@@ -470,6 +475,33 @@ class SessionRunner {
         void resetSessionFilePointer()
       }
     }
+  }
+
+  /**
+   * Append a custom-title entry to the session JSONL file so the sidebar
+   * shows a meaningful label based on the user's latest message.
+   * Fire-and-forget — errors are logged but never block the round.
+   */
+  private updateSessionTitle(userMessage: string, effectiveCwd: string) {
+    // Clean and truncate the message for use as a title
+    let title = userMessage.replace(/[\r\n]+/g, ' ').trim()
+    // Strip XML-like tags (task-notification, system-reminder, etc.)
+    title = title.replace(/<[^>]+>/g, '').trim()
+    if (!title) return
+    if (title.length > 100) title = title.slice(0, 100).trim() + '\u2026'
+
+    const projectDir = join(getProjectsDir(), sanitizePath(effectiveCwd))
+    const filePath = join(projectDir, `${this.sessionId}.jsonl`)
+
+    const entry = JSON.stringify({
+      type: 'custom-title',
+      customTitle: title,
+      sessionId: this.sessionId,
+    }) + '\n'
+
+    appendFile(filePath, entry, { mode: 0o600 }).catch(err => {
+      console.error('[web] Failed to update session title:', err.message)
+    })
   }
 
   cancel() {
@@ -1163,6 +1195,7 @@ export class WebServer {
 
         if (msg.type === 'get_config') {
           const profile = loadProfileFile({ cwd: process.cwd() })
+          const settings = getInitialSettings()
           send({
             type: 'config',
             profile: profile?.profile || 'openai',
@@ -1170,6 +1203,7 @@ export class WebServer {
             model: profile?.env?.OPENAI_MODEL || '',
             apiKey: profile?.env?.OPENAI_API_KEY ? '••••••••' : '',
             hasApiKey: !!profile?.env?.OPENAI_API_KEY,
+            language: settings.language || 'chinese',
           })
           return
         }
@@ -1237,6 +1271,12 @@ export class WebServer {
             if (env.OPENAI_BASE_URL) process.env.OPENAI_BASE_URL = env.OPENAI_BASE_URL
             if (env.OPENAI_MODEL) process.env.OPENAI_MODEL = env.OPENAI_MODEL
             if (env.OPENAI_API_KEY) process.env.OPENAI_API_KEY = env.OPENAI_API_KEY
+
+            // Save language setting to settings.json
+            if (msg.language !== undefined) {
+              const langValue = msg.language || undefined  // empty string → undefined to delete
+              updateSettingsForSource('userSettings', { language: langValue } as any)
+            }
 
             send({ type: 'config_saved', success: true })
 

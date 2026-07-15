@@ -605,6 +605,7 @@ function loadConfig(config) {
   document.getElementById('baseUrlInput').value = config.baseUrl || ''
   document.getElementById('apiKeyInput').value = config.hasApiKey ? '••••••••' : ''
   document.getElementById('apiKeyInput').placeholder = config.hasApiKey ? '••••••••' : 'sk-...'
+  document.getElementById('languageSelect').value = config.language || 'chinese'
   currentModel = config.model || ''
 
   // Fetch available models from the API and populate the dropdown
@@ -691,6 +692,7 @@ function saveSettings() {
     baseUrl: document.getElementById('baseUrlInput').value,
     model: document.getElementById('modelSelect').value,
     apiKey: document.getElementById('apiKeyInput').value,
+    language: document.getElementById('languageSelect').value || undefined,
   }
   ws.send(JSON.stringify(config))
 }

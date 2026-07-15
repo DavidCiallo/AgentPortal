@@ -88,7 +88,7 @@
     <!-- Settings Modal -->
     <div class="modal-overlay" id="settingsModal">
       <div class="modal">
-        <h2>Provider Settings</h2>
+        <h2>Settings</h2>
         <div class="config-status" id="configStatus"></div>
         <div class="form-group">
           <label for="providerSelect">Provider</label>
@@ -116,6 +116,15 @@
             <button class="btn-refresh" onclick="refreshModels()" title="Refresh model list">↻</button>
           </div>
           <div class="hint">Select the model to use</div>
+        </div>
+        <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
+        <div class="form-group">
+          <label for="languageSelect">Language</label>
+          <select id="languageSelect" autocomplete="off">
+            <option value="chinese">中文</option>
+            <option value="english">English</option>
+          </select>
+          <div class="hint">Response language for the AI</div>
         </div>
         <div class="modal-actions">
           <button class="btn-cancel" onclick="closeSettings()">Cancel</button>
