@@ -213,6 +213,9 @@ class SessionRunner {
   }
 
   private broadcast(data: any) {
+    // Tag every event with the originating session so clients can
+    // discard stale events from a previous session after switching.
+    data._sessionId = this.sessionId
     this.eventBuffer.push(data)
     this.bufferSeq++
     for (const c of this.clients) c.send(data)
@@ -536,14 +539,15 @@ export class WebServer {
   }
 
   /**
-   * Try to claim the active-runner slot. Returns true if this runner can
-   * proceed, false if another runner is already active. This prevents
-   * concurrent rounds across different sessions from corrupting the global
-   * sessionId that recordTranscript relies on.
+   * Try to claim the active-runner slot. If another runner is active,
+   * cancel it and let the new one proceed. This prevents concurrent
+   * rounds from corrupting the global sessionId, while still allowing
+   * the user to freely switch sessions.
    */
   claimActiveRunner(runner: SessionRunner): boolean {
     if (this.activeRunner && this.activeRunner !== runner) {
-      return false
+      this.activeRunner.cancel()
+      this.activeRunner = null
     }
     this.activeRunner = runner
     return true
@@ -1204,6 +1208,7 @@ export class WebServer {
             apiKey: profile?.env?.OPENAI_API_KEY ? '••••••••' : '',
             hasApiKey: !!profile?.env?.OPENAI_API_KEY,
             language: settings.language || 'chinese',
+            cwd: process.cwd(),
           })
           return
         }

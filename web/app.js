@@ -37,6 +37,14 @@ const agentStatusDot = agentStatusEl?.querySelector('.agent-status-dot')
 const agentStatusText = document.getElementById('agentStatusText')
 
 // Theme management
+// Disable the browser's automatic scroll-position restoration on reload.
+// We manage the chat scroll ourselves (scrollToBottom after loading messages)
+// and the browser's restore can race with our rAF-based scroll, leaving the
+// viewport mid-conversation instead of at the latest message.
+if ('scrollRestoration' in history) {
+  history.scrollRestoration = 'manual'
+}
+
 function getTheme() {
   return localStorage.getItem('portal-theme') || 'light'
 }
@@ -282,6 +290,13 @@ function connect() {
 function handleMessage(msg) {
   console.log('[handleMessage] Processing:', msg.type)
   try {
+  // Discard events from a session we've already switched away from.
+  // This prevents stale streaming events from polluting the new session's UI
+  // after the user switches while a round is still in progress.
+  if (msg._sessionId && sessionId && msg._sessionId !== sessionId) {
+    console.log('[handleMessage] Ignoring stale event from session', msg._sessionId, '(current:', sessionId, ')')
+    return
+  }
   switch (msg.type) {
     case 'text_chunk':
       showAgentStatus('Generating', false)
@@ -571,15 +586,20 @@ function isNearBottom() {
 }
 
 function scrollToBottom(force = false) {
-  if (!force && !isNearBottom()) return
   // Defer to next frame so layout (scrollHeight) is settled after
   // large innerHTML rewrites. Setting scrollTop synchronously can
   // land short when the browser hasn't computed the new layout yet,
   // causing a visible flicker/jump.
+  // The isNearBottom check is inside rAF because scrollHeight may
+  // change between the call and the frame (new content inserted by
+  // streaming or tool rendering). Reading it at the last moment
+  // ensures we compare against the final layout height.
   requestAnimationFrame(() => {
+    if (!force && !isNearBottom()) return
     chatContainer.scrollTop = chatContainer.scrollHeight
   })
 }
+
 
 function escapeHtml(text) {
   const div = document.createElement('div')
@@ -607,6 +627,13 @@ function loadConfig(config) {
   document.getElementById('apiKeyInput').placeholder = config.hasApiKey ? '••••••••' : 'sk-...'
   document.getElementById('languageSelect').value = config.language || 'chinese'
   currentModel = config.model || ''
+
+  // Set the project directory from the server's cwd so new sessions are
+  // created in the correct project folder (not the server process cwd).
+  if (config.cwd && !currentProject) {
+    currentProject = config.cwd
+    currentProjectId = currentProject.replace(/[/\\:]/g, '-')
+  }
 
   // Fetch available models from the API and populate the dropdown
   fetchModelsAndPopulateSelect(config.model)
@@ -786,10 +813,15 @@ sendBtn.addEventListener('click', () => {
 })
 
 // Infinite scroll — load older messages when within ~1 viewport height from top
+// Guard flag: set true during initial session restore so the browser's
+// scroll-position restoration doesn't fire spurious loadMoreMessages().
+let suppressScrollLoad = false
 let scrollLoadTimer = null
 chatContainer.addEventListener('scroll', () => {
+  if (suppressScrollLoad) return
   if (scrollLoadTimer) clearTimeout(scrollLoadTimer)
   scrollLoadTimer = setTimeout(() => {
+    if (suppressScrollLoad) return
     if (chatContainer.scrollTop < chatContainer.clientHeight && hasMoreMessages && !isLoadingHistory) {
       loadMoreMessages()
     }
@@ -1066,6 +1098,12 @@ async function loadMoreMessages() {
 
 async function switchSession(projectId, newSessionId, cwd) {
   closeSidebar()
+
+  // Cancel any in-flight round in the old session before switching
+  if (isGenerating && sessionId) {
+    ws.send(JSON.stringify({ type: 'cancel', sessionId }))
+  }
+
   // Clear current chat
   chatContainer.innerHTML = ''
   sessionId = newSessionId
@@ -1146,6 +1184,12 @@ function autoRestoreLastSession() {
     currentProject = cwd || projectId
     currentProjectId = projectId
 
+    // Suppress infinite-scroll handler while restoring — the browser may
+    // fire a scroll event from its saved position before we've rendered,
+    // which would spuriously trigger loadMoreMessages() and push the
+    // viewport away from the bottom.
+    suppressScrollLoad = true
+
     // Fetch and display session messages via HTTP
     fetch(`/api/session-messages?project=${encodeURIComponent(projectId)}&session=${encodeURIComponent(savedSessionId)}&offset=0&limit=40`)
       .then(res => res.json())
@@ -1160,12 +1204,24 @@ function autoRestoreLastSession() {
           messageOffset = data.messages.length
           totalMessages = data.total
           hasMoreMessages = data.hasMore
+
+          // Keep pinned to the bottom while content settles — images,
+          // fonts, and late layout shifts can increase scrollHeight after
+          // the initial paint.
           scrollToBottom(true)
+          const followBottom = new MutationObserver(() => scrollToBottom(true))
+          followBottom.observe(chatContainer, { childList: true, subtree: true })
+          setTimeout(() => followBottom.disconnect(), 3000)
+
           // Subscribe to live updates (catches in-progress rounds)
           subscribeToSession()
         }
       })
       .catch(err => console.error('[autoRestore] Failed to load session:', err))
+      .finally(() => {
+        // Re-enable after the scrollToBottom requestAnimationFrame fires
+        requestAnimationFrame(() => { suppressScrollLoad = false })
+      })
   } catch (err) {
     console.error('[autoRestore] Error:', err)
   }
