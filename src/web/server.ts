@@ -181,6 +181,8 @@ class SessionRunner {
   private appState: AppState = getDefaultAppState()
   private messages: any[] = []
   private interrupted = false
+  /** Set by claimActiveRunner when a newer session takes over. */
+  superseded = false
   private running = false
   private roundStartTime = 0
   private toolNameById = new Map<string, string>()
@@ -213,6 +215,9 @@ class SessionRunner {
   }
 
   private broadcast(data: any) {
+    // Superseded runners should not emit any more events — the new runner
+    // owns the clients now and stale events would confuse the UI.
+    if (this.superseded) return
     // Tag every event with the originating session so clients can
     // discard stale events from a previous session after switching.
     data._sessionId = this.sessionId
@@ -354,7 +359,7 @@ class SessionRunner {
     try {
       for await (const event of generator) {
         lastDataTime = Date.now()
-        if (this.interrupted) {
+        if (this.interrupted || this.superseded) {
           clearInterval(keepaliveTimer)
           break
         }
@@ -468,6 +473,12 @@ class SessionRunner {
       this.running = false
       this.resetBuffer()
 
+      if (this.superseded) {
+        // A newer session has taken over — don't touch the global sessionId
+        // or release the active-runner slot (the new runner owns it now).
+        return
+      }
+
       // Restore the previous global session ID so a concurrent session's
       // in-flight recordTranscript calls aren't stamped with this session's ID.
       // Only restore if nothing else has already switched the session (e.g.
@@ -510,7 +521,11 @@ class SessionRunner {
   cancel() {
     this.interrupted = true
     if (this.engine) this.engine.interrupt()
-    this.broadcast({ type: 'cancelled' })
+    // Don't broadcast 'cancelled' if superseded — the new runner is taking
+    // over and will handle this session's clients.
+    if (!this.superseded) {
+      this.broadcast({ type: 'cancelled' })
+    }
   }
 
 }
@@ -546,6 +561,9 @@ export class WebServer {
    */
   claimActiveRunner(runner: SessionRunner): boolean {
     if (this.activeRunner && this.activeRunner !== runner) {
+      // Mark old runner as superseded BEFORE cancelling so its finally block
+      // knows not to restore the global sessionId (the new runner owns it now).
+      this.activeRunner.superseded = true
       this.activeRunner.cancel()
       this.activeRunner = null
     }
