@@ -4,6 +4,7 @@ import type { logs } from '@opentelemetry/api-logs'
 import type { LoggerProvider } from '@opentelemetry/sdk-logs'
 import type { MeterProvider } from '@opentelemetry/sdk-metrics'
 import type { BasicTracerProvider } from '@opentelemetry/sdk-trace-base'
+import { AsyncLocalStorage } from 'async_hooks'
 import { realpathSync } from 'fs'
 import { cwd } from 'process'
 import type { HookEvent, ModelUsage } from 'src/entrypoints/agentSdkTypes.js'
@@ -216,10 +217,6 @@ type State = {
   // evaluation so mid-session overage flips don't change the cache_control
   // TTL, which would bust the server-side prompt cache.
   promptCache1hEligible: boolean | null
-  // Sticky-on latch for AFK_MODE_BETA_HEADER. Once auto mode is first
-  // activated, keep sending the header for the rest of the session so
-  // Shift+Tab toggles don't bust the ~50-70K token prompt cache.
-  afkModeHeaderLatched: boolean | null
   // Sticky-on latch for FAST_MODE_BETA_HEADER. Once fast mode is first
   // enabled, keep sending the header so cooldown enter/exit doesn't
   // double-bust the prompt cache. The `speed` body param stays dynamic.
@@ -393,7 +390,6 @@ function getInitialState(): State {
     // Prompt cache 1h eligibility (null = not yet evaluated)
     promptCache1hEligible: null,
     // Beta header latches (null = not yet triggered)
-    afkModeHeaderLatched: null,
     fastModeHeaderLatched: null,
     cacheEditingHeaderLatched: null,
     thinkingClearLatched: null,
@@ -410,8 +406,73 @@ function getInitialState(): State {
 // AND ESPECIALLY HERE
 const STATE: State = getInitialState()
 
+/**
+ * Per-async-context session override.  When set (via runWithSessionContext),
+ * getSessionId() and getSessionProjectDir() return the overridden values
+ * instead of the global STATE — allowing multiple SessionRunners to execute
+ * concurrently without corrupting each other's transcript paths.
+ */
+const sessionContextStore = new AsyncLocalStorage<{
+  sessionId: string
+  sessionProjectDir: string | null
+  /** Per-session working directory. When set, getCwdState() returns this
+   *  instead of the global STATE.cwd — preventing concurrent runners from
+   *  stomping on each other's working directory via setCwdState(). */
+  cwd: string | null
+  /** Per-session model override. When set, getMainLoopModelOverride() returns
+   *  this instead of the global STATE.mainLoopModelOverride — preventing
+   *  concurrent runners from corrupting each other's model selection. */
+  modelOverride: ModelSetting | undefined
+  /** Per-session beta header latches. Prevents one runner's cache-key-
+   *  stabilising latch from contaminating another concurrent runner's
+   *  API requests (which would cause 400 errors if the target plan
+   *  doesn't support the latched beta). */
+  betaLatches: {
+    fastMode: boolean | null
+    cacheEditing: boolean | null
+    thinkingClear: boolean | null
+  }
+}>()
+
+/**
+ * Run `fn` with a scoped session context.  Inside `fn`, getSessionId() and
+ * getSessionProjectDir() return the provided values without touching the
+ * global STATE, so multiple runners can coexist safely.
+ *
+ * @param initialCwd  — when provided, getCwdState() inside `fn` returns this
+ *   value (until the runner's shell issues a `cd`).  Prevents one runner's
+ *   setCwdState() from clobbering another concurrent runner's cwd.
+ */
+export function runWithSessionContext<T>(
+  sessionId: string,
+  sessionProjectDir: string | null,
+  fn: () => T | Promise<T>,
+  initialCwd?: string,
+): T | Promise<T> {
+  return sessionContextStore.run(
+    {
+      sessionId,
+      sessionProjectDir,
+      cwd: initialCwd ?? null,
+      modelOverride: undefined,
+      betaLatches: { fastMode: null, cacheEditing: null, thinkingClear: null },
+    },
+    fn,
+  )
+}
+
+/**
+ * Returns true when executing inside a runWithSessionContext scope.
+ * Used by sessionStorage to decide whether to buffer entries (CLI) or
+ * write them directly (web server with concurrent runners).
+ */
+export function isInSessionContext(): boolean {
+  return sessionContextStore.getStore() !== undefined
+}
+
 export function getSessionId(): SessionId {
-  return STATE.sessionId
+  const ctx = sessionContextStore.getStore()
+  return ctx ? (ctx.sessionId as SessionId) : STATE.sessionId
 }
 
 export function regenerateSessionId(
@@ -476,7 +537,8 @@ export const onSessionSwitch = sessionSwitched.subscribe
  * originalCwd). See `switchSession()`.
  */
 export function getSessionProjectDir(): string | null {
-  return STATE.sessionProjectDir
+  const ctx = sessionContextStore.getStore()
+  return ctx ? ctx.sessionProjectDir : STATE.sessionProjectDir
 }
 
 export function getOriginalCwd(): string {
@@ -507,11 +569,20 @@ export function setProjectRoot(cwd: string): void {
 }
 
 export function getCwdState(): string {
-  return STATE.cwd
+  const ctx = sessionContextStore.getStore()
+  return ctx?.cwd ?? STATE.cwd
 }
 
 export function setCwdState(cwd: string): void {
-  STATE.cwd = cwd.normalize('NFC')
+  const normalized = cwd.normalize('NFC')
+  // Update the global state as a fallback for non-session contexts
+  STATE.cwd = normalized
+  // If running inside a session context, also update the per-session cwd
+  // so that concurrent runners don't clobber each other's working directory.
+  const ctx = sessionContextStore.getStore()
+  if (ctx) {
+    ctx.cwd = normalized
+  }
 }
 
 export function getDirectConnectServerUrl(): string | undefined {
@@ -735,8 +806,16 @@ export function getUsageForModel(model: string): ModelUsage | undefined {
 /**
  * Gets the model override set from the --model CLI flag or after the user
  * updates their configured model.
+ *
+ * When called inside a `runWithSessionContext` scope that has set a per-session
+ * model override (via setSessionModelOverride), returns that instead of the
+ * global STATE — preventing concurrent runners from clobbering each other.
  */
 export function getMainLoopModelOverride(): ModelSetting | undefined {
+  const ctx = sessionContextStore.getStore()
+  if (ctx?.modelOverride !== undefined) {
+    return ctx.modelOverride
+  }
   return STATE.mainLoopModelOverride
 }
 
@@ -748,6 +827,23 @@ export function setMainLoopModelOverride(
   model: ModelSetting | undefined,
 ): void {
   STATE.mainLoopModelOverride = model
+}
+
+/**
+ * Set a per-session model override that takes priority over the global
+ * STATE.mainLoopModelOverride when read via getMainLoopModelOverride().
+ *
+ * Must be called inside a `runWithSessionContext` scope.  The override is
+ * automatically discarded when the scope exits (the AsyncLocalStorage store
+ * is garbage-collected).
+ */
+export function setSessionModelOverride(
+  model: ModelSetting | undefined,
+): void {
+  const ctx = sessionContextStore.getStore()
+  if (ctx) {
+    ctx.modelOverride = model
+  }
 }
 
 export function setInitialMainLoopModel(model: ModelSetting): void {
@@ -1533,36 +1629,37 @@ export function setPromptCache1hEligible(eligible: boolean | null): void {
   STATE.promptCache1hEligible = eligible
 }
 
-export function getAfkModeHeaderLatched(): boolean | null {
-  return STATE.afkModeHeaderLatched
-}
-
-export function setAfkModeHeaderLatched(v: boolean): void {
-  STATE.afkModeHeaderLatched = v
-}
-
 export function getFastModeHeaderLatched(): boolean | null {
-  return STATE.fastModeHeaderLatched
+  const ctx = sessionContextStore.getStore()
+  return ctx?.betaLatches.fastMode ?? STATE.fastModeHeaderLatched
 }
 
 export function setFastModeHeaderLatched(v: boolean): void {
   STATE.fastModeHeaderLatched = v
+  const ctx = sessionContextStore.getStore()
+  if (ctx) ctx.betaLatches.fastMode = v
 }
 
 export function getCacheEditingHeaderLatched(): boolean | null {
-  return STATE.cacheEditingHeaderLatched
+  const ctx = sessionContextStore.getStore()
+  return ctx?.betaLatches.cacheEditing ?? STATE.cacheEditingHeaderLatched
 }
 
 export function setCacheEditingHeaderLatched(v: boolean): void {
   STATE.cacheEditingHeaderLatched = v
+  const ctx = sessionContextStore.getStore()
+  if (ctx) ctx.betaLatches.cacheEditing = v
 }
 
 export function getThinkingClearLatched(): boolean | null {
-  return STATE.thinkingClearLatched
+  const ctx = sessionContextStore.getStore()
+  return ctx?.betaLatches.thinkingClear ?? STATE.thinkingClearLatched
 }
 
 export function setThinkingClearLatched(v: boolean): void {
   STATE.thinkingClearLatched = v
+  const ctx = sessionContextStore.getStore()
+  if (ctx) ctx.betaLatches.thinkingClear = v
 }
 
 /**
@@ -1570,10 +1667,15 @@ export function setThinkingClearLatched(v: boolean): void {
  * fresh conversation gets fresh header evaluation.
  */
 export function clearBetaHeaderLatches(): void {
-  STATE.afkModeHeaderLatched = null
   STATE.fastModeHeaderLatched = null
   STATE.cacheEditingHeaderLatched = null
   STATE.thinkingClearLatched = null
+  const ctx = sessionContextStore.getStore()
+  if (ctx) {
+    ctx.betaLatches.fastMode = null
+    ctx.betaLatches.cacheEditing = null
+    ctx.betaLatches.thinkingClear = null
+  }
 }
 
 export function getPromptId(): string | null {

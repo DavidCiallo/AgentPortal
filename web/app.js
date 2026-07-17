@@ -1101,10 +1101,9 @@ async function loadMoreMessages() {
 async function switchSession(projectId, newSessionId, cwd) {
   closeSidebar()
 
-  // Do NOT cancel the old session's in-flight round — it should keep
-  // running in the background.  The server's claimActiveRunner / superseded
-  // mechanism handles the case where the user sends a new message on a
-  // different session (the old round will be superseded at that point).
+  // Do NOT cancel the old session's in-flight round — the server uses
+  // AsyncLocalStorage to scope each runner's session ID, so multiple
+  // sessions can run concurrently without interfering with each other.
 
   // Clear current chat
   chatContainer.innerHTML = ''

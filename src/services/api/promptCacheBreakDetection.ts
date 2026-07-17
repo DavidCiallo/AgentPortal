@@ -44,8 +44,7 @@ type PreviousState = {
   globalCacheStrategy: string
   /** Sorted beta header list. Diffed to show which headers were added/removed. */
   betas: string[]
-  /** AFK_MODE_BETA_HEADER presence — should NOT break cache anymore
-   *  (sticky-on latched in claude.ts). Tracked to verify the fix. */
+  /** Auto mode header presence — no longer sent (AFK beta removed). */
   autoModeActive: boolean
   /** Overage state flip — should NOT break cache anymore (eligibility is
    *  latched session-stable in should1hCacheTTL). Tracked to verify the fix. */

@@ -33,7 +33,7 @@ async function main() {
   }
   await validateProviderEnvOrExit()
   console.log('Provider environment validated successfully.')
-  const port = process.env.WEB_PORT ? parseInt(process.env.WEB_PORT, 10) : 3210
+  const port = process.env.WEB_PORT ? parseInt(process.env.WEB_PORT, 10) : 3211
   const host = process.env.WEB_HOST || '0.0.0.0'
 
   const server = new WebServer({ port, host })

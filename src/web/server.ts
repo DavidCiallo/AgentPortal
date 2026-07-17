@@ -13,8 +13,8 @@ import { getTools } from '../tools.js'
 import { getDefaultAppState } from '../state/AppStateStore.js'
 import { AppState } from '../state/AppState.js'
 import { FileStateCache, READ_FILE_STATE_CACHE_SIZE } from '../utils/fileStateCache.js'
-import { setMainLoopModelOverride, switchSession, getOriginalCwd, getSessionId } from '../bootstrap/state.js'
-import { resetSessionFilePointer } from '../utils/sessionStorage.js'
+import { setSessionModelOverride, runWithSessionContext, getOriginalCwd, getSessionId } from '../bootstrap/state.js'
+
 import { parseUserSpecifiedModel } from '../utils/model/model.js'
 import {
   loadProfileFile,
@@ -181,8 +181,6 @@ class SessionRunner {
   private appState: AppState = getDefaultAppState()
   private messages: any[] = []
   private interrupted = false
-  /** Set by claimActiveRunner when a newer session takes over. */
-  superseded = false
   private running = false
   private roundStartTime = 0
   private toolNameById = new Map<string, string>()
@@ -206,8 +204,10 @@ class SessionRunner {
         c.send(ev)
       }
     }
-    // Tell the newcomer whether a round is already in flight
-    c.send({ type: 'subscribed', sessionId: this.sessionId, running: this.running, roundStartTime: this.roundStartTime })
+    // Tell the newcomer whether a round is already in flight.
+    // Tag with _sessionId so the client-side stale-event filter can
+    // discard it if the user has already switched to another session.
+    c.send({ type: 'subscribed', sessionId: this.sessionId, running: this.running, roundStartTime: this.roundStartTime, _sessionId: this.sessionId })
   }
 
   removeClient(c: Client) {
@@ -215,9 +215,6 @@ class SessionRunner {
   }
 
   private broadcast(data: any) {
-    // Superseded runners should not emit any more events — the new runner
-    // owns the clients now and stale events would confuse the UI.
-    if (this.superseded) return
     // Tag every event with the originating session so clients can
     // discard stale events from a previous session after switching.
     data._sessionId = this.sessionId
@@ -241,12 +238,8 @@ class SessionRunner {
       return
     }
 
-    // Prevent concurrent rounds across different sessions — their
-    // switchSession calls would race on the global sessionId.
-    if (!this.server.claimActiveRunner(this)) {
-      this.broadcast({ type: 'error', message: 'Another session is currently processing a request' })
-      return
-    }
+    // No global lock needed — runWithSessionContext scopes the session ID
+    // per-async-chain, so multiple runners can execute concurrently.
 
     this.running = true
     this.interrupted = false
@@ -295,74 +288,78 @@ class SessionRunner {
       if (profile?.env?.OPENAI_MODEL) resolvedModel = profile.env.OPENAI_MODEL
     }
     if (!resolvedModel && process.env.OPENAI_MODEL) resolvedModel = process.env.OPENAI_MODEL
-    if (resolvedModel) {
-      setMainLoopModelOverride(parseUserSpecifiedModel(resolvedModel))
-    }
 
-    // Save the current global session ID so we can restore it when this round
-    // finishes. Without this, if Session B starts while Session A is still
-    // draining its write queue, B's switchSession overwrites the global ID and
-    // A's fire-and-forget recordTranscript calls stamp messages with B's ID —
-    // writing A's messages into B's transcript.
-    const previousSessionId = getSessionId()
-
-    // Sync global session ID + project dir so the transcript lands in the
-    // exact folder the sidebar reads from: ~/.claude/projects/<sanitizePath(cwd)>.
-    // switchSession's second arg becomes sessionProjectDir, which
-    // getTranscriptPath() uses verbatim (no further sanitization). Passing the
-    // raw cwd would write the transcript into the user's actual project dir
-    // instead of the projects cache — the sidebar would never see it. So pass
-    // the sanitized path under getProjectsDir(), matching what
-    // handleListSessions scans.
+    // Scope the session ID, project dir, and working directory to this
+    // async chain via AsyncLocalStorage so that recordTranscript (called
+    // inside the engine) writes to the correct JSONL — and concurrent
+    // runners each see their own cwd/model without clobbering each other.
     const transcriptProjectDir = join(getProjectsDir(), sanitizePath(effectiveCwd))
-    switchSession(this.sessionId as any, transcriptProjectDir)
-    await resetSessionFilePointer()
 
-    this.engine = new QueryEngine({
-      cwd: this.cwd,
-      tools: getTools(this.appState.toolPermissionContext),
-      commands: [],
-      mcpClients: [],
-      agents: [],
-      ...(this.messages.length > 0 ? { initialMessages: this.messages } : {}),
-      includePartialMessages: true,
-      canUseTool: async (tool, input, _context, _assistantMsg, toolUseID) => {
-        if (toolUseID) this.toolNameById.set(toolUseID, tool.name)
-        this.broadcast({
-          type: 'tool_start',
-          toolName: tool.name,
-          arguments: input,
-          toolUseId: toolUseID,
-        })
-        // Auto-approve all tool calls unconditionally
-        return { behavior: 'allow' }
-      },
-      getAppState: () => this.appState,
-      setAppState: (updater) => { this.appState = updater(this.appState) },
-      readFileCache: this.fileCache,
-      userSpecifiedModel: resolvedModel,
-      fallbackModel: resolvedModel,
-    })
+    // Pass this.cwd as initialCwd so getCwdState() returns the session's
+    // directory instead of the global STATE.cwd (which concurrent runners
+    // may have overwritten).  Shell `cd` commands inside this scope will
+    // update the per-session ALS store via setCwdState().
+    await runWithSessionContext(this.sessionId, transcriptProjectDir, async () => {
+      // Set per-session model override (scoped to this ALS context).
+      // Do NOT call setMainLoopModelOverride() — that mutates the global
+      // singleton, which clobbers concurrent runners' model selection.
+      if (resolvedModel) {
+        setSessionModelOverride(parseUserSpecifiedModel(resolvedModel))
+      }
+      // Ensure the session's cwd is in the allowed working directories so
+      // resetCwdIfOutsideProject() (called after every Bash execution) does
+      // not reset the agent back to the server process's original cwd.
+      const toolPermCtx = { ...this.appState.toolPermissionContext }
+      if (!toolPermCtx.additionalWorkingDirectories.has(this.cwd)) {
+        const dirs = new Map(toolPermCtx.additionalWorkingDirectories)
+        dirs.set(this.cwd, { path: this.cwd, source: 'session' })
+        toolPermCtx.additionalWorkingDirectories = dirs
+      }
+      this.engine = new QueryEngine({
+        cwd: this.cwd,
+        tools: getTools(toolPermCtx),
+        commands: [],
+        mcpClients: [],
+        agents: [],
+        ...(this.messages.length > 0 ? { initialMessages: this.messages } : {}),
+        includePartialMessages: true,
+        canUseTool: async (tool, input, _context, _assistantMsg, toolUseID) => {
+          if (toolUseID) this.toolNameById.set(toolUseID, tool.name)
+          this.broadcast({
+            type: 'tool_start',
+            toolName: tool.name,
+            arguments: input,
+            toolUseId: toolUseID,
+          })
+          // Auto-approve all tool calls unconditionally
+          return { behavior: 'allow' }
+        },
+        getAppState: () => this.appState,
+        setAppState: (updater) => { this.appState = updater(this.appState) },
+        readFileCache: this.fileCache,
+        userSpecifiedModel: resolvedModel,
+        fallbackModel: resolvedModel,
+      })
 
-    let fullText = ''
-    let isThinking = false
-    let currentToolUse: { id: string; name: string; inputJson: string } | null = null
-    let lastDataTime = Date.now()
-    let thinkingTokenEstimate = 0
-    const generator = this.engine.submitMessage(userMessage)
+      let fullText = ''
+      let isThinking = false
+      let currentToolUse: { id: string; name: string; inputJson: string } | null = null
+      let lastDataTime = Date.now()
+      let thinkingTokenEstimate = 0
+      const generator = this.engine.submitMessage(userMessage)
 
-    const keepaliveTimer = setInterval(() => {
-      const idleMs = Date.now() - lastDataTime
-      this.broadcast({ type: 'keepalive', idleMs })
-    }, 3000)
+      const keepaliveTimer = setInterval(() => {
+        const idleMs = Date.now() - lastDataTime
+        this.broadcast({ type: 'keepalive', idleMs })
+      }, 3000)
 
-    try {
-      for await (const event of generator) {
-        lastDataTime = Date.now()
-        if (this.interrupted || this.superseded) {
-          clearInterval(keepaliveTimer)
-          break
-        }
+      try {
+        for await (const event of generator) {
+          lastDataTime = Date.now()
+          if (this.interrupted) {
+            clearInterval(keepaliveTimer)
+            break
+          }
 
         if (event.type === 'stream_event') {
           const delta = event.event
@@ -464,31 +461,16 @@ class SessionRunner {
         this.server.setSessionMessages(this.sessionId, this.messages)
         this.broadcast({ type: 'done', fullText, sessionId: this.sessionId })
       }
-    } catch (err: any) {
-      console.error('[web] runner error:', err.message, err.stack)
-      this.broadcast({ type: 'error', message: err.message || 'Internal error' })
-    } finally {
-      clearInterval(keepaliveTimer)
-      this.engine = null
-      this.running = false
-      this.resetBuffer()
-
-      if (this.superseded) {
-        // A newer session has taken over — don't touch the global sessionId
-        // or release the active-runner slot (the new runner owns it now).
-        return
+      } catch (err: any) {
+        console.error('[web] runner error:', err.message, err.stack)
+        this.broadcast({ type: 'error', message: err.message || 'Internal error' })
+      } finally {
+        clearInterval(keepaliveTimer)
+        this.engine = null
+        this.running = false
+        this.resetBuffer()
       }
-
-      // Restore the previous global session ID so a concurrent session's
-      // in-flight recordTranscript calls aren't stamped with this session's ID.
-      // Only restore if nothing else has already switched the session (e.g.
-      // another SessionRunner's startRound may have set its own ID).
-      this.server.releaseActiveRunner(this)
-      if (getSessionId() === (this.sessionId as any)) {
-        switchSession(previousSessionId as any, null)
-        void resetSessionFilePointer()
-      }
-    }
+    }, this.cwd)
   }
 
   /**
@@ -521,11 +503,7 @@ class SessionRunner {
   cancel() {
     this.interrupted = true
     if (this.engine) this.engine.interrupt()
-    // Don't broadcast 'cancelled' if superseded — the new runner is taking
-    // over and will handle this session's clients.
-    if (!this.superseded) {
-      this.broadcast({ type: 'cancelled' })
-    }
+    this.broadcast({ type: 'cancelled' })
   }
 
 }
@@ -535,10 +513,6 @@ export class WebServer {
   private wss: WebSocketServer
   private sessions: Map<string, SessionData> = new Map()
   private runners: Map<string, SessionRunner> = new Map()
-  /** The SessionRunner currently executing a round, or null. Prevents
-   *  concurrent rounds across different sessions — which would corrupt the
-   *  global sessionId that recordTranscript relies on. */
-  private activeRunner: SessionRunner | null = null
   private webRoot: string
   private port: number
   private host: string
@@ -551,31 +525,6 @@ export class WebServer {
     this.httpServer = createServer(this.handleHttpRequest.bind(this))
     this.wss = new WebSocketServer({ server: this.httpServer })
     this.wss.on('connection', this.handleConnection.bind(this))
-  }
-
-  /**
-   * Try to claim the active-runner slot. If another runner is active,
-   * cancel it and let the new one proceed. This prevents concurrent
-   * rounds from corrupting the global sessionId, while still allowing
-   * the user to freely switch sessions.
-   */
-  claimActiveRunner(runner: SessionRunner): boolean {
-    if (this.activeRunner && this.activeRunner !== runner) {
-      // Mark old runner as superseded BEFORE cancelling so its finally block
-      // knows not to restore the global sessionId (the new runner owns it now).
-      this.activeRunner.superseded = true
-      this.activeRunner.cancel()
-      this.activeRunner = null
-    }
-    this.activeRunner = runner
-    return true
-  }
-
-  /** Release the active-runner slot. Called when a round finishes. */
-  releaseActiveRunner(runner: SessionRunner): void {
-    if (this.activeRunner === runner) {
-      this.activeRunner = null
-    }
   }
 
   private async handleHttpRequest(req: any, res: any) {

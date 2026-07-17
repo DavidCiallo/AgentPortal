@@ -23,6 +23,7 @@ import {
   getPromptId,
   getSessionId,
   getSessionProjectDir,
+  isInSessionContext,
   isSessionPersistenceDisabled,
   switchSession,
 } from '../bootstrap/state.js'
@@ -1140,12 +1141,21 @@ class Project {
 
     let sessionFile: string
     if (isCurrentSession) {
-      // Buffer until materializeSessionFile runs (first user/assistant message).
-      if (this.sessionFile === null) {
+      // When running inside runWithSessionContext (web server with concurrent
+      // runners), skip the shared pendingEntries buffer and write directly
+      // to the ALS-derived transcript path.  The buffer lives on the global
+      // Project singleton — sharing it across concurrent runners would flush
+      // one runner's entries into another runner's session file.
+      if (this.sessionFile === null && !isInSessionContext()) {
         this.pendingEntries.push(entry)
         return
       }
-      sessionFile = this.sessionFile
+      // Always derive from ALS context, not the cached this.sessionFile.
+      // The cached value lives on the global Project singleton and can be
+      // overwritten by a concurrent runner (e.g. the web server running
+      // multiple sessions in parallel).  getTranscriptPath() reads the
+      // sessionId from AsyncLocalStorage, so each runner gets its own file.
+      sessionFile = getTranscriptPath()
     } else {
       const existing = await this.getExistingSessionFile(sessionId)
       if (!existing) {
@@ -1272,13 +1282,15 @@ class Project {
   /**
    * Loads the sessionFile variable.
    * Do not need to create session files until they are written to.
+   *
+   * Always re-derives from ALS (AsyncLocalStorage) when available so that
+   * concurrent runners each resolve to their own transcript file instead of
+   * sharing the stale cached path left behind by a different runner.
    */
   private ensureCurrentSessionFile(): string {
-    if (this.sessionFile === null) {
-      this.sessionFile = getTranscriptPath()
-    }
-
-    return this.sessionFile
+    const alsPath = getTranscriptPath()
+    this.sessionFile = alsPath
+    return alsPath
   }
 
   /**
