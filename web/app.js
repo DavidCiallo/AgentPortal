@@ -788,7 +788,9 @@ async function sendMessage() {
     message,
     sessionId,
     cwd: currentProject || undefined,
-    model: currentModel || undefined,
+    // Read the model directly from the dropdown so changes in settings take
+    // effect immediately without needing to sync currentModel.
+    model: document.getElementById('modelSelect').value || currentModel || undefined,
   }
   console.log('[sendMessage] Sending:', chatMsg)
   lastChatMessage = chatMsg
@@ -1160,7 +1162,7 @@ function subscribeToSession() {
     type: 'subscribe',
     sessionId,
     cwd: currentProject || undefined,
-    model: currentModel || undefined,
+    model: document.getElementById('modelSelect').value || currentModel || undefined,
   }))
 }
 

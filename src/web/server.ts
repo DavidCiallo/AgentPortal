@@ -1205,6 +1205,10 @@ export class WebServer {
           })}\n`
           console.log(logMsg.trim())
 
+          // Update the runner's model so changes in the settings dropdown
+          // take effect immediately for this and subsequent rounds.
+          if (msg.model) runner.model = msg.model
+
           // Fire-and-forget: the runner broadcasts to all subscribers
           runner.startRound(msg.message)
           return
