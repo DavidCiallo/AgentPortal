@@ -1099,10 +1099,10 @@ async function loadMoreMessages() {
 async function switchSession(projectId, newSessionId, cwd) {
   closeSidebar()
 
-  // Cancel any in-flight round in the old session before switching
-  if (isGenerating && sessionId) {
-    ws.send(JSON.stringify({ type: 'cancel', sessionId }))
-  }
+  // Do NOT cancel the old session's in-flight round — it should keep
+  // running in the background.  The server's claimActiveRunner / superseded
+  // mechanism handles the case where the user sends a new message on a
+  // different session (the old round will be superseded at that point).
 
   // Clear current chat
   chatContainer.innerHTML = ''
