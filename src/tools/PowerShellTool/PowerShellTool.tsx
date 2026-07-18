@@ -1,8 +1,7 @@
 import { feature } from 'bun:bundle';
 import type { ToolResultBlockParam } from '@anthropic-ai/sdk/resources/index.mjs';
 import { copyFile, stat as fsStat, truncate as fsTruncate, link } from 'fs/promises';
-import * as React from 'react';
-import type { CanUseToolFn } from 'src/hooks/useCanUseTool.js';
+import type { CanUseToolFn } from 'src/types/canUseTool.js';
 import type { AppState } from 'src/state/AppState.js';
 import { z } from 'zod/v4';
 import { getKairosActive } from '../../bootstrap/state.js';
@@ -33,7 +32,7 @@ import { TaskOutput } from '../../utils/task/TaskOutput.js';
 import { isOutputLineTruncated } from '../../utils/terminal.js';
 import { buildLargeToolResultMessage, ensureToolResultsDir, generatePreview, getToolResultPath, PREVIEW_SIZE_BYTES } from '../../utils/toolResultStorage.js';
 import { shouldUseSandbox } from '../BashTool/shouldUseSandbox.js';
-import { BackgroundHint } from '../BashTool/UI.js';
+
 import { buildImageToolResult, isImageOutput, resetCwdIfOutsideProject, resizeShellImageOutput, stdErrAppendShellResetMessage, stripEmptyLines } from '../BashTool/utils.js';
 import { trackGitOperations } from '../shared/gitOperationTracking.js';
 import { interpretCommandResult } from './commandSemantics.js';
@@ -41,7 +40,7 @@ import { powershellToolHasPermission } from './powershellPermissions.js';
 import { getDefaultTimeoutMs, getMaxTimeoutMs, getPrompt } from './prompt.js';
 import { hasSyncSecurityConcerns, isReadOnlyCommand, resolveToCanonical } from './readOnlyValidation.js';
 import { POWERSHELL_TOOL_NAME } from './toolName.js';
-import { renderToolResultMessage, renderToolUseErrorMessage, renderToolUseMessage, renderToolUseProgressMessage, renderToolUseQueuedMessage } from './UI.js';
+
 
 // Never use os.EOL for terminal output — \r\n on Windows breaks Ink rendering
 const EOL = '\n';
@@ -257,17 +256,6 @@ type OutputSchema = ReturnType<typeof outputSchema>;
 export type Out = z.infer<OutputSchema>;
 import type { PowerShellProgress } from '../../types/tools.js';
 export type { PowerShellProgress } from '../../types/tools.js';
-const COMMON_BACKGROUND_COMMANDS = ['npm', 'yarn', 'pnpm', 'node', 'python', 'python3', 'go', 'cargo', 'make', 'docker', 'terraform', 'webpack', 'vite', 'jest', 'pytest', 'curl', 'Invoke-WebRequest', 'build', 'test', 'serve', 'watch', 'dev'] as const;
-function getCommandTypeForLogging(command: string): AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS {
-  const trimmed = command.trim();
-  const firstWord = trimmed.split(/\s+/)[0] || '';
-  for (const cmd of COMMON_BACKGROUND_COMMANDS) {
-    if (firstWord.toLowerCase() === cmd.toLowerCase()) {
-      return cmd as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS;
-    }
-  }
-  return 'other' as AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS;
-}
 export const PowerShellTool = buildTool({
   name: POWERSHELL_TOOL_NAME,
   searchHint: 'execute Windows PowerShell commands',
@@ -374,11 +362,7 @@ export const PowerShellTool = buildTool({
   async checkPermissions(input: PowerShellToolInput, context: Parameters<Tool['checkPermissions']>[1]): Promise<PermissionResult> {
     return await powershellToolHasPermission(input, context);
   },
-  renderToolUseMessage,
-  renderToolUseProgressMessage,
-  renderToolUseQueuedMessage,
-  renderToolResultMessage,
-  renderToolUseErrorMessage,
+
   mapToolResultToToolResultBlockParam({
     interrupted,
     stdout,
@@ -955,7 +939,7 @@ async function* runPowerShellCommand({
           }, setAppState, toolUseId);
         }
         setToolJSX({
-          jsx: <BackgroundHint />,
+          jsx: null,
           shouldHidePromptInput: false,
           shouldContinueAnimation: true,
           showSpinner: true

@@ -6,7 +6,6 @@ import {
   isMaxSubscriber,
   isTeamPremiumSubscriber,
 } from '../auth.js'
-import { getModelStrings } from './modelStrings.js'
 import {
   COST_TIER_3_15,
   COST_HAIKU_45,
@@ -31,7 +30,6 @@ import { has1mContext } from '../context.js'
 import { getGlobalConfig } from '../config.js'
 import { getActiveOpenAIModelOptionsCache } from '../providerProfiles.js'
 import { getCachedOllamaModelOptions, isOllamaProvider } from './ollamaModels.js'
-import { getAntModels } from './antModels.js'
 
 // @[MODEL LAUNCH]: Update all the available and default model option strings below.
 
@@ -187,7 +185,6 @@ function getHaiku45Option(): ModelOption {
 
 function getHaikuOption(): ModelOption {
   // Return correct Haiku option based on provider
-  const haikuModel = getDefaultHaikuModel()
   return getHaiku45Option()
 }
 
@@ -214,16 +211,6 @@ export function getMaxOpus46_1MOption(fastMode = false): ModelOption {
     value: 'opus[1m]',
     label: 'Opus (1M context)',
     description: `Opus 4.6 with 1M context${billingInfo}`,
-  }
-}
-
-function getMergedOpus1MOption(fastMode = false): ModelOption {
-  return {
-    value: 'opus[1m]',
-    label: 'Opus (1M context)',
-    description: `Opus 4.6 with 1M context · Most capable for complex work`,
-    descriptionForModel:
-      'Opus 4.6 with 1M context - most capable for complex work',
   }
 }
 
@@ -310,16 +297,6 @@ function getCodexModelOptions(): ModelOption[] {
 
 // @[MODEL LAUNCH]: Update the model picker lists below to include/reorder options for the new model.
 // Each user tier (ant, Max/Team Premium, Pro/Team Standard/Enterprise, PAYG) has its own list.
-
-import { getAllCopilotModels } from './copilotModels.js'
-
-function getCopilotModelOptions(): ModelOption[] {
-  return getAllCopilotModels().map(m => ({
-    value: m.id,
-    label: m.name,
-    description: `${m.family}${m.reasoning ? ' · Reasoning' : ''}${m.tool_call ? ' · Tool call' : ''} · ${Math.round(m.limit.context / 1000)}K context`,
-  }))
-}
 
 function getModelOptionsBase(fastMode = false): ModelOption[] {
   // When using Ollama, show models from the Ollama server instead of Claude models

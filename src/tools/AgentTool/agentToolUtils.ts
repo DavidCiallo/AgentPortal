@@ -52,7 +52,7 @@ import { emitTaskProgress as emitTaskProgressEvent } from '../../utils/task/sdkP
 import { isInProcessTeammate } from '../../utils/teammateContext.js'
 import { getTokenCountFromUsage } from '../../utils/tokens.js'
 import { EXIT_PLAN_MODE_V2_TOOL_NAME } from '../ExitPlanModeTool/constants.js'
-import { AGENT_TOOL_NAME, LEGACY_AGENT_TOOL_NAME } from './constants.js'
+import { AGENT_TOOL_NAME } from './constants.js'
 import type { AgentDefinition } from './loadAgentsDir.js'
 export type ResolvedAgentTools = {
   hasWildcard: boolean
@@ -281,12 +281,8 @@ export function finalizeAgentTool(
   },
 ): AgentToolResult {
   const {
-    prompt,
-    resolvedAgentModel,
-    isBuiltInAgent,
     startTime,
     agentType,
-    isAsync,
   } = metadata
 
   const lastAssistantMessage = getLastAssistantMessage(agentMessages)
@@ -397,12 +393,6 @@ export async function classifyHandoffIfNeeded({
       toolPermissionContext as ToolPermissionContext,
       abortSignal,
     )
-
-    const handoffDecision = classifierResult.unavailable
-      ? 'unavailable'
-      : classifierResult.shouldBlock
-        ? 'blocked'
-        : 'allowed'
 
     if (classifierResult.shouldBlock) {
       // When classifier is unavailable, still propagate the sub-agent's

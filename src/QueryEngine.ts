@@ -1,20 +1,24 @@
 import { feature } from 'bun:bundle'
-import type { ContentBlockParam } from '@anthropic-ai/sdk/resources/messages.mjs'
+import type { ContentBlockParam, TextBlockParam } from '@anthropic-ai/sdk/resources/messages.mjs'
 import type { SDKMessage, SDKStatus } from './entrypoints/agentSdkTypes.js'
 import { randomUUID } from 'crypto'
 import last from 'lodash-es/last.js'
 import { getSessionId, isSessionPersistenceDisabled, } from 'src/bootstrap/state.js'
 import stripAnsi from 'strip-ansi'
-import type { Command } from './commands.js'
-import { getSlashCommandToolSkills } from './commands.js'
+import type { Command } from './types/command.js'
 import {
+  BASH_STDERR_TAG,
+  BASH_STDOUT_TAG,
   LOCAL_COMMAND_STDERR_TAG,
   LOCAL_COMMAND_STDOUT_TAG,
+  TASK_NOTIFICATION_TAG,
+  TEAMMATE_MESSAGE_TAG,
+  TICK_TAG,
 } from './constants/xml.js'
 import {
   getTotalAPIDuration,
 } from './bootstrap/state.js'
-import type { CanUseToolFn } from './hooks/useCanUseTool.js'
+import type { CanUseToolFn } from './types/canUseTool.js'
 import { loadMemoryPrompt } from './memdir/memdir.js'
 import { hasAutoMemPathOverride } from './memdir/paths.js'
 import { query } from './query.js'
@@ -29,7 +33,6 @@ import type { OrphanedPermission } from './types/textInputTypes.js'
 import { createAbortController } from './utils/abortController.js'
 import type { AttributionState } from './utils/commitAttribution.js'
 import { getGlobalConfig } from './utils/config.js'
-import { getCwd } from './utils/cwd.js'
 import { isBareMode, isEnvTruthy } from './utils/envUtils.js'
 import { logForDebugging } from './utils/debug.js'
 import { getFastModeState } from './utils/fastMode.js'
@@ -42,7 +45,7 @@ import { cloneFileStateCache, type FileStateCache, } from './utils/fileStateCach
 import { headlessProfilerCheckpoint } from './utils/headlessProfiler.js'
 import { registerStructuredOutputEnforcement } from './utils/hooks/hookHelpers.js'
 import { getInMemoryErrors } from './utils/log.js'
-import { countToolCalls, SYNTHETIC_MESSAGES } from './utils/messages.js'
+import { countToolCalls, isSyntheticMessage, SYNTHETIC_MESSAGES } from './utils/messages.js'
 import { getMainLoopModel, parseUserSpecifiedModel, } from './utils/model/model.js'
 import { loadAllPluginsCacheOnly } from './utils/plugins/pluginLoader.js'
 import { type ProcessUserInputContext, processUserInput, } from './utils/processUserInput/processUserInput.js'
@@ -56,11 +59,53 @@ import {
   type ThinkingConfig,
 } from './utils/thinking.js'
 
-// Lazy: MessageSelector.tsx pulls React/ink; only needed for message filtering at query time
-/* eslint-disable @typescript-eslint/no-require-imports */
-const messageSelector =
-  (): typeof import('src/components/MessageSelector.js') =>
-    require('src/components/MessageSelector.js')
+function isTextBlock(block: ContentBlockParam): block is TextBlockParam {
+  return block.type === 'text'
+}
+
+/**
+ * Filter for user messages that are selectable in the message selector UI.
+ * Excludes tool results, synthetic messages, meta messages, compact summaries,
+ * and messages containing command output / task notification tags.
+ * (Extracted from deleted MessageSelector.tsx)
+ */
+export function selectableUserMessagesFilter(message: Message): boolean {
+  if (message.type !== 'user') {
+    return false
+  }
+  if (Array.isArray(message.message.content) && message.message.content[0]?.type === 'tool_result') {
+    return false
+  }
+  if (isSyntheticMessage(message)) {
+    return false
+  }
+  if (message.isMeta) {
+    return false
+  }
+  if (message.isCompactSummary || message.isVisibleInTranscriptOnly) {
+    return false
+  }
+  const content = message.message.content
+  const lastBlock = typeof content === 'string' ? null : content[content.length - 1]
+  const messageText = typeof content === 'string'
+    ? content.trim()
+    : lastBlock && isTextBlock(lastBlock)
+      ? lastBlock.text.trim()
+      : ''
+
+  if (
+    messageText.indexOf(`<${LOCAL_COMMAND_STDOUT_TAG}>`) !== -1 ||
+    messageText.indexOf(`<${LOCAL_COMMAND_STDERR_TAG}>`) !== -1 ||
+    messageText.indexOf(`<${BASH_STDOUT_TAG}>`) !== -1 ||
+    messageText.indexOf(`<${BASH_STDERR_TAG}>`) !== -1 ||
+    messageText.indexOf(`<${TASK_NOTIFICATION_TAG}>`) !== -1 ||
+    messageText.indexOf(`<${TICK_TAG}>`) !== -1 ||
+    messageText.indexOf(`<${TEAMMATE_MESSAGE_TAG}`) !== -1
+  ) {
+    return false
+  }
+  return true
+}
 
 import {
   localCommandOutputToSDKAssistantMessage,
@@ -73,7 +118,6 @@ import {
   getScratchpadDir,
   isScratchpadEnabled,
 } from './utils/permissions/filesystem.js'
-/* eslint-enable @typescript-eslint/no-require-imports */
 import {
   handleOrphanedPermission,
   isResultSuccessful,
@@ -423,7 +467,7 @@ export class QueryEngine {
         (msg.type === 'user' &&
           !msg.isMeta && // Skip synthetic caveat messages
           !msg.toolUseResult && // Skip tool results (they'll be acked from query)
-          messageSelector().selectableUserMessagesFilter(msg)) || // Skip non-user-authored messages (task notifications, etc.)
+          selectableUserMessagesFilter(msg)) || // Skip non-user-authored messages (task notifications, etc.)
         (msg.type === 'system' && msg.subtype === 'compact_boundary'), // Always ack compact boundaries
     )
     const messagesToAck = replayUserMessages ? replayableMessages : []
@@ -485,8 +529,7 @@ export class QueryEngine {
     // ref-tracked plugins. CCR populates the cache via CLAUDE_CODE_SYNC_PLUGIN_INSTALL
     // (headlessPluginInstall) or CLAUDE_CODE_PLUGIN_SEED_DIR before this runs;
     // SDK callers that need fresh source can call /reload-plugins.
-    const [skills, { enabled: enabledPlugins }] = await Promise.all([
-      getSlashCommandToolSkills(getCwd()),
+    const [{ enabled: enabledPlugins }] = await Promise.all([
       loadAllPluginsCacheOnly(),
     ])
     headlessProfilerCheckpoint('after_skills_plugins')
@@ -498,7 +541,7 @@ export class QueryEngine {
       permissionMode: initialAppState.toolPermissionContext.mode,
       commands,
       agents,
-      skills,
+      skills: [],
       plugins: enabledPlugins,
       fastMode: initialAppState.fastMode,
     })
@@ -590,7 +633,7 @@ export class QueryEngine {
 
     if (fileHistoryEnabled() && persistSession) {
       messagesFromUserInput
-        .filter(messageSelector().selectableUserMessagesFilter)
+        .filter(selectableUserMessagesFilter)
         .forEach(message => {
           void fileHistoryMakeSnapshot(
             (updater: (prev: FileHistoryState) => FileHistoryState) => {

@@ -7,7 +7,6 @@ import {
 } from 'src/commands.js'
 import { COMMAND_NAME_TAG } from '../../constants/xml.js'
 import { stringWidth } from '../../ink/stringWidth.js'
-import { count } from '../../utils/array.js'
 import { logForDebugging } from '../../utils/debug.js'
 import { toError } from '../../utils/errors.js'
 import { truncate } from '../../utils/format.js'
@@ -126,10 +125,6 @@ export function formatCommandsWithinBudget(
   }
 
   // Truncate non-bundled descriptions to fit within budget
-  const truncatedCount = count(
-    restCommands,
-    cmd => stringWidth(getCommandDescription(cmd)) > maxDescLen,
-  )
   // Analytics removed - no telemetry for skill tool
   return commands
     .map((cmd, i) => {

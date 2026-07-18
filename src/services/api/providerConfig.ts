@@ -1,7 +1,5 @@
 import { isIP } from 'node:net'
 
-import { isEnvTruthy } from '../../utils/envUtils.js'
-
 export const DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com/v1'
 
 type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh'

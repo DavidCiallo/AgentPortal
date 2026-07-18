@@ -1,5 +1,4 @@
 import { c as _c } from "react-compiler-runtime";
-import React from 'react';
 import { z } from 'zod/v4';
 import { FallbackToolUseErrorMessage } from '../../components/FallbackToolUseErrorMessage.js';
 import { FallbackToolUseRejectedMessage } from '../../components/FallbackToolUseRejectedMessage.js';
@@ -23,8 +22,6 @@ import { countCharInString } from '../../utils/stringUtils.js';
 import { getTaskOutput } from '../../utils/task/diskOutput.js';
 import { updateTaskState } from '../../utils/task/framework.js';
 import { formatTaskOutput } from '../../utils/task/outputFormatting.js';
-import type { ThemeName } from '../../utils/theme.js';
-import { AgentPromptDisplay, AgentResponseDisplay } from '../AgentTool/UI.js';
 import BashToolResultMessage from '../BashTool/BashToolResultMessage.js';
 import { TASK_OUTPUT_TOOL_NAME } from './constants.js';
 const inputSchema = lazySchema(() => z.strictObject({
@@ -424,7 +421,7 @@ function TaskOutputResultDisplay(t0) {
         }
         let t4;
         if ($[12] !== task.prompt || $[13] !== theme) {
-          t4 = task.prompt && <AgentPromptDisplay prompt={task.prompt} theme={theme} dim={true} />;
+          t4 = task.prompt && null;
           $[12] = task.prompt;
           $[13] = theme;
           $[14] = t4;
@@ -433,10 +430,7 @@ function TaskOutputResultDisplay(t0) {
         }
         let t5;
         if ($[15] !== task.result || $[16] !== theme) {
-          t5 = task.result && <Box marginTop={1}><AgentResponseDisplay content={[{
-              type: "text",
-              text: task.result
-            }]} theme={theme} /></Box>;
+          t5 = task.result && null;
           $[15] = task.result;
           $[16] = theme;
           $[17] = t5;

@@ -295,7 +295,6 @@ export const loadMarkdownFilesForSubdir = memoize(
     subdir: ClaudeConfigDirectory,
     cwd: string,
   ): Promise<MarkdownFile[]> {
-    const searchStartTime = Date.now()
     const userDir = join(getClaudeConfigHomeDir(), subdir)
     const managedDir = join(getManagedFilePath(), '.portal', subdir)
     const projectDirs = getProjectDirsUpToHome(subdir, cwd)

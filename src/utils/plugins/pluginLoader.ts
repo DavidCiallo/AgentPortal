@@ -558,7 +558,6 @@ export async function gitClone(
 
   args.push(gitUrl, targetPath)
 
-  const cloneStarted = performance.now()
   const cloneResult = await execFileNoThrow(gitExe(), args)
 
   if (cloneResult.code !== 0) {

@@ -1,5 +1,4 @@
 import { z } from 'zod/v4'
-import { sanitizeToolNameForAnalytics } from '../../services/analytics/metadata.js'
 import type { AssistantMessage, Message } from '../../types/message.js'
 import { getGlobalConfig } from '../config.js'
 import { logForDebugging } from '../debug.js'
@@ -11,18 +10,6 @@ import { sideQuery } from '../sideQuery.js'
 import { jsonStringify } from '../slowOperations.js'
 
 export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH'
-
-// Map risk levels to numeric values for analytics
-const RISK_LEVEL_NUMERIC: Record<RiskLevel, number> = {
-  LOW: 1,
-  MEDIUM: 2,
-  HIGH: 3,
-}
-
-// Error type codes for analytics
-const ERROR_TYPE_PARSE = 1
-const ERROR_TYPE_NETWORK = 2
-const ERROR_TYPE_UNKNOWN = 3
 
 export type PermissionExplanation = {
   riskLevel: RiskLevel
@@ -216,8 +203,6 @@ Explain this command in context.`
     logForDebugging(`Permission explainer: no parsed output in response`)
     return null
   } catch (error) {
-    const latencyMs = Date.now() - startTime
-
     // Don't log aborted requests as errors
     if (signal.aborted) {
       logForDebugging(`Permission explainer: request aborted for ${toolName}`)

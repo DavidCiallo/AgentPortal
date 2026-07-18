@@ -75,8 +75,6 @@ export async function* handleStopHooks(
   | ToolUseSummaryMessage,
   StopHookResult
 > {
-  const hookStartTime = Date.now()
-
   const stopHookContext: REPLHookContext = {
     messages: [...messagesForQuery, ...assistantMessages],
     systemPrompt,
@@ -445,8 +443,6 @@ export async function* handleStopHooks(
 
     return { blockingErrors: [], preventContinuation: false }
   } catch (error) {
-    const durationMs = Date.now() - hookStartTime
-
     // Yield a system message that is not visible to the model for the user
     // to debug their hook.
     yield createSystemMessage(

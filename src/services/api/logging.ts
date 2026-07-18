@@ -1,30 +1,20 @@
-import { feature } from 'bun:bundle'
 import { APIError } from '@anthropic-ai/sdk'
 import type {
   BetaStopReason,
   BetaUsage as Usage,
 } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
 import {
-  addToTotalDurationState,
-  consumePostCompaction,
-  getIsNonInteractiveSession,
-  getLastApiCompletionTimestamp,
   getTeleportedSessionInfo,
   markFirstTeleportMessageLogged,
-  setLastApiCompletionTimestamp,
 } from 'src/bootstrap/state.js'
 import type { QueryChainTracking } from 'src/Tool.js'
-import { isConnectorTextBlock } from 'src/types/connectorText.js'
-import type { AssistantMessage } from 'src/types/message.js'
 import { logForDebugging } from 'src/utils/debug.js'
 import type { EffortLevel } from 'src/utils/effort.js'
 import { logError } from 'src/utils/log.js'
 import type { PermissionMode } from 'src/utils/permissions/PermissionMode.js'
-import { jsonStringify } from 'src/utils/slowOperations.js'
 import { logOTelEvent } from 'src/utils/telemetry/events.js'
 import {
   endLLMRequestSpan,
-  isBetaTracingEnabled,
   type Span,
 } from 'src/utils/telemetry/sessionTracing.js'
 import { consumeInvokingRequestId } from '../../utils/agentContext.js'
@@ -32,7 +22,6 @@ import {
   type AnalyticsMetadata_I_VERIFIED_THIS_IS_NOT_CODE_OR_FILEPATHS,
   logEvent,
 } from '../analytics/index.js'
-import { sanitizeToolNameForAnalytics } from '../analytics/metadata.js'
 import { classifyAPIError } from './errors.js'
 import { extractConnectionErrorDetails } from './errorUtils.js'
 

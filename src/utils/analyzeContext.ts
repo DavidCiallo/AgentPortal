@@ -6,7 +6,7 @@ import {
 } from 'src/constants/prompts.js'
 import { microcompactMessages } from 'src/services/compact/microCompact.js'
 import { getSdkBetas } from '../bootstrap/state.js'
-import { getCommandName } from '../commands.js'
+import { getCommandName } from '../types/command.js'
 import { getSystemContext } from '../context.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
 import {
@@ -27,7 +27,6 @@ import {
   type ToolPermissionContext,
   type Tools,
   type ToolUseContext,
-  toolMatchesName,
 } from '../Tool.js'
 import type {
   AgentDefinition,
@@ -927,13 +926,11 @@ export async function analyzeContextUsage(
 
   // Critical operations that should not fail due to skills
   const [
-    { systemPromptTokens, systemPromptSections },
+    { systemPromptTokens },
     { claudeMdTokens, memoryFileDetails },
     {
       builtInToolTokens,
-      deferredBuiltinDetails,
       deferredBuiltinTokens,
-      systemToolDetails,
     },
     { mcpToolTokens, mcpToolDetails, deferredToolTokens },
     { agentTokens, agentDetails },

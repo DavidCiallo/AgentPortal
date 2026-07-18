@@ -60,14 +60,7 @@ import {
   inputSchema,
   outputSchema,
 } from './types.js'
-import {
-  getToolUseSummary,
-  renderToolResultMessage,
-  renderToolUseErrorMessage,
-  renderToolUseMessage,
-  renderToolUseRejectedMessage,
-  userFacingName,
-} from './UI.js'
+
 import {
   areFileEditsInputsEquivalent,
   findActualString,
@@ -93,11 +86,8 @@ export const FileEditTool = buildTool({
   async prompt() {
     return getEditToolDescription()
   },
-  userFacingName,
-  getToolUseSummary,
-  getActivityDescription(input) {
-    const summary = getToolUseSummary(input)
-    return summary ? `Editing ${summary}` : 'Editing file'
+  getActivityDescription() {
+    return 'Editing file'
   },
   get inputSchema() {
     return inputSchema()
@@ -129,10 +119,7 @@ export const FileEditTool = buildTool({
       appState.toolPermissionContext,
     )
   },
-  renderToolUseMessage,
-  renderToolResultMessage,
-  renderToolUseRejectedMessage,
-  renderToolUseErrorMessage,
+
   async validateInput(input: FileEditInput, toolUseContext: ToolUseContext) {
     const { file_path, old_string, new_string, replace_all = false } = input
     // Use expandPath for consistent path normalization (especially on Windows
@@ -543,7 +530,6 @@ export const FileEditTool = buildTool({
       isEnvTruthy(process.env.CLAUDE_CODE_REMOTE) &&
       getFeatureValue_CACHED_MAY_BE_STALE('tengu_quartz_lantern', false)
     ) {
-      const startTime = Date.now()
       const diff = await fetchSingleFileGitDiff(absoluteFilePath)
       if (diff) gitDiff = diff
     }

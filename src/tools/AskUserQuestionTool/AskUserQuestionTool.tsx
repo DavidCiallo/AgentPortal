@@ -1,8 +1,6 @@
 import { c as _c } from "react-compiler-runtime";
 import { feature } from 'bun:bundle';
-import * as React from 'react';
 import { getAllowedChannels, getQuestionPreviewFormat } from 'src/bootstrap/state.js';
-import { MessageResponse } from 'src/components/MessageResponse.js';
 import { BLACK_CIRCLE } from 'src/constants/figures.js';
 import { getModeColor } from 'src/utils/permissions/PermissionMode.js';
 import { z } from 'zod/v4';
@@ -94,17 +92,13 @@ function AskUserQuestionResultMessage(t0) {
   }
   let t2;
   if ($[1] !== answers) {
-    t2 = <Box flexDirection="column" marginTop={1}>{t1}<MessageResponse><Box flexDirection="column">{Object.entries(answers).map(_temp)}</Box></MessageResponse></Box>;
+    t2 = <Box flexDirection="column" marginTop={1}>{t1}</Box>;
     $[1] = answers;
     $[2] = t2;
   } else {
     t2 = $[2];
   }
   return t2;
-}
-function _temp(t0) {
-  const [questionText, answer] = t0;
-  return <Text key={questionText} color="inactive">· {questionText} → {answer}</Text>;
 }
 export const AskUserQuestionTool: Tool<InputSchema, Output> = buildTool({
   name: ASK_USER_QUESTION_TOOL_NAME,

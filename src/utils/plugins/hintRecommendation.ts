@@ -11,7 +11,6 @@
  */
 
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../../services/analytics/growthbook.js'
-import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED } from '../../services/analytics/index.js';
 import {
   type ClaudeCodeHint,
   hasShownHintThisSession,
@@ -100,7 +99,7 @@ export async function resolvePluginHint(
   hint: ClaudeCodeHint,
 ): Promise<PluginHintRecommendation | null> {
   const pluginId = hint.value
-  const { name, marketplace } = parsePluginIdentifier(pluginId)
+  const { marketplace } = parsePluginIdentifier(pluginId)
 
   const pluginData = await getPluginById(pluginId)
 

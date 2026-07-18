@@ -1,8 +1,8 @@
 import { c as _c } from "react-compiler-runtime";
-import React, { createContext, type ReactNode, useContext, useMemo } from 'react';
-import type { Command } from '../../commands.js';
+import { createContext, useContext } from 'react';
+import type { Command } from '../../types/command.js';
 import type { Tool } from '../../Tool.js';
-import type { MCPServerConnection, ScopedMcpServerConfig, ServerResource } from './types.js';
+import type { MCPServerConnection, ServerResource } from './types.js';
 import { useManageMCPConnections } from './useManageMCPConnections.js';
 interface MCPConnectionContextValue {
   reconnectMcpServer: (serverName: string) => Promise<{
@@ -28,12 +28,6 @@ export function useMcpToggleEnabled() {
   }
   return context.toggleMcpServer;
 }
-interface MCPConnectionManagerProps {
-  children: ReactNode;
-  dynamicMcpConfig: Record<string, ScopedMcpServerConfig> | undefined;
-  isStrictMcpConfig: boolean;
-}
-
 // TODO (ollie): We may be able to get rid of this context by putting these function on app state
 export function MCPConnectionManager(t0) {
   const $ = _c(6);

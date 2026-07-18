@@ -4,11 +4,7 @@ import { lazySchema } from '../../utils/lazySchema.js'
 import type { PermissionResult } from '../../utils/permissions/PermissionResult.js'
 import { isOutputLineTruncated } from '../../utils/terminal.js'
 import { DESCRIPTION, PROMPT } from './prompt.js'
-import {
-  renderToolResultMessage,
-  renderToolUseMessage,
-  renderToolUseProgressMessage,
-} from './UI.js'
+
 
 // Allow any input object since MCP tools define their own schemas
 export const inputSchema = lazySchema(() => z.object({}).passthrough())
@@ -72,11 +68,8 @@ export const MCPTool = buildTool({
       message: 'MCPTool requires permission.',
     }
   },
-  renderToolUseMessage,
   // Overridden in mcpClient.ts
   userFacingName: () => 'mcp',
-  renderToolUseProgressMessage,
-  renderToolResultMessage,
   isResultTruncated(output: Output): boolean {
     if (typeof output === 'string') {
       return isOutputLineTruncated(output)

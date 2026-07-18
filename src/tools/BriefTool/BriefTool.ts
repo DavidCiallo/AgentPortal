@@ -14,7 +14,7 @@ import {
   DESCRIPTION,
   LEGACY_BRIEF_TOOL_NAME,
 } from './prompt.js'
-import { renderToolResultMessage, renderToolUseMessage } from './UI.js'
+
 
 const inputSchema = lazySchema(() =>
   z.strictObject({
@@ -180,8 +180,7 @@ export const BriefTool = buildTool({
       content: `Message delivered to user.${suffix}`,
     }
   },
-  renderToolUseMessage,
-  renderToolResultMessage,
+
   async call({ message, attachments, status }, context) {
     const sentAt = new Date().toISOString()
 

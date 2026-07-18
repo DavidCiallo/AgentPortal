@@ -3,7 +3,6 @@ import type {
   BetaTool,
   BetaToolUnion,
 } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
-import { createHash } from 'crypto'
 import { SYSTEM_PROMPT_DYNAMIC_BOUNDARY } from 'src/constants/prompts.js'
 import { getSystemContext, getUserContext } from 'src/context.js'
 import { prefetchAllMcpResources } from 'src/services/mcp/client.js'
@@ -256,8 +255,7 @@ function logStripOnce(stripped: string[]): void {
  * (see https://console.statsig.com/4aF3Ewatb6xPVpCwxb5nA3/dynamic_configs/claude_cli_system_prompt_prefixes)
  */
 export function logAPIPrefix(systemPrompt: SystemPrompt): void {
-  const [firstSyspromptBlock] = splitSysPromptPrefix(systemPrompt)
-  const firstSystemPrompt = firstSyspromptBlock?.text
+  splitSysPromptPrefix(systemPrompt)
 }
 
 /**
@@ -440,19 +438,14 @@ export async function logContextMetrics(
   if (isAnalyticsDisabled()) {
     return
   }
-  const [{ tools: mcpTools }, tools, userContext, systemContext] =
+  const [{ tools: mcpTools }, tools] =
     await Promise.all([
       prefetchAllMcpResources(mcpConfigs),
       getTools(toolPermissionContext),
       getUserContext(),
       getSystemContext(),
     ])
-  // Extract individual context sizes and calculate total
-  const gitStatusSize = systemContext.gitStatus?.length ?? 0
-  const claudeMdSize = userContext.claudeMd?.length ?? 0
-
   // Calculate total context size
-  const totalContextSize = gitStatusSize + claudeMdSize
 
   // Get file count using ripgrep (rounded to nearest power of 10 for privacy)
   const currentDir = getCwd()
@@ -461,17 +454,14 @@ export async function logContextMetrics(
     ignorePatternsByRoot,
     currentDir,
   )
-  const fileCount = await countFilesRoundedRg(
+  await countFilesRoundedRg(
     currentDir,
     AbortSignal.timeout(1000),
     normalizedIgnorePatterns,
   )
 
   // Calculate tool metrics
-  let mcpToolsCount = 0
-  let mcpServersCount = 0
   let mcpToolsTokens = 0
-  let nonMcpToolsCount = 0
   let nonMcpToolsTokens = 0
 
   const nonMcpTools = tools.filter(tool => !tool.isMcp)

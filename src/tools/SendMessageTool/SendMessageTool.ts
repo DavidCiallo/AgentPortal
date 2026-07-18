@@ -41,7 +41,7 @@ import {
 import { resumeAgentBackground } from '../AgentTool/resumeAgent.js'
 import { SEND_MESSAGE_TOOL_NAME } from './constants.js'
 import { DESCRIPTION, getPrompt } from './prompt.js'
-import { renderToolResultMessage, renderToolUseMessage } from './UI.js'
+
 
 const StructuredMessage = lazySchema(() =>
   z.discriminatedUnion('type', [
@@ -314,7 +314,6 @@ async function handleShutdownApproval(
     `[SendMessageTool] handleShutdownApproval: teamName=${teamName}, agentId=${agentId}, agentName=${agentName}`,
   )
 
-  let ownPaneId: string | undefined
   let ownBackendType: BackendType | undefined
   if (teamName) {
     const teamFile = await readTeamFileAsync(teamName)
@@ -903,6 +902,5 @@ export const SendMessageTool: Tool<InputSchema, SendMessageToolOutput> =
       }
     },
 
-    renderToolUseMessage,
-    renderToolResultMessage,
+
   } satisfies ToolDef<InputSchema, SendMessageToolOutput>)

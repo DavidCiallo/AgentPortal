@@ -20,7 +20,7 @@ import {
   isDurableCronEnabled,
   isKairosCronEnabled,
 } from './prompt.js'
-import { renderCreateResultMessage, renderCreateToolUseMessage } from './UI.js'
+
 
 const MAX_JOBS = 50
 
@@ -152,6 +152,5 @@ export const CronCreateTool = buildTool({
         : `Scheduled one-shot task ${output.id} (${output.humanSchedule}). ${where}. It will fire once then auto-delete.`,
     }
   },
-  renderToolUseMessage: renderCreateToolUseMessage,
-  renderToolResultMessage: renderCreateResultMessage,
+
 } satisfies ToolDef<InputSchema, CreateOutput>)

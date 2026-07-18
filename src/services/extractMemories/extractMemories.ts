@@ -16,7 +16,7 @@
 import { feature } from 'bun:bundle'
 import { basename } from 'path'
 import { getIsRemoteMode } from '../../bootstrap/state.js'
-import type { CanUseToolFn } from '../../hooks/useCanUseTool.js'
+import type { CanUseToolFn } from '../../types/canUseTool.js'
 import { ENTRYPOINT_NAME } from '../../memdir/memdir.js'
 import {
   formatMemoryManifest,
@@ -305,9 +305,6 @@ export function initExtractMemories(): void {
   /** UUID of the last message processed — cursor so each run only
    *  considers messages added since the previous extraction. */
   let lastMemoryMessageUuid: string | undefined
-
-  /** One-shot flag: once we log that the gate is disabled, don't repeat. */
-  let hasLoggedGateFailure = false
 
   /** True while runExtraction is executing — prevents overlapping runs. */
   let inProgress = false

@@ -125,8 +125,6 @@ export async function fileHistoryTrackEdit(
 
     return
   }
-  const isAddingFile = backup.backupFileName === null
-
   // Phase 3: commit. Re-check tracked (another trackEdit may have raced).
   updateFileHistoryState((state: FileHistoryState) => {
     try {
@@ -365,7 +363,7 @@ export async function fileHistoryRewind(
     logForDebugging(
       `FileHistory: [Rewind] Rewinding to snapshot for ${messageId}`,
     )
-    const filesChanged = await applySnapshot(captured, targetSnapshot)
+    await applySnapshot(captured, targetSnapshot)
 
     logForDebugging(`FileHistory: [Rewind] Finished rewinding to ${messageId}`)
 

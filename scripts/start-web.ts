@@ -1,5 +1,5 @@
-import { WebServer } from '../src/web/server.ts'
-import { init } from '../src/entrypoints/init.ts'
+import { WebServer } from '../src/web/server'
+import { init } from '../src/entrypoints/init'
 
 // Polyfill MACRO which is normally injected by the bundler
 Object.assign(globalThis, {
@@ -32,8 +32,8 @@ async function main() {
     }
   }
   await validateProviderEnvOrExit()
-
-  const port = process.env.WEB_PORT ? parseInt(process.env.WEB_PORT, 10) : 3000
+  console.log('Provider environment validated successfully.')
+  const port = process.env.WEB_PORT ? parseInt(process.env.WEB_PORT, 10) : 3210
   const host = process.env.WEB_HOST || '0.0.0.0'
 
   const server = new WebServer({ port, host })

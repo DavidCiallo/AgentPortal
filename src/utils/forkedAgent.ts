@@ -10,9 +10,9 @@
 
 import type { UUID } from 'crypto'
 import { randomUUID } from 'crypto'
-import type { PromptCommand } from '../commands.js'
+import type { PromptCommand } from '../types/command.js'
 import type { QuerySource } from '../constants/querySource.js'
-import type { CanUseToolFn } from '../hooks/useCanUseTool.js'
+import type { CanUseToolFn } from '../types/canUseTool.js'
 import { query } from '../query.js'
 import type { ToolUseContext } from '../Tool.js'
 import type { AgentDefinition } from '../tools/AgentTool/loadAgentsDir.js'
@@ -493,9 +493,7 @@ export async function runForkedAgent({
   skipTranscript,
   skipCacheWrite,
 }: ForkedAgentParams): Promise<ForkedAgentResult> {
-  const startTime = Date.now()
   const outputMessages: Message[] = []
-  let totalUsage: { tokens: number, turns: number } = { tokens: 0, turns: 0 }
 
   const {
     systemPrompt,

@@ -43,12 +43,7 @@ import {
 } from './formatters.js'
 import { DESCRIPTION, LSP_TOOL_NAME } from './prompt.js'
 import { lspToolInputSchema } from './schemas.js'
-import {
-  renderToolResultMessage,
-  renderToolUseErrorMessage,
-  renderToolUseMessage,
-  userFacingName,
-} from './UI.js'
+
 
 const MAX_LSP_FILE_SIZE_BYTES = 10_000_000
 
@@ -132,7 +127,7 @@ export const LSPTool = buildTool({
   async description() {
     return DESCRIPTION
   },
-  userFacingName,
+
   shouldDefer: true,
   isEnabled() {
     return isLspConnected()
@@ -218,9 +213,7 @@ export const LSPTool = buildTool({
   async prompt() {
     return DESCRIPTION
   },
-  renderToolUseMessage,
-  renderToolUseErrorMessage,
-  renderToolResultMessage,
+
   async call(input: Input, _context) {
     const absolutePath = expandPath(input.filePath)
     const cwd = getCwd()

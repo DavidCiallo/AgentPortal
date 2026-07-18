@@ -26,7 +26,7 @@ import {
   isSessionPersistenceDisabled,
   switchSession,
 } from '../bootstrap/state.js'
-import { builtInCommandNames } from '../commands.js'
+// builtInCommandNames removed (CLI commands deleted)
 import { COMMAND_NAME_TAG, TICK_TAG } from '../constants/xml.js'
 import { getFeatureValue_CACHED_MAY_BE_STALE } from '../services/analytics/growthbook.js'
 import * as sessionIngress from '../services/api/sessionIngress.js'
@@ -73,7 +73,6 @@ import { getFsImplementation } from './fsOperations.js'
 import { getWorktreePaths } from './getWorktreePaths.js'
 import { getBranch } from './git.js'
 import { gracefulShutdownSync, isShuttingDown } from './gracefulShutdown.js'
-import { parseJSONL } from './json.js'
 import { logError } from './log.js'
 import { extractTag, isCompactBoundaryMessage } from './messages.js'
 import { sanitizePath } from './path.js'
@@ -1780,11 +1779,9 @@ export function getFirstMeaningfulUserMessageTextContent<T extends Message>(
 
       const commandNameTag = extractTag(textContent, COMMAND_NAME_TAG)
       if (commandNameTag) {
-        const commandName = commandNameTag.replace(/^\//, '')
-
         // If it's a built-in command, then it's unlikely to provide
         // meaningful context (e.g. `/model sonnet`)
-        if (builtInCommandNames().has(commandName)) {
+        if (false /* builtInCommandNames removed */) {
           continue
         } else {
           // Otherwise, for custom commands, then keep it only if it has
@@ -1896,7 +1893,6 @@ function applyPreservedSegmentRelinks(
       | 'cycle_before_head'
       | 'missing_anchor' = 'missing_tail'
     let lastSeenUuid: UUID | undefined
-    let lastSeenType: TranscriptMessage['type'] | undefined
     let breakParentUuid: UUID | null | undefined
 
     while (cur) {
@@ -1907,7 +1903,6 @@ function applyPreservedSegmentRelinks(
       walkSeen.add(cur.uuid)
       preservedUuids.add(cur.uuid)
       lastSeenUuid = cur.uuid
-      lastSeenType = cur.type
       if (cur.uuid === lastSeg.headUuid) {
         reachedHead = true
         break
@@ -2463,7 +2458,6 @@ export function checkResumeConsistency(chain: Message[]): void {
     // `i` is the 0-based index of the checkpoint in the reconstructed chain.
     // The checkpoint was appended AFTER messageCount messages, so its own
     // position should be messageCount (i.e., i === expected).
-    const actual = i
 
     return
   }
@@ -2769,10 +2763,6 @@ async function trackSessionBranchingAnalytics(
     return
   }
 
-  // Count sessions with branches and calculate stats using functional approach
-  const branchCounts = Array.from(sessionIdCounts.values()).filter(c => c > 1)
-  const sessionsWithBranches = branchCounts.length
-  const totalBranches = branchCounts.reduce((sum, count) => sum + count, 0)
 }
 
 export async function fetchLogs(limit?: number): Promise<LogOption[]> {
@@ -5086,9 +5076,8 @@ function extractFirstPromptFromChunk(chunk: string): string {
         // so the session still appears in the resume picker.
         const commandNameTag = extractTag(result, COMMAND_NAME_TAG)
         if (commandNameTag) {
-          const name = commandNameTag.replace(/^\//, '')
           const commandArgs = extractTag(result, 'command-args')?.trim() || ''
-          if (builtInCommandNames().has(name) || !commandArgs) {
+          if (false /* builtInCommandNames removed */ || !commandArgs) {
             if (!firstCommandFallback) {
               firstCommandFallback = commandNameTag
             }

@@ -15,15 +15,10 @@ const registerProtocolModule = feature('LODESTONE')
 
 import { getIsInteractive, getLastInteractionTime } from '../bootstrap/state.js'
 import {
-  cleanupNpmCacheForAnthropicPackages,
   cleanupOldMessageFilesInBackground,
-  cleanupOldVersionsThrottled,
 } from './cleanup.js'
 import { cleanupOldVersions } from './nativeInstaller/index.js'
 import { autoUpdateMarketplacesAndPluginsInBackground } from './plugins/pluginAutoupdate.js'
-
-// 24 hours in milliseconds
-const RECURRING_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000
 
 // 10 minutes after start.
 const DELAY_VERY_SLOW_OPERATIONS_THAT_HAPPEN_EVERY_SESSION = 10 * 60 * 1000

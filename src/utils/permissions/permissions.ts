@@ -1,6 +1,6 @@
 import { feature } from 'bun:bundle'
 import { APIUserAbortError } from '@anthropic-ai/sdk'
-import type { CanUseToolFn } from '../../hooks/useCanUseTool.js'
+import type { CanUseToolFn } from '../../types/canUseTool.js'
 import {
   getToolNameForPermissionCheck,
   mcpInfoFromString,
@@ -65,13 +65,8 @@ const autoModeStateModule = feature('TRANSCRIPT_CLASSIFIER')
 
 import {
   addToTurnClassifierDuration,
-  getTotalCacheCreationInputTokens,
-  getTotalCacheReadInputTokens,
-  getTotalInputTokens,
-  getTotalOutputTokens,
 } from '../../bootstrap/state.js'
 import { getFeatureValue_CACHED_WITH_REFRESH } from '../../services/analytics/growthbook.js'
-import { sanitizeToolNameForAnalytics } from '../../services/analytics/metadata.js'
 import {
   clearClassifierChecking,
   setClassifierChecking,
@@ -83,7 +78,6 @@ import {
   buildYoloRejectionMessage,
   DONT_ASK_REJECT_MESSAGE,
 } from '../messages.js'
-import { calculateCostFromTokens } from '../modelCost.js'
 /* eslint-enable @typescript-eslint/no-require-imports */
 import { jsonStringify } from '../slowOperations.js'
 import {
@@ -669,22 +663,6 @@ export const hasPermissionsToUseTool: CanUseToolFn = async (
       }
 
       // Notify ants when classifier error dumped prompts (will be in /share)
-
-      // Log classifier decision for metrics (including overhead telemetry)
-      const yoloDecision = classifierResult.unavailable
-        ? 'unavailable'
-        : classifierResult.shouldBlock
-          ? 'blocked'
-          : 'allowed'
-
-      // Compute classifier cost in USD for overhead analysis
-      const classifierCostUSD =
-        classifierResult.usage && classifierResult.model
-          ? calculateCostFromTokens(
-              classifierResult.model,
-              classifierResult.usage,
-            )
-          : undefined
 
       if (classifierResult.durationMs !== undefined) {
         addToTurnClassifierDuration(classifierResult.durationMs)

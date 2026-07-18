@@ -1,11 +1,8 @@
 import type { ToolResultBlockParam } from '@anthropic-ai/sdk/resources/index.mjs'
-import uniqBy from 'lodash-es/uniqBy.js'
 import { getProjectRoot } from 'src/bootstrap/state.js'
 import {
-  builtInCommandNames,
   findCommand,
   getCommands,
-  type PromptCommand,
 } from 'src/commands.js'
 import type {
   Tool,
@@ -26,28 +23,17 @@ import type {
 import { logForDebugging } from 'src/utils/debug.js'
 import type { PermissionDecision } from 'src/utils/permissions/PermissionResult.js'
 import { getRuleByContentsForTool } from 'src/utils/permissions/permissions.js'
-import {
-  isOfficialMarketplaceName,
-  parsePluginIdentifier,
-} from 'src/utils/plugins/pluginIdentifier.js'
 import { z } from 'zod/v4'
 import {
-  addInvokedSkill,
   clearInvokedSkillsForAgent,
-  getSessionId,
 } from '../../bootstrap/state.js'
 import { COMMAND_MESSAGE_TAG } from '../../constants/xml.js'
-import type { CanUseToolFn } from '../../hooks/useCanUseTool.js'
-import { type AnalyticsMetadata_I_VERIFIED_THIS_IS_PII_TAGGED } from '../../services/analytics/index.js';
-import { getAgentContext } from '../../utils/agentContext.js'
-import { errorMessage } from '../../utils/errors.js'
 import {
   extractResultText,
   prepareForkedCommandContext,
 } from '../../utils/forkedAgent.js'
-import { parseFrontmatter } from '../../utils/frontmatterParser.js'
 import { lazySchema } from '../../utils/lazySchema.js'
-import { createUserMessage, normalizeMessages } from '../../utils/messages.js'
+import { normalizeMessages } from '../../utils/messages.js'
 import type { ModelAlias } from '../../utils/model/aliases.js'
 import { resolveSkillModelOverride } from '../../utils/model/model.js'
 import { recordSkillUsage } from '../../utils/suggestions/skillUsageTracking.js'
@@ -59,13 +45,7 @@ import {
 } from '../utils.js'
 import { SKILL_TOOL_NAME } from './constants.js'
 import { getPrompt } from './prompt.js'
-import {
-  renderToolResultMessage,
-  renderToolUseErrorMessage,
-  renderToolUseMessage,
-  renderToolUseProgressMessage,
-  renderToolUseRejectedMessage,
-} from './UI.js'
+
 
 /**
  * Gets all commands including MCP skills/prompts from AppState.
@@ -92,24 +72,12 @@ async function executeForkedSkill(
   commandName: string,
   args: string | undefined,
   context: ToolUseContext,
-  canUseTool: CanUseToolFn,
+  canUseTool: any,
   parentMessage: AssistantMessage,
   onProgress?: ToolCallProgress<Progress>,
 ): Promise<ToolResult<Output>> {
   const startTime = Date.now()
   const agentId = createAgentId()
-  const isBuiltIn = builtInCommandNames().has(commandName)
-  const isOfficialSkill = isOfficialMarketplaceSkill(command)
-  const isBundled = command.source === 'bundled'
-  const forkedSanitizedName =
-    isBuiltIn || isBundled || isOfficialSkill ? commandName : 'custom'
-
-  const wasDiscoveredField = {}
-  const pluginMarketplace = command.pluginInfo
-    ? parsePluginIdentifier(command.pluginInfo.repository).marketplace
-    : undefined
-  const queryDepth = context.queryTracking?.depth ?? 0
-  const parentAgentId = getAgentContext()?.agentId
 
   const { modifiedGetAppState, baseAgent, promptMessages, skillContent } =
     await prepareForkedCommandContext(command, args || '', context)
@@ -513,20 +481,6 @@ export const SkillTool: Tool<InputSchema, Output, Progress> = buildTool({
     const model = processedCommand.model
     const effort = command?.type === 'prompt' ? command.effort : undefined
 
-    const isBuiltIn = builtInCommandNames().has(commandName)
-    const isBundled = command?.type === 'prompt' && command.source === 'bundled'
-    const isOfficialSkill =
-      command?.type === 'prompt' && isOfficialMarketplaceSkill(command)
-    const sanitizedCommandName =
-      isBuiltIn || isBundled || isOfficialSkill ? commandName : 'custom'
-
-    const pluginMarketplace =
-      command?.type === 'prompt' && command.pluginInfo
-        ? parsePluginIdentifier(command.pluginInfo.repository).marketplace
-        : undefined
-    const queryDepth = context.queryTracking?.depth ?? 0
-    const parentAgentId = getAgentContext()?.agentId
-
     // Get the tool use ID from the parent message for linking newMessages
     const toolUseID = getToolUseIDFromParentMessage(
       parentMessage,
@@ -663,11 +617,7 @@ export const SkillTool: Tool<InputSchema, Output, Progress> = buildTool({
     }
   },
 
-  renderToolResultMessage,
-  renderToolUseMessage,
-  renderToolUseProgressMessage,
-  renderToolUseRejectedMessage,
-  renderToolUseErrorMessage,
+
 } satisfies ToolDef<InputSchema, Output, Progress>)
 
 // Allowlist of PromptCommand property keys that are safe and don't require permission.
@@ -734,24 +684,3 @@ function skillHasOnlySafeProperties(command: Command): boolean {
   return true
 }
 
-function isOfficialMarketplaceSkill(command: PromptCommand): boolean {
-  if (command.source !== 'plugin' || !command.pluginInfo?.repository) {
-    return false
-  }
-  return isOfficialMarketplaceName(
-    parsePluginIdentifier(command.pluginInfo.repository).marketplace,
-  )
-}
-
-/**
- * Extract URL scheme for telemetry. Defaults to 'gs' for unrecognized schemes
- * since the AKI backend is the only production path and the loader throws on
- * unknown schemes before we reach telemetry anyway.
- */
-function extractUrlScheme(url: string): 'gs' | 'http' | 'https' | 's3' {
-  if (url.startsWith('gs://')) return 'gs'
-  if (url.startsWith('https://')) return 'https'
-  if (url.startsWith('http://')) return 'http'
-  if (url.startsWith('s3://')) return 's3'
-  return 'gs'
-}

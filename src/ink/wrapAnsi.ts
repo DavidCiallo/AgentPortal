@@ -1,20 +1,6 @@
-import wrapAnsiNpm from 'wrap-ansi'
-
-type WrapAnsiOptions = {
-  hard?: boolean
-  wordWrap?: boolean
-  trim?: boolean
+/**
+ * Stub — terminal ANSI text wrapping.
+ */
+export function wrapAnsi(input: string, columns: number, _options?: { hard?: boolean; wordWrap?: boolean; trim?: boolean }): string {
+  return input
 }
-
-const wrapAnsiBun =
-  typeof Bun !== 'undefined' && typeof Bun.wrapAnsi === 'function'
-    ? Bun.wrapAnsi
-    : null
-
-const wrapAnsi: (
-  input: string,
-  columns: number,
-  options?: WrapAnsiOptions,
-) => string = wrapAnsiBun ?? wrapAnsiNpm
-
-export { wrapAnsi }

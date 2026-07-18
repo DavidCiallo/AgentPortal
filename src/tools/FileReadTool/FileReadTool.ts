@@ -1,7 +1,6 @@
 import type { Base64ImageSource } from '@anthropic-ai/sdk/resources/index.mjs'
 import { readdir, readFile as readFileAsync } from 'fs/promises'
 import * as path from 'path'
-import { posix, win32 } from 'path'
 import { z } from 'zod/v4'
 import {
   PDF_AT_MENTION_INLINE_THRESHOLD,
@@ -23,7 +22,7 @@ import {
 import type { ToolUseContext } from '../../Tool.js'
 import { buildTool, type ToolDef } from '../../Tool.js'
 import { getCwd } from '../../utils/cwd.js'
-import { getClaudeConfigHomeDir, isEnvTruthy } from '../../utils/envUtils.js'
+import { isEnvTruthy } from '../../utils/envUtils.js'
 import { getErrnoCode, isENOENT } from '../../utils/errors.js'
 import {
   addLineNumbers,
@@ -79,14 +78,7 @@ import {
   OFFSET_INSTRUCTION_TARGETED,
   renderPromptTemplate,
 } from './prompt.js'
-import {
-  getToolUseSummary,
-  renderToolResultMessage,
-  renderToolUseErrorMessage,
-  renderToolUseMessage,
-  renderToolUseTag,
-  userFacingName,
-} from './UI.js'
+
 
 // Device files that would hang the process: infinite output or blocking input.
 // Checked by path only (no I/O). Safe devices like /dev/null are intentionally omitted.
@@ -181,43 +173,6 @@ export class MaxFileReadTokenExceededError extends Error {
 
 // Common image extensions
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp'])
-
-/**
- * Detects if a file path is a session-related file for analytics logging.
- * Only matches files within the Claude config directory (e.g., ~/.portal).
- * Returns the type of session file or null if not a session file.
- */
-function detectSessionFileType(
-  filePath: string,
-): 'session_memory' | 'session_transcript' | null {
-  const configDir = getClaudeConfigHomeDir()
-
-  // Only match files within the Claude config directory
-  if (!filePath.startsWith(configDir)) {
-    return null
-  }
-
-  // Normalize path to use forward slashes for consistent matching across platforms
-  const normalizedPath = filePath.split(win32.sep).join(posix.sep)
-
-  // Session memory files: ~/.portal/session-memory/*.md (including summary.md)
-  if (
-    normalizedPath.includes('/session-memory/') &&
-    normalizedPath.endsWith('.md')
-  ) {
-    return 'session_memory'
-  }
-
-  // Session JSONL transcript files: ~/.portal/projects/*/*.jsonl
-  if (
-    normalizedPath.includes('/projects/') &&
-    normalizedPath.endsWith('.jsonl')
-  ) {
-    return 'session_transcript'
-  }
-
-  return null
-}
 
 const inputSchema = lazySchema(() =>
   z.strictObject({
@@ -359,11 +314,8 @@ export const FileReadTool = buildTool({
   get outputSchema(): OutputSchema {
     return outputSchema()
   },
-  userFacingName,
-  getToolUseSummary,
-  getActivityDescription(input) {
-    const summary = getToolUseSummary(input)
-    return summary ? `Reading ${summary}` : 'Reading file'
+  getActivityDescription() {
+    return 'Reading file'
   },
   isConcurrencySafe() {
     return true
@@ -398,9 +350,7 @@ export const FileReadTool = buildTool({
       appState.toolPermissionContext,
     )
   },
-  renderToolUseMessage,
-  renderToolUseTag,
-  renderToolResultMessage,
+
   // UI.tsx:140 — ALL types render summary chrome only: "Read N lines",
   // "Read image (42KB)". Never the content itself. The model-facing
   // serialization (below) sends content + CYBER_RISK_MITIGATION_REMINDER
@@ -409,7 +359,7 @@ export const FileReadTool = buildTool({
   extractSearchText() {
     return ''
   },
-  renderToolUseErrorMessage,
+
   async validateInput({ file_path, pages }, toolUseContext: ToolUseContext) {
     // Validate pages parameter (pure string parsing, no I/O)
     if (pages !== undefined) {
@@ -993,7 +943,7 @@ async function callInner(
 
   // --- Text file (single async read via readFileInRange) ---
   const lineOffset = offset === 0 ? 0 : offset - 1
-  const { content, lineCount, totalLines, totalBytes, readBytes, mtimeMs } =
+  const { content, lineCount, totalLines, mtimeMs } =
     await readFileInRange(
       resolvedFilePath,
       lineOffset,

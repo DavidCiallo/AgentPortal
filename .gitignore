@@ -12,3 +12,5 @@ package-lock.json
 coverage/
 test-regex*.ts
 *.backup
+.reachable.txt
+*.jsonl

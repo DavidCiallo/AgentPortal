@@ -37,7 +37,6 @@ import {
   logEvent,
 } from '../analytics/index.js'
 import {
-  checkMockRateLimitError,
   isMockRateLimitError,
 } from '../rateLimitMocking.js'
 import { REPEATED_529_ERROR_MESSAGE } from './errors.js'
@@ -665,7 +664,6 @@ function shouldRetry(error: APIError): boolean {
   // Ants can ignore x-should-retry: false for 5xx server errors only.
   // For other status codes (401, 403, 400, 429, etc.), respect the header.
   if (shouldRetryHeader === 'false') {
-    const is5xxError = error.status !== undefined && error.status >= 500
     return false
   }
 

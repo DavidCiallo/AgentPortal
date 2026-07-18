@@ -51,7 +51,6 @@ import {
   getSettings_DEPRECATED,
   getSettingsForSource,
 } from './settings/settings.js'
-import { ALLOWED_OFFICIAL_MARKETPLACE_NAMES } from './plugins/schemas.js'
 import {
   hookJSONOutputSchema,
   promptRequestSchema,
@@ -1409,40 +1408,6 @@ function isInternalHook(matched: MatchedHook): boolean {
  */
 function hookDedupKey(m: MatchedHook, payload: string): string {
   return `${m.pluginRoot ?? m.skillRoot ?? ''}\0${payload}`
-}
-
-/**
- * Build a map of {sanitizedPluginName: hookCount} from matched hooks.
- * Only logs actual names for official marketplace plugins; others become 'third-party'.
- */
-function getPluginHookCounts(
-  hooks: MatchedHook[],
-): Record<string, number> | undefined {
-  const pluginHooks = hooks.filter(h => h.pluginId)
-  if (pluginHooks.length === 0) {
-    return undefined
-  }
-  const counts: Record<string, number> = {}
-  for (const h of pluginHooks) {
-    const atIndex = h.pluginId!.lastIndexOf('@')
-    const isOfficial =
-      atIndex > 0 &&
-      ALLOWED_OFFICIAL_MARKETPLACE_NAMES.has(h.pluginId!.slice(atIndex + 1))
-    const key = isOfficial ? h.pluginId! : 'third-party'
-    counts[key] = (counts[key] || 0) + 1
-  }
-  return counts
-}
-
-/**
- * Build a map of {hookType: count} from matched hooks.
- */
-function getHookTypeCounts(hooks: MatchedHook[]): Record<string, number> {
-  const counts: Record<string, number> = {}
-  for (const h of hooks) {
-    counts[h.hook.type] = (counts[h.hook.type] || 0) + 1
-  }
-  return counts
 }
 
 function getHooksConfig(

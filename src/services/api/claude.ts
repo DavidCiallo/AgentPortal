@@ -1,10 +1,8 @@
 import type {
   BetaContentBlock,
-
   BetaImageBlockParam,
   BetaJSONOutputFormat,
   BetaMessage,
-  BetaMessageDeltaUsage,
   BetaMessageStreamParams,
   BetaOutputConfig,
   BetaRawMessageStreamEvent,
@@ -14,7 +12,6 @@ import type {
   BetaToolChoiceTool,
   BetaToolResultBlockParam,
   BetaToolUnion,
-  BetaUsage,
   BetaMessageParam as MessageParam,
 } from '@anthropic-ai/sdk/resources/beta/messages/messages.mjs'
 import type { TextBlockParam } from '@anthropic-ai/sdk/resources/index.mjs'
@@ -78,8 +75,6 @@ import {
   stripToolReferenceBlocksFromUserMessage,
 } from '../../utils/messages.js'
 import {
-  getDefaultOpusModel,
-  getDefaultSonnetModel,
   getSmallFastModel,
   isNonCustomOpusModel,
 } from '../../utils/model/model.js'
@@ -1011,8 +1006,6 @@ async function* queryModel(
   // Also naturally handles rollback/undo since removed messages won't be in the array.
   const previousRequestId = getPreviousRequestIdFromMessages(messages)
 
-  const resolvedModel = options.model
-
   queryCheckpoint('query_tool_schema_build_start')
   const isAgenticQuery =
     options.querySource.startsWith('repl_main_thread') ||
@@ -1134,17 +1127,12 @@ async function* queryModel(
 
   // Determine if cached microcompact is enabled for this model.
   // Computed once here (in async context) and captured by paramsFromContext.
-  // The beta header is also captured here to avoid a top-level import of the
-  // internal-only CACHE_EDITING_BETA_HEADER constant.
   let cachedMCEnabled = false
-  let cacheEditingBetaHeader = ''
   if (feature('CACHED_MICROCOMPACT')) {
     const {
       isCachedMicrocompactEnabled,
       isModelSupportedForCacheEditing,
     } = await import('../compact/cachedMicrocompact.js')
-    const betas = await import('src/constants/betas.js')
-    cacheEditingBetaHeader = betas.CACHE_EDITING_BETA_HEADER
     const featureEnabled = isCachedMicrocompactEnabled()
     const modelSupported = isModelSupportedForCacheEditing(options.model)
     cachedMCEnabled = featureEnabled && modelSupported
@@ -1470,10 +1458,6 @@ async function* queryModel(
   const consumedCacheEdits = cachedMCEnabled ? consumePendingCacheEdits() : null
   const consumedPinnedEdits = cachedMCEnabled ? getPinnedCacheEdits() : []
 
-  // Capture the betas sent in the last API request, including the ones that
-  // were dynamically added, so we can log and send it to telemetry.
-  let lastRequestBetas: string[] | undefined
-
   const paramsFromContext = (retryContext: RetryContext) => {
     const betasParams = [...betas]
 
@@ -1608,8 +1592,6 @@ async function* queryModel(
       ? (options.temperatureOverride ?? 1)
       : undefined
 
-    lastRequestBetas = betasParams
-
     return {
       model: normalizeModelStringForAPI(options.model),
       // IMPORTANT: `system` must appear before `messages` in the object literal.
@@ -1682,13 +1664,10 @@ async function* queryModel(
   let ttftMs = 0
   let partialMessage: BetaMessage | undefined = undefined
   const contentBlocks: (BetaContentBlock | ConnectorTextBlock)[] = []
-  let costUSD = 0
   let stopReason: BetaStopReason | null = null
   let didFallBackToNonStreaming = false
   let fallbackMessage: AssistantMessage | undefined
   let maxOutputTokens = 0
-  let responseHeaders: globalThis.Headers | undefined = undefined
-  let research: unknown = undefined
   let isFastModeRequest = isFastMode // Keep separate state as it may change if falling back
   let isAdvisorInProgress = false
 
@@ -2251,8 +2230,6 @@ async function* queryModel(
       const resp = streamResponse as unknown as Response | undefined
       if (resp) {
         extractQuotaStatusFromHeaders(resp.headers)
-        // Store headers for gateway detection
-        responseHeaders = resp.headers
       }
     } catch (streamingError) {
       // Clear the idle timeout watchdog on error path too

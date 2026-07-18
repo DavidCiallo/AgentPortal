@@ -24,7 +24,7 @@ import {
 } from '../../utils/worktree.js'
 import { EXIT_WORKTREE_TOOL_NAME } from './constants.js'
 import { getExitWorktreeToolPrompt } from './prompt.js'
-import { renderToolResultMessage, renderToolUseMessage } from './UI.js'
+
 
 const inputSchema = lazySchema(() =>
   z.strictObject({
@@ -221,8 +221,7 @@ export const ExitWorktreeTool: Tool<InputSchema, Output> = buildTool({
 
     return { result: true }
   },
-  renderToolUseMessage,
-  renderToolResultMessage,
+
   async call(input) {
     const session = getCurrentWorktreeSession()
     if (!session) {

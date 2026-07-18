@@ -503,13 +503,6 @@ export const createAndSaveSnapshot = async (
             logError(
               new Error(`Failed to create shell snapshot: ${error.message}`),
             )
-            // Convert signal name to number if present
-            const signalNumber = execError?.signal
-              ? os.constants.signals[
-                  execError.signal as keyof typeof os.constants.signals
-                ]
-              : undefined
-
             resolve(undefined)
           } else {
             let snapshotSize: number | undefined

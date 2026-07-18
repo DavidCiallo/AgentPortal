@@ -32,7 +32,6 @@ export async function getLatestVersionFromArtifactory(
   if (!ARTIFACTORY_REGISTRY_URL) {
     throw new Error('Internal artifactory registry URL is not configured')
   }
-  const startTime = Date.now()
   const { stdout, code, stderr } = await execFileNoThrowWithCwd(
     'npm',
     [
@@ -48,8 +47,6 @@ export async function getLatestVersionFromArtifactory(
       preserveOutputOnError: true,
     },
   )
-
-  const latencyMs = Date.now() - startTime
 
   if (code !== 0) {
 
@@ -70,23 +67,15 @@ export async function getLatestVersionFromBinaryRepo(
   baseUrl: string,
   authConfig?: { auth: { username: string; password: string } },
 ): Promise<string> {
-  const startTime = Date.now()
   try {
     const response = await axios.get(`${baseUrl}/${channel}`, {
       timeout: 30000,
       responseType: 'text',
       ...authConfig,
     })
-    const latencyMs = Date.now() - startTime
-
     return response.data.trim()
   } catch (error) {
-    const latencyMs = Date.now() - startTime
     const errorMessage = error instanceof Error ? error.message : String(error)
-    let httpStatus: number | undefined
-    if (axios.isAxiosError(error) && error.response) {
-      httpStatus = error.response.status
-    }
 
     const fetchError = new Error(
       `Failed to fetch version from ${baseUrl}/${channel}: ${errorMessage}`,
@@ -380,7 +369,6 @@ export async function downloadVersionFromBinaryRepo(
 
   // Get platform
   const platform = getPlatform()
-  const startTime = Date.now()
 
   // Log download attempt start
 
@@ -397,12 +385,7 @@ export async function downloadVersionFromBinaryRepo(
     )
     manifest = manifestResponse.data
   } catch (error) {
-    const latencyMs = Date.now() - startTime
     const errorMessage = error instanceof Error ? error.message : String(error)
-    let httpStatus: number | undefined
-    if (axios.isAxiosError(error) && error.response) {
-      httpStatus = error.response.status
-    }
 
     logError(
       new Error(
@@ -438,15 +421,8 @@ export async function downloadVersionFromBinaryRepo(
       binaryPath,
       authConfig || {},
     )
-    const latencyMs = Date.now() - startTime
-
   } catch (error) {
-    const latencyMs = Date.now() - startTime
     const errorMessage = error instanceof Error ? error.message : String(error)
-    let httpStatus: number | undefined
-    if (axios.isAxiosError(error) && error.response) {
-      httpStatus = error.response.status
-    }
 
     logError(
       new Error(`Failed to download binary from ${binaryUrl}: ${errorMessage}`),

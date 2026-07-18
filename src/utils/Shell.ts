@@ -6,7 +6,6 @@ import { isAbsolute, resolve } from 'path'
 import { join as posixJoin } from 'path/posix'
 import {
   getOriginalCwd,
-  getSessionId,
   setCwdState,
 } from '../bootstrap/state.js'
 import { generateTaskId } from '../Task.js'
