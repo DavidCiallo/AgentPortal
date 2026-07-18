@@ -162,6 +162,16 @@
     </div>
   </div>
 
-  <script src="/app.js"></script>
+  <!-- UI modules — loaded in dependency order (all share global scope) -->
+  <script src="/js/state.js"></script>
+  <script src="/js/utils.js"></script>
+  <script src="/js/markdown.js"></script>
+  <script src="/js/tools.js"></script>
+  <script src="/js/settings.js"></script>
+  <script src="/js/sidebar.js"></script>
+  <script src="/js/sessions.js"></script>
+  <script src="/js/project.js"></script>
+  <script src="/js/websocket.js"></script>
+  <script src="/js/events.js"></script>
 </body>
 </html>
