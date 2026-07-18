@@ -1119,6 +1119,10 @@ export class WebServer {
           if (!runner) {
             runner = new SessionRunner(this, sid, msg.cwd || process.cwd(), msg.model)
             this.runners.set(sid, runner)
+          } else if (msg.cwd && msg.cwd !== runner.cwd) {
+            // Correct a stale cwd on an existing runner (e.g. created by a
+            // previous subscribe that didn't carry cwd).
+            runner.cwd = msg.cwd
           }
           runner.addClient(client)
           subscribedRunner = runner
@@ -1130,8 +1134,23 @@ export class WebServer {
           const sid = msg.sessionId || randomUUID()
           let runner = this.runners.get(sid)
           if (!runner) {
-            runner = new SessionRunner(this, sid, msg.cwd || process.cwd(), msg.model)
+            // Prefer the client-supplied cwd; only fall back to process.cwd()
+            // if the client didn't send one.  Logging here makes it obvious
+            // when the frontend forgot to send cwd (a frequent source of
+            // "agent ran in the wrong directory" bugs).
+            const initialCwd = msg.cwd || process.cwd()
+            if (!msg.cwd) {
+              console.warn(`[web] chat for sid=${sid} missing cwd; falling back to ${initialCwd}`)
+            }
+            runner = new SessionRunner(this, sid, initialCwd, msg.model)
             this.runners.set(sid, runner)
+          } else if (msg.cwd && msg.cwd !== runner.cwd) {
+            // Update the runner's cwd so a stale runner (e.g. one created by
+            // an earlier subscribe that didn't carry cwd) is corrected before
+            // this round starts.  Without this, the agent can end up running
+            // in the server's process.cwd() even though the UI shows the
+            // correct project path.
+            runner.cwd = msg.cwd
           }
           // Auto-subscribe this client if not already
           if (subscribedRunner !== runner) {
