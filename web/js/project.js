@@ -116,7 +116,7 @@ async function loadDirectory(dirPath) {
     if (data.parentPath) {
       const parent = document.createElement('div')
       parent.className = 'dir-entry dir-up'
-      parent.innerHTML = '<span class="dir-icon">\ud83d\udcc2</span> ..'
+      parent.innerHTML = '<span class="dir-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-7l-2-2H5a2 2 0 0 0-2 2Z"/><path d="m10 11 2-2 2 2M12 9v4"/></svg></span> ..'
       parent.onclick = () => loadDirectory(data.parentPath)
       list.appendChild(parent)
     }
@@ -125,7 +125,7 @@ async function loadDirectory(dirPath) {
       const el = document.createElement('div')
       el.className = 'dir-entry'
       if (!entry.accessible) el.classList.add('dir-inaccessible')
-      el.innerHTML = `<span class="dir-icon">\ud83d\udcc1</span> ${escapeHtml(entry.name)}`
+      el.innerHTML = `<span class="dir-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-7l-2-2H5a2 2 0 0 0-2 2Z"/></svg></span> ${escapeHtml(entry.name)}`
       el.onclick = () => {
         if (entry.accessible) {
           loadDirectory(entry.path)
@@ -198,6 +198,10 @@ async function createNewChat() {
   currentProject = projectPath
   currentProjectId = projectPath.replace(/[/\\:]/g, '-')
   sessionId = ''
+
+  // Persist the chosen project path so that switchSession() can recover it
+  // even when the JSONL metadata hasn't been written yet (new sessions).
+  localStorage.setItem('lastProjectDir', projectPath)
 
   // Clear chat and show welcome message
   chatContainer.innerHTML = ''

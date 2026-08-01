@@ -33,7 +33,6 @@ function connect() {
   ws.onmessage = (event) => {
     try {
       const msg = JSON.parse(event.data)
-      console.log('[ws] Received:', msg.type, msg)
       handleMessage(msg)
     } catch (e) {
       console.error('[ws] Error parsing message:', e, event.data)
@@ -42,7 +41,6 @@ function connect() {
 }
 
 function handleMessage(msg) {
-  console.log('[handleMessage] Processing:', msg.type)
   try {
   // Discard events from a session we've already switched away from.
   // This prevents stale streaming events from polluting the new session's UI
@@ -186,7 +184,10 @@ function handleMessage(msg) {
       // immediately so subsequent UI state (retry, subscribe, etc.) targets
       // the right session instead of waiting for `done`.
       sessionId = msg.sessionId || sessionId
-      if (msg.cwd) currentProject = msg.cwd
+      if (msg.cwd) {
+        currentProject = msg.cwd
+        try { localStorage.setItem('lastProjectDir', msg.cwd) } catch {}
+      }
       if (msg.projectId) currentProjectId = msg.projectId
       break
 

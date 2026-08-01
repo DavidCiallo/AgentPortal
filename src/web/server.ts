@@ -1,9 +1,9 @@
 import { createServer } from 'node:http'
 import { readFile, readdir, mkdir, stat, unlink, appendFile } from 'node:fs/promises'
-import { join, extname, resolve, win32 } from 'node:path'
+import { join, extname, resolve, win32, dirname } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
-import { createReadStream, readFileSync } from 'node:fs'
+import { createReadStream, readFileSync, existsSync } from 'node:fs'
 import { createInterface } from 'node:readline'
 
 // @ts-expect-error - ws types not bundled
@@ -516,19 +516,51 @@ class SessionRunner {
 
 }
 
+/**
+ * Resolve the web/ static assets directory.
+ *
+ * Priority:
+ *   1. explicit `webRoot` option
+ *   2. `PORTAL_WEB_ROOT` env var
+ *   3. `web/` next to the running executable (compiled-binary case)
+ *   4. `web/` in the current working directory
+ *   5. source-tree default `../../web` relative to this file (dev mode)
+ */
+function resolveWebRoot(explicit?: string): string {
+  if (explicit) return resolve(explicit)
+  if (process.env.PORTAL_WEB_ROOT) return resolve(process.env.PORTAL_WEB_ROOT)
+
+  const candidates: string[] = []
+  // Compiled binary: Bun sets process.execPath / process.argv[0] to the exe.
+  try {
+    const exeDir = dirname(process.execPath)
+    candidates.push(join(exeDir, 'web'))
+  } catch { /* ignore */ }
+  candidates.push(join(process.cwd(), 'web'))
+  if (import.meta.dirname) {
+    candidates.push(join(import.meta.dirname, '../../web'))
+  }
+
+  for (const c of candidates) {
+    if (existsSync(join(c, 'index.html'))) return resolve(c)
+  }
+  // Fall back to the last candidate so error messages reference a real path.
+  return resolve(candidates[candidates.length - 1])
+}
+
 export class WebServer {
   private httpServer: ReturnType<typeof createServer>
   private wss: WebSocketServer
   private sessions: Map<string, SessionData> = new Map()
   private runners: Map<string, SessionRunner> = new Map()
   private webRoot: string
-  private port: number
+  private port: number | undefined
   private host: string
 
   constructor(options: { port?: number; host?: string; webRoot?: string } = {}) {
-    this.port = options.port ?? 3000
-    this.host = options.host ?? 'localhost'
-    this.webRoot = options.webRoot ?? join(import.meta.dirname, '../../web')
+    this.port = options.port
+    this.host = options.host ?? '0.0.0.0'
+    this.webRoot = resolveWebRoot(options.webRoot)
 
     this.httpServer = createServer(this.handleHttpRequest.bind(this))
     this.wss = new WebSocketServer({ server: this.httpServer })
@@ -1324,8 +1356,18 @@ export class WebServer {
   }
 
   start() {
-    this.httpServer.listen(this.port, this.host, () => {
-      console.log(`Portal Web UI running at http://${this.host}:${this.port}`)
+    return new Promise<void>((resolveStart, rejectStart) => {
+      this.httpServer.once('error', rejectStart)
+      this.httpServer.listen(this.port ?? 0, this.host, () => {
+        const addr = this.httpServer.address()
+        const boundPort = typeof addr === 'object' && addr ? addr.port : this.port
+        this.port = boundPort
+        const displayHost = this.host === '0.0.0.0' || this.host === '::' ? '127.0.0.1' : this.host
+        const url = `http://${displayHost}:${boundPort}`
+        // Plain log line so launchers/grep can find the URL reliably.
+        console.log(`Portal Web UI listening on ${url} (host=${this.host})`)
+        resolveStart()
+      })
     })
   }
 

@@ -32,12 +32,10 @@ function loadConfig(config) {
   document.getElementById('languageSelect').value = config.language || 'chinese'
   currentModel = config.model || ''
 
-  // Set the project directory from the server's cwd so new sessions are
-  // created in the correct project folder (not the server process cwd).
-  if (config.cwd && !currentProject) {
-    currentProject = config.cwd
-    currentProjectId = currentProject.replace(/[/\\:]/g, '-')
-  }
+  // Note: do NOT adopt config.cwd (the server's process.cwd) as the project
+  // directory — that would cause new sessions to run in wherever the server
+  // was launched from. currentProject must come from the user explicitly
+  // choosing a project (createNewChat) or restoring a previous session.
 
   // Fetch available models from the API and populate the dropdown
   fetchModelsAndPopulateSelect(config.model)
@@ -130,9 +128,9 @@ function showConfigStatus(type, message) {
   if (type === 'validating') {
     statusEl.className = 'config-status validating'
     statusEl.style.display = 'block'
-    statusEl.style.background = 'rgba(59, 130, 246, 0.15)'
-    statusEl.style.borderColor = 'var(--accent)'
-    statusEl.style.color = 'var(--accent)'
+    statusEl.style.background = 'color-mix(in srgb, var(--info) 12%, transparent)'
+    statusEl.style.borderColor = 'color-mix(in srgb, var(--info) 35%, transparent)'
+    statusEl.style.color = 'var(--info)'
   } else if (type === 'success') {
     statusEl.className = 'config-status success'
     setTimeout(() => {

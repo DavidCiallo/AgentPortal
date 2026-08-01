@@ -15,6 +15,16 @@ async function sendMessage() {
   const message = messageInput.value.trim()
   if (!message || isGenerating) return
 
+  // Guard: refuse to send without a chosen project directory. Without a cwd
+  // the backend would fall back to its own process.cwd(), running the agent
+  // in the wrong folder. The user must pick a project via "New Chat" (or
+  // restore/switch to a session that carries one) first.
+  if (!currentProject) {
+    alert('Please start a "New Chat" and select a project folder first.')
+    openProjectSelector()
+    return
+  }
+
   // If continuing an existing session, load and display full history
   // so the user sees the complete conversation context.
   if (sessionId) {
@@ -41,12 +51,17 @@ async function sendMessage() {
   }
 
   addMessage(message, 'user')
-  scrollToBottom(true)
   // Remember what the user sent so we can put it back into the textarea
   // if they cancel the round before it completes.
   pendingUserInput = message
   messageInput.value = ''
+  // Shrink the textarea.  This changes the flex layout — the input area
+  // gets shorter and the chat container taller, which can push the
+  // viewport up.  A synchronous scroll pins us to the bottom before the
+  // browser paints, avoiding the visible one-frame jump that
+  // requestAnimationFrame (used by scrollToBottom) would cause.
   messageInput.style.height = 'auto'
+  chatContainer.scrollTop = chatContainer.scrollHeight
 
   setSendButtonState('stop')
   showAgentStatus('Working')
@@ -144,7 +159,7 @@ function renderMessage(msg, container) {
         ? `${mergedGroups.length} tool calls (merged from ${filteredCalls.length})`
         : `${filteredCalls.length} tool calls`
       toggleBtn.innerHTML = `
-        <span class="icon">&#128295;</span>
+        <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76Z"/></svg></span>
         <span>${label}</span>
         <span class="count">${mergedGroups.length}</span>
       `
@@ -199,10 +214,15 @@ async function switchSession(projectId, newSessionId, cwd) {
   // Clear current chat
   chatContainer.innerHTML = ''
   sessionId = newSessionId
-  // Prefer the real cwd from the session data; fall back to a best-effort
-  // reverse of the sanitized projectId so the server always receives a
-  // plausible filesystem path rather than a slug like "C-items-Tiny-Web".
-  currentProject = cwd || denormalizeProjectId(projectId) || ''
+  // Prefer the real cwd from the session data; fall back to the last known
+  // project dir from localStorage (set by createNewChat / session_started),
+  // then a best-effort reverse of the sanitized projectId.
+  // IMPORTANT: denormalizeProjectId is lossy (all non-alphanumeric chars map
+  // to '-'), so it must be the last resort.
+  currentProject = cwd
+    || (function() { try { return localStorage.getItem('lastProjectDir') || '' } catch { return '' } })()
+    || denormalizeProjectId(projectId)
+    || ''
   currentProjectId = projectId
 
   // Reset agent status from the previous session
@@ -286,7 +306,7 @@ function autoRestoreLastSession() {
     // Prefer the real cwd; fall back to a best-effort reverse of the sanitized
     // projectId.  The server-side projects API is queried below to refine this
     // to the canonical path when cwd was not saved (e.g. older localStorage).
-    currentProject = cwd || denormalizeProjectId(projectId) || ''
+    currentProject = cwd || localStorage.getItem('lastProjectDir') || denormalizeProjectId(projectId) || ''
     currentProjectId = projectId
 
     // Suppress infinite-scroll handler while restoring
@@ -304,6 +324,8 @@ function autoRestoreLastSession() {
           .catch(() => {})
 
     resolveCwd.then(() => {
+      // Persist the resolved cwd for future session switches
+      if (currentProject) try { localStorage.setItem('lastProjectDir', currentProject) } catch {}
       // Fetch and display session messages via HTTP
       return fetch(`/api/session-messages?project=${encodeURIComponent(projectId)}&session=${encodeURIComponent(savedSessionId)}&offset=0&limit=40`)
         .then(res => res.json())
