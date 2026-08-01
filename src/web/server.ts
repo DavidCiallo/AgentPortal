@@ -460,7 +460,7 @@ class SessionRunner {
         } else {
           // console.log('[web] unhandled event:', event)
         }
-        console.log(new Date(), '[web] event:', event.type)
+        // console.log(new Date(), '[web] event:', event.type)
       }
 
       if (!this.interrupted) {
@@ -569,8 +569,6 @@ export class WebServer {
 
   private async handleHttpRequest(req: any, res: any) {
     const url = new URL(req.url, `http://${req.headers.host}`)
-    console.log('Request:', url.pathname)
-
     // API endpoints
     if (url.pathname === '/api/projects') {
       return this.handleListProjects(res)
