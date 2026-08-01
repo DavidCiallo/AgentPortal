@@ -309,12 +309,20 @@ class SessionRunner {
       // Ensure the session's cwd is in the allowed working directories so
       // resetCwdIfOutsideProject() (called after every Bash execution) does
       // not reset the agent back to the server process's original cwd.
-      const toolPermCtx = { ...this.appState.toolPermissionContext }
-      if (!toolPermCtx.additionalWorkingDirectories.has(this.cwd)) {
-        const dirs = new Map(toolPermCtx.additionalWorkingDirectories)
+      // Must write back to this.appState: BashTool reads toolPermissionContext
+      // via getAppState(), so a detached local copy is invisible to it.
+      if (!this.appState.toolPermissionContext.additionalWorkingDirectories.has(this.cwd)) {
+        const dirs = new Map(this.appState.toolPermissionContext.additionalWorkingDirectories)
         dirs.set(this.cwd, { path: this.cwd, source: 'session' })
-        toolPermCtx.additionalWorkingDirectories = dirs
+        this.appState = {
+          ...this.appState,
+          toolPermissionContext: {
+            ...this.appState.toolPermissionContext,
+            additionalWorkingDirectories: dirs,
+          },
+        }
       }
+      const toolPermCtx = this.appState.toolPermissionContext
       this.engine = new QueryEngine({
         cwd: this.cwd,
         tools: getTools(toolPermCtx),
@@ -1117,7 +1125,18 @@ export class WebServer {
           }
           let runner = this.runners.get(sid)
           if (!runner) {
-            runner = new SessionRunner(this, sid, msg.cwd || process.cwd(), msg.model)
+            // Do NOT silently fall back to process.cwd() here (unlike the
+            // chat path): subscribe is automatic (page load / reconnect),
+            // so a missing cwd almost always means the frontend hasn't
+            // resolved the project yet.  Creating a runner now would pin
+            // the session to the server's cwd, leaking transcript/memory
+            // into the wrong project directory (unrecoverable).  Bail out
+            // and let the frontend re-subscribe once it has the real cwd.
+            if (!msg.cwd) {
+              send({ type: 'error', message: 'subscribe requires cwd; retry after project is selected' })
+              return
+            }
+            runner = new SessionRunner(this, sid, msg.cwd, msg.model)
             this.runners.set(sid, runner)
           } else if (msg.cwd && msg.cwd !== runner.cwd) {
             // Correct a stale cwd on an existing runner (e.g. created by a

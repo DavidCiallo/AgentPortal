@@ -419,6 +419,11 @@ const sessionContextStore = new AsyncLocalStorage<{
    *  instead of the global STATE.cwd — preventing concurrent runners from
    *  stomping on each other's working directory via setCwdState(). */
   cwd: string | null
+  /** Per-session system prompt section cache. Prevents one concurrent
+   *  runner's cached sections (notably env_info_simple, which embeds the
+   *  primary working directory) from leaking into another session's
+   *  system prompt. */
+  systemPromptSectionCache: Map<string, string | null>
   /** Per-session model override. When set, getMainLoopModelOverride() returns
    *  this instead of the global STATE.mainLoopModelOverride — preventing
    *  concurrent runners from corrupting each other's model selection. */
@@ -454,6 +459,7 @@ export function runWithSessionContext<T>(
       sessionId,
       sessionProjectDir,
       cwd: initialCwd ?? null,
+      systemPromptSectionCache: new Map(),
       modelOverride: undefined,
       betaLatches: { fastMode: null, cacheEditing: null, thinkingClear: null },
     },
@@ -1563,17 +1569,34 @@ export function setIsRemoteMode(value: boolean): void {
 // System prompt section accessors
 
 export function getSystemPromptSectionCache(): Map<string, string | null> {
-  return STATE.systemPromptSectionCache
+  // Prefer the per-session cache so concurrent runners don't leak cached
+  // sections (env_info_simple embeds the primary working directory) into
+  // each other's system prompts. Fall back to the global STATE cache for
+  // non-session contexts (tests, direct-connect, etc.).
+  return (
+    sessionContextStore.getStore()?.systemPromptSectionCache ??
+    STATE.systemPromptSectionCache
+  )
 }
 
 export function setSystemPromptSectionCacheEntry(
   name: string,
   value: string | null,
 ): void {
+  const ctx = sessionContextStore.getStore()
+  if (ctx) {
+    ctx.systemPromptSectionCache.set(name, value)
+    return
+  }
   STATE.systemPromptSectionCache.set(name, value)
 }
 
 export function clearSystemPromptSectionState(): void {
+  const ctx = sessionContextStore.getStore()
+  if (ctx) {
+    ctx.systemPromptSectionCache.clear()
+    return
+  }
   STATE.systemPromptSectionCache.clear()
 }
 

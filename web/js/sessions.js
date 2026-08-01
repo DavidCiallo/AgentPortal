@@ -247,10 +247,21 @@ async function switchSession(projectId, newSessionId, cwd) {
 function subscribeToSession() {
   if (!sessionId) return
   if (!ws || ws.readyState !== WebSocket.OPEN) return
+  // Guard: do NOT send subscribe without a cwd.  The server now refuses to
+  // create a runner without one (it used to silently fall back to its own
+  // process.cwd(), which pinned the session to the wrong project directory
+  // and leaked transcript/memory into it).  This is especially important on
+  // auto-restore / reconnect, where currentProject may not be resolved yet.
+  // Returning here is safe: the server keeps the client attached on retry,
+  // and any later chat/subscribe will (re)create the runner with the cwd.
+  if (!currentProject) {
+    console.warn('[subscribeToSession] skipping: currentProject is empty')
+    return
+  }
   ws.send(JSON.stringify({
     type: 'subscribe',
     sessionId,
-    cwd: currentProject || undefined,
+    cwd: currentProject,
     model: document.getElementById('modelSelect').value || currentModel || undefined,
   }))
 }
