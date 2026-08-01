@@ -68,6 +68,13 @@ document.getElementById('settingsModal').addEventListener('click', (e) => {
   }
 })
 
+// Close connection-lost modal when clicking outside
+document.getElementById('connectionLostModal').addEventListener('click', (e) => {
+  if (e.target === document.getElementById('connectionLostModal')) {
+    closeConnectionLostModal()
+  }
+})
+
 // ---- Responsive ------------------------------------------------------------
 
 // Auto-close sidebar when resizing above mobile breakpoint

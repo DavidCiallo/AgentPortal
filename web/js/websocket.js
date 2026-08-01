@@ -10,11 +10,28 @@
 //             settings.js (loadConfig, showConfigStatus)
 // ---------------------------------------------------------------------------
 
+// Connection-lost notice: shown once per outage if the WebSocket has been
+// down for more than 5s (the backend has likely stopped). Reset on reconnect.
+let disconnectTimer = null
+let disconnectNoticeShown = false
+
+function showConnectionLostModal() {
+  document.getElementById('connectionLostModal')?.classList.add('active')
+}
+
+function closeConnectionLostModal() {
+  document.getElementById('connectionLostModal')?.classList.remove('active')
+}
+
 // Connect WebSocket
 function connect() {
   ws = new WebSocket(WS_URL)
 
   ws.onopen = () => {
+    // Reconnected — cancel any pending disconnect notice
+    clearTimeout(disconnectTimer)
+    disconnectNoticeShown = false
+    closeConnectionLostModal()
     setConnectionStatus(true)
     setSendButtonState('send')
     // Load config to populate currentModel
@@ -28,6 +45,15 @@ function connect() {
   ws.onclose = () => {
     setConnectionStatus(false)
     sendBtn.disabled = true
+    // Alert the user if the connection stays down for 5s. The reconnect
+    // timer fires every 3s, so this only means the backend is unreachable.
+    if (!disconnectNoticeShown) {
+      clearTimeout(disconnectTimer)
+      disconnectTimer = setTimeout(() => {
+        disconnectNoticeShown = true
+        showConnectionLostModal()
+      }, 5000)
+    }
     setTimeout(connect, 3000)
   }
 

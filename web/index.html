@@ -134,6 +134,17 @@
       </div>
     </div>
 
+    <!-- Connection Lost Modal — shown when the WebSocket stays down for 5s+ -->
+    <div class="modal-overlay" id="connectionLostModal">
+      <div class="modal">
+        <h2>连接已断开</h2>
+        <p class="modal-description">与服务端断开连接，可能是后台已停止</p>
+        <div class="modal-actions">
+          <button class="btn-save" onclick="closeConnectionLostModal()">知道了</button>
+        </div>
+      </div>
+    </div>
+
     <div class="chat-container" id="chatContainer">
       <div class="message assistant">Welcome to Portal! I can help you with coding tasks, file operations, and more. What would you like to work on?</div>
     </div>
