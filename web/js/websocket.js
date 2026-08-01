@@ -5,7 +5,8 @@
 //                          hideAgentStatus, scrollToBottom, addMessage, escapeHtml)
 //             tools.js   (renderToolCallLive, pendingToolElements, …)
 //             markdown.js (renderMarkdown)
-//             sessions.js (renderSessionMessages, loadSessions — called from 'done')
+//             sessions.js (renderSessionMessages)
+//             sidebar.js  (refreshSessionList — called from 'session_started'/'done')
 //             settings.js (loadConfig, showConfigStatus)
 // ---------------------------------------------------------------------------
 
@@ -116,13 +117,9 @@ function handleMessage(msg) {
         }))
 
         // Refresh the sidebar so a brand-new conversation appears in the
-        // list immediately.
-        if (currentProjectId && document.getElementById(`sessions-${currentProjectId}`)) {
-          loadSessions(currentProjectId).then(() => {
-            document.querySelectorAll('.session-item').forEach(el => el.classList.remove('active'))
-            document.querySelector(`.session-item[data-session-id="${sessionId}"]`)?.classList.add('active')
-          })
-        }
+        // list (and the title reflects the finished round). refreshSessionList
+        // also creates the project group when it's missing.
+        refreshSessionList()
       }
       // Flush any remaining buffered tool elements (never got results)
       pendingToolElements.clear()
@@ -179,7 +176,7 @@ function handleMessage(msg) {
       hideAgentStatus()
       break
 
-    case 'session_started':
+    case 'session_started': {
       // Server has allocated/confirmed the sessionId for this round. Pin it
       // immediately so subsequent UI state (retry, subscribe, etc.) targets
       // the right session instead of waiting for `done`.
@@ -189,7 +186,22 @@ function handleMessage(msg) {
         try { localStorage.setItem('lastProjectDir', msg.cwd) } catch {}
       }
       if (msg.projectId) currentProjectId = msg.projectId
+
+      // Refresh the sidebar the moment the user speaks so a brand-new
+      // conversation appears immediately. The server writes the session's
+      // JSONL asynchronously, so retry briefly until it shows up (the 'done'
+      // handler refreshes again as a final catch).
+      const refreshAttempt = (remaining) => {
+        refreshSessionList().then(() => {
+          if (remaining > 0 && sessionId
+              && !document.querySelector(`.session-item[data-session-id="${sessionId}"]`)) {
+            setTimeout(() => refreshAttempt(remaining - 1), 400)
+          }
+        })
+      }
+      refreshAttempt(3)
       break
+    }
 
     case 'config':
       loadConfig(msg)

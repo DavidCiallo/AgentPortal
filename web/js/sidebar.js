@@ -121,6 +121,23 @@ async function deleteSession(projectId, sessionIdToDelete) {
   }
 }
 
+// Refresh the sidebar so a freshly-created session appears immediately.
+// When the project group isn't in the DOM yet (brand-new project: the server
+// only creates the project dir once the first JSONL is written), rebuild the
+// whole project list instead of just one session list.
+async function refreshSessionList() {
+  if (!currentProjectId) return
+  if (!document.getElementById(`sessions-${currentProjectId}`)) {
+    await loadProjects()
+  } else {
+    await loadSessions(currentProjectId)
+  }
+  if (sessionId) {
+    document.querySelectorAll('.session-item').forEach(el => el.classList.remove('active'))
+    document.querySelector(`.session-item[data-session-id="${sessionId}"]`)?.classList.add('active')
+  }
+}
+
 // Mobile sidebar toggle
 function toggleSidebar() {
   const sidebar = document.querySelector('.sidebar')
