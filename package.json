@@ -15,6 +15,7 @@
   "scripts": {
     "dev:web": "bun run scripts/start-web.ts",
     "start": "bun run scripts/start-web.ts",
+    "build:exe": "bun run scripts/build-exe.ts",
     "dev:profile": "bun run scripts/provider-launch.ts",
     "dev:profile:fast": "bun run scripts/provider-launch.ts auto --fast --bare",
     "dev:codex": "bun run scripts/provider-launch.ts codex",

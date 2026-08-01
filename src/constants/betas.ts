@@ -23,9 +23,9 @@ export const TOKEN_EFFICIENT_TOOLS_BETA_HEADER =
 export const SUMMARIZE_CONNECTOR_TEXT_BETA_HEADER = feature('CONNECTOR_TEXT')
   ? 'summarize-connector-text-2026-03-13'
   : ''
-export const AFK_MODE_BETA_HEADER = feature('TRANSCRIPT_CLASSIFIER')
-  ? 'afk-mode-2026-01-31'
-  : ''
+// AFK_MODE_BETA_HEADER removed — the afk-mode beta is not supported by
+// open source API keys and caused 400 errors in concurrent multi-session
+// runners when a stale global latch leaked the header into unrelated sessions.
 export const CLI_INTERNAL_BETA_HEADER =
   ''
 export const CACHE_EDITING_BETA_HEADER = 'cache-editing-2025-12-01'

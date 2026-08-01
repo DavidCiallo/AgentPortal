@@ -10,7 +10,48 @@ Object.assign(globalThis, {
   }
 })
 
+interface CliOptions {
+  port?: number
+  host?: string
+  webRoot?: string
+}
+
+function parseArgs(argv: string[]): CliOptions {
+  const opts: CliOptions = {}
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i]
+    if (arg === '--port' || arg === '-p') {
+      const v = parseInt(argv[++i], 10)
+      if (Number.isFinite(v) && v > 0 && v < 65536) opts.port = v
+    } else if (arg === '--host' || arg === '-h') {
+      opts.host = argv[++i]
+    } else if (arg === '--web-root') {
+      opts.webRoot = argv[++i]
+    } else if (arg === '--help') {
+      console.log(`Portal Web UI
+
+Usage: portal-web [options]
+
+Options:
+  --port <number>     Port to listen on (default: random free port)
+  --host <addr>       Host/interface to bind (default: 0.0.0.0)
+  --web-root <path>   Path to the web/ static assets directory
+  --help              Show this help
+`)
+      process.exit(0)
+    }
+  }
+  // Env vars remain supported as a fallback (matches previous behavior)
+  if (!opts.port && process.env.WEB_PORT) {
+    const v = parseInt(process.env.WEB_PORT, 10)
+    if (Number.isFinite(v) && v > 0 && v < 65536) opts.port = v
+  }
+  if (!opts.host && process.env.WEB_HOST) opts.host = process.env.WEB_HOST
+  return opts
+}
+
 async function main() {
+  const opts = parseArgs(process.argv.slice(2))
   console.log('Starting Portal Web UI...')
   await init()
 
@@ -33,11 +74,10 @@ async function main() {
   }
   await validateProviderEnvOrExit()
   console.log('Provider environment validated successfully.')
-  const port = process.env.WEB_PORT ? parseInt(process.env.WEB_PORT, 10) : 3210
-  const host = process.env.WEB_HOST || '0.0.0.0'
 
-  const server = new WebServer({ port, host })
-  server.start()
+  const host = opts.host || '0.0.0.0'
+  const server = new WebServer({ port: opts.port, host, webRoot: opts.webRoot })
+  await server.start()
 }
 
 main().catch((err) => {

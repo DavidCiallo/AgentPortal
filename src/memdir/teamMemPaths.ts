@@ -56,10 +56,6 @@ function sanitizePathKey(key: string): string {
   if (key.includes('\\')) {
     throw new PathTraversalError(`Backslash in path key: "${key}"`)
   }
-  // Reject absolute paths
-  if (key.startsWith('/')) {
-    throw new PathTraversalError(`Absolute path key: "${key}"`)
-  }
   return key
 }
 

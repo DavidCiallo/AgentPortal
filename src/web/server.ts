@@ -1,9 +1,9 @@
 import { createServer } from 'node:http'
-import { readFile, readdir, mkdir, stat, unlink } from 'node:fs/promises'
-import { join, extname, resolve, win32 } from 'node:path'
+import { readFile, readdir, mkdir, stat, unlink, appendFile } from 'node:fs/promises'
+import { join, extname, resolve, win32, dirname } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
-import { createReadStream, readFileSync } from 'node:fs'
+import { createReadStream, readFileSync, existsSync } from 'node:fs'
 import { createInterface } from 'node:readline'
 
 // @ts-expect-error - ws types not bundled
@@ -13,8 +13,8 @@ import { getTools } from '../tools.js'
 import { getDefaultAppState } from '../state/AppStateStore.js'
 import { AppState } from '../state/AppState.js'
 import { FileStateCache, READ_FILE_STATE_CACHE_SIZE } from '../utils/fileStateCache.js'
-import { setMainLoopModelOverride, switchSession, getOriginalCwd, getSessionId } from '../bootstrap/state.js'
-import { resetSessionFilePointer } from '../utils/sessionStorage.js'
+import { setSessionModelOverride, runWithSessionContext, getOriginalCwd, getSessionId } from '../bootstrap/state.js'
+
 import { parseUserSpecifiedModel } from '../utils/model/model.js'
 import {
   loadProfileFile,
@@ -35,6 +35,7 @@ import {
   sanitizePath,
 } from '../utils/sessionStoragePortable.js'
 import { listOpenAICompatibleModels } from '../utils/providerDiscovery.js'
+import { getInitialSettings, updateSettingsForSource } from '../utils/settings/settings.js'
 
 /**
  * Format tool use input into human-readable display text (matching CLI output style)
@@ -203,8 +204,10 @@ class SessionRunner {
         c.send(ev)
       }
     }
-    // Tell the newcomer whether a round is already in flight
-    c.send({ type: 'subscribed', sessionId: this.sessionId, running: this.running, roundStartTime: this.roundStartTime })
+    // Tell the newcomer whether a round is already in flight.
+    // Tag with _sessionId so the client-side stale-event filter can
+    // discard it if the user has already switched to another session.
+    c.send({ type: 'subscribed', sessionId: this.sessionId, running: this.running, roundStartTime: this.roundStartTime, _sessionId: this.sessionId })
   }
 
   removeClient(c: Client) {
@@ -212,6 +215,9 @@ class SessionRunner {
   }
 
   private broadcast(data: any) {
+    // Tag every event with the originating session so clients can
+    // discard stale events from a previous session after switching.
+    data._sessionId = this.sessionId
     this.eventBuffer.push(data)
     this.bufferSeq++
     for (const c of this.clients) c.send(data)
@@ -232,12 +238,8 @@ class SessionRunner {
       return
     }
 
-    // Prevent concurrent rounds across different sessions — their
-    // switchSession calls would race on the global sessionId.
-    if (!this.server.claimActiveRunner(this)) {
-      this.broadcast({ type: 'error', message: 'Another session is currently processing a request' })
-      return
-    }
+    // No global lock needed — runWithSessionContext scopes the session ID
+    // per-async-chain, so multiple runners can execute concurrently.
 
     this.running = true
     this.interrupted = false
@@ -255,6 +257,10 @@ class SessionRunner {
       cwd: this.cwd,
       projectId: sanitizePath(effectiveCwd),
     })
+
+    // Update the session title in the JSONL file so the sidebar shows
+    // a meaningful label based on the user's message.
+    this.updateSessionTitle(userMessage, effectiveCwd)
 
     // Load history from in-memory cache or JSONL file
     if (this.messages.length === 0) {
@@ -282,74 +288,86 @@ class SessionRunner {
       if (profile?.env?.OPENAI_MODEL) resolvedModel = profile.env.OPENAI_MODEL
     }
     if (!resolvedModel && process.env.OPENAI_MODEL) resolvedModel = process.env.OPENAI_MODEL
-    if (resolvedModel) {
-      setMainLoopModelOverride(parseUserSpecifiedModel(resolvedModel))
-    }
 
-    // Save the current global session ID so we can restore it when this round
-    // finishes. Without this, if Session B starts while Session A is still
-    // draining its write queue, B's switchSession overwrites the global ID and
-    // A's fire-and-forget recordTranscript calls stamp messages with B's ID —
-    // writing A's messages into B's transcript.
-    const previousSessionId = getSessionId()
-
-    // Sync global session ID + project dir so the transcript lands in the
-    // exact folder the sidebar reads from: ~/.claude/projects/<sanitizePath(cwd)>.
-    // switchSession's second arg becomes sessionProjectDir, which
-    // getTranscriptPath() uses verbatim (no further sanitization). Passing the
-    // raw cwd would write the transcript into the user's actual project dir
-    // instead of the projects cache — the sidebar would never see it. So pass
-    // the sanitized path under getProjectsDir(), matching what
-    // handleListSessions scans.
+    // Scope the session ID, project dir, and working directory to this
+    // async chain via AsyncLocalStorage so that recordTranscript (called
+    // inside the engine) writes to the correct JSONL — and concurrent
+    // runners each see their own cwd/model without clobbering each other.
     const transcriptProjectDir = join(getProjectsDir(), sanitizePath(effectiveCwd))
-    switchSession(this.sessionId as any, transcriptProjectDir)
-    await resetSessionFilePointer()
 
-    this.engine = new QueryEngine({
-      cwd: this.cwd,
-      tools: getTools(this.appState.toolPermissionContext),
-      commands: [],
-      mcpClients: [],
-      agents: [],
-      ...(this.messages.length > 0 ? { initialMessages: this.messages } : {}),
-      includePartialMessages: true,
-      canUseTool: async (tool, input, _context, _assistantMsg, toolUseID) => {
-        if (toolUseID) this.toolNameById.set(toolUseID, tool.name)
-        this.broadcast({
-          type: 'tool_start',
-          toolName: tool.name,
-          arguments: input,
-          toolUseId: toolUseID,
-        })
-        // Auto-approve all tool calls unconditionally
-        return { behavior: 'allow' }
-      },
-      getAppState: () => this.appState,
-      setAppState: (updater) => { this.appState = updater(this.appState) },
-      readFileCache: this.fileCache,
-      userSpecifiedModel: resolvedModel,
-      fallbackModel: resolvedModel,
-    })
-
-    let fullText = ''
-    let isThinking = false
-    let currentToolUse: { id: string; name: string; inputJson: string } | null = null
-    let lastDataTime = Date.now()
-    let thinkingTokenEstimate = 0
-    const generator = this.engine.submitMessage(userMessage)
-
-    const keepaliveTimer = setInterval(() => {
-      const idleMs = Date.now() - lastDataTime
-      this.broadcast({ type: 'keepalive', idleMs })
-    }, 3000)
-
-    try {
-      for await (const event of generator) {
-        lastDataTime = Date.now()
-        if (this.interrupted) {
-          clearInterval(keepaliveTimer)
-          break
+    // Pass this.cwd as initialCwd so getCwdState() returns the session's
+    // directory instead of the global STATE.cwd (which concurrent runners
+    // may have overwritten).  Shell `cd` commands inside this scope will
+    // update the per-session ALS store via setCwdState().
+    await runWithSessionContext(this.sessionId, transcriptProjectDir, async () => {
+      // Set per-session model override (scoped to this ALS context).
+      // Do NOT call setMainLoopModelOverride() — that mutates the global
+      // singleton, which clobbers concurrent runners' model selection.
+      if (resolvedModel) {
+        setSessionModelOverride(parseUserSpecifiedModel(resolvedModel))
+      }
+      // Ensure the session's cwd is in the allowed working directories so
+      // resetCwdIfOutsideProject() (called after every Bash execution) does
+      // not reset the agent back to the server process's original cwd.
+      // Must write back to this.appState: BashTool reads toolPermissionContext
+      // via getAppState(), so a detached local copy is invisible to it.
+      if (!this.appState.toolPermissionContext.additionalWorkingDirectories.has(this.cwd)) {
+        const dirs = new Map(this.appState.toolPermissionContext.additionalWorkingDirectories)
+        dirs.set(this.cwd, { path: this.cwd, source: 'session' })
+        this.appState = {
+          ...this.appState,
+          toolPermissionContext: {
+            ...this.appState.toolPermissionContext,
+            additionalWorkingDirectories: dirs,
+          },
         }
+      }
+      const toolPermCtx = this.appState.toolPermissionContext
+      this.engine = new QueryEngine({
+        cwd: this.cwd,
+        tools: getTools(toolPermCtx),
+        commands: [],
+        mcpClients: [],
+        agents: [],
+        ...(this.messages.length > 0 ? { initialMessages: this.messages } : {}),
+        includePartialMessages: true,
+        canUseTool: async (tool, input, _context, _assistantMsg, toolUseID) => {
+          if (toolUseID) this.toolNameById.set(toolUseID, tool.name)
+          this.broadcast({
+            type: 'tool_start',
+            toolName: tool.name,
+            arguments: input,
+            toolUseId: toolUseID,
+          })
+          // Auto-approve all tool calls unconditionally
+          return { behavior: 'allow' }
+        },
+        getAppState: () => this.appState,
+        setAppState: (updater) => { this.appState = updater(this.appState) },
+        readFileCache: this.fileCache,
+        userSpecifiedModel: resolvedModel,
+        fallbackModel: resolvedModel,
+      })
+
+      let fullText = ''
+      let isThinking = false
+      let currentToolUse: { id: string; name: string; inputJson: string } | null = null
+      let lastDataTime = Date.now()
+      let thinkingTokenEstimate = 0
+      const generator = this.engine.submitMessage(userMessage)
+
+      const keepaliveTimer = setInterval(() => {
+        const idleMs = Date.now() - lastDataTime
+        this.broadcast({ type: 'keepalive', idleMs })
+      }, 3000)
+
+      try {
+        for await (const event of generator) {
+          lastDataTime = Date.now()
+          if (this.interrupted) {
+            clearInterval(keepaliveTimer)
+            break
+          }
 
         if (event.type === 'stream_event') {
           const delta = event.event
@@ -442,7 +460,7 @@ class SessionRunner {
         } else {
           // console.log('[web] unhandled event:', event)
         }
-        console.log(new Date(), '[web] event:', event.type)
+        // console.log(new Date(), '[web] event:', event.type)
       }
 
       if (!this.interrupted) {
@@ -451,25 +469,43 @@ class SessionRunner {
         this.server.setSessionMessages(this.sessionId, this.messages)
         this.broadcast({ type: 'done', fullText, sessionId: this.sessionId })
       }
-    } catch (err: any) {
-      console.error('[web] runner error:', err.message, err.stack)
-      this.broadcast({ type: 'error', message: err.message || 'Internal error' })
-    } finally {
-      clearInterval(keepaliveTimer)
-      this.engine = null
-      this.running = false
-      this.resetBuffer()
-
-      // Restore the previous global session ID so a concurrent session's
-      // in-flight recordTranscript calls aren't stamped with this session's ID.
-      // Only restore if nothing else has already switched the session (e.g.
-      // another SessionRunner's startRound may have set its own ID).
-      this.server.releaseActiveRunner(this)
-      if (getSessionId() === (this.sessionId as any)) {
-        switchSession(previousSessionId as any, null)
-        void resetSessionFilePointer()
+      } catch (err: any) {
+        console.error('[web] runner error:', err.message, err.stack)
+        this.broadcast({ type: 'error', message: err.message || 'Internal error' })
+      } finally {
+        clearInterval(keepaliveTimer)
+        this.engine = null
+        this.running = false
+        this.resetBuffer()
       }
-    }
+    }, this.cwd)
+  }
+
+  /**
+   * Append a custom-title entry to the session JSONL file so the sidebar
+   * shows a meaningful label based on the user's latest message.
+   * Fire-and-forget — errors are logged but never block the round.
+   */
+  private updateSessionTitle(userMessage: string, effectiveCwd: string) {
+    // Clean and truncate the message for use as a title
+    let title = userMessage.replace(/[\r\n]+/g, ' ').trim()
+    // Strip XML-like tags (task-notification, system-reminder, etc.)
+    title = title.replace(/<[^>]+>/g, '').trim()
+    if (!title) return
+    if (title.length > 100) title = title.slice(0, 100).trim() + '\u2026'
+
+    const projectDir = join(getProjectsDir(), sanitizePath(effectiveCwd))
+    const filePath = join(projectDir, `${this.sessionId}.jsonl`)
+
+    const entry = JSON.stringify({
+      type: 'custom-title',
+      customTitle: title,
+      sessionId: this.sessionId,
+    }) + '\n'
+
+    appendFile(filePath, entry, { mode: 0o600 }).catch(err => {
+      console.error('[web] Failed to update session title:', err.message)
+    })
   }
 
   cancel() {
@@ -480,54 +516,59 @@ class SessionRunner {
 
 }
 
+/**
+ * Resolve the web/ static assets directory.
+ *
+ * Priority:
+ *   1. explicit `webRoot` option
+ *   2. `PORTAL_WEB_ROOT` env var
+ *   3. `web/` next to the running executable (compiled-binary case)
+ *   4. `web/` in the current working directory
+ *   5. source-tree default `../../web` relative to this file (dev mode)
+ */
+function resolveWebRoot(explicit?: string): string {
+  if (explicit) return resolve(explicit)
+  if (process.env.PORTAL_WEB_ROOT) return resolve(process.env.PORTAL_WEB_ROOT)
+
+  const candidates: string[] = []
+  // Compiled binary: Bun sets process.execPath / process.argv[0] to the exe.
+  try {
+    const exeDir = dirname(process.execPath)
+    candidates.push(join(exeDir, 'web'))
+  } catch { /* ignore */ }
+  candidates.push(join(process.cwd(), 'web'))
+  if (import.meta.dirname) {
+    candidates.push(join(import.meta.dirname, '../../web'))
+  }
+
+  for (const c of candidates) {
+    if (existsSync(join(c, 'index.html'))) return resolve(c)
+  }
+  // Fall back to the last candidate so error messages reference a real path.
+  return resolve(candidates[candidates.length - 1])
+}
+
 export class WebServer {
   private httpServer: ReturnType<typeof createServer>
   private wss: WebSocketServer
   private sessions: Map<string, SessionData> = new Map()
   private runners: Map<string, SessionRunner> = new Map()
-  /** The SessionRunner currently executing a round, or null. Prevents
-   *  concurrent rounds across different sessions — which would corrupt the
-   *  global sessionId that recordTranscript relies on. */
-  private activeRunner: SessionRunner | null = null
   private webRoot: string
-  private port: number
+  private port: number | undefined
   private host: string
 
   constructor(options: { port?: number; host?: string; webRoot?: string } = {}) {
-    this.port = options.port ?? 3000
-    this.host = options.host ?? 'localhost'
-    this.webRoot = options.webRoot ?? join(import.meta.dirname, '../../web')
+    this.port = options.port
+    this.host = options.host ?? '0.0.0.0'
+    this.webRoot = resolveWebRoot(options.webRoot)
 
     this.httpServer = createServer(this.handleHttpRequest.bind(this))
     this.wss = new WebSocketServer({ server: this.httpServer })
     this.wss.on('connection', this.handleConnection.bind(this))
   }
 
-  /**
-   * Try to claim the active-runner slot. Returns true if this runner can
-   * proceed, false if another runner is already active. This prevents
-   * concurrent rounds across different sessions from corrupting the global
-   * sessionId that recordTranscript relies on.
-   */
-  claimActiveRunner(runner: SessionRunner): boolean {
-    if (this.activeRunner && this.activeRunner !== runner) {
-      return false
-    }
-    this.activeRunner = runner
-    return true
-  }
-
-  /** Release the active-runner slot. Called when a round finishes. */
-  releaseActiveRunner(runner: SessionRunner): void {
-    if (this.activeRunner === runner) {
-      this.activeRunner = null
-    }
-  }
-
   private async handleHttpRequest(req: any, res: any) {
     const url = new URL(req.url, `http://${req.headers.host}`)
-    console.log('Request:', url.pathname)
-
     // API endpoints
     if (url.pathname === '/api/projects') {
       return this.handleListProjects(res)
@@ -1114,8 +1155,23 @@ export class WebServer {
           }
           let runner = this.runners.get(sid)
           if (!runner) {
-            runner = new SessionRunner(this, sid, msg.cwd || process.cwd(), msg.model)
+            // Do NOT silently fall back to process.cwd() here (unlike the
+            // chat path): subscribe is automatic (page load / reconnect),
+            // so a missing cwd almost always means the frontend hasn't
+            // resolved the project yet.  Creating a runner now would pin
+            // the session to the server's cwd, leaking transcript/memory
+            // into the wrong project directory (unrecoverable).  Bail out
+            // and let the frontend re-subscribe once it has the real cwd.
+            if (!msg.cwd) {
+              send({ type: 'error', message: 'subscribe requires cwd; retry after project is selected' })
+              return
+            }
+            runner = new SessionRunner(this, sid, msg.cwd, msg.model)
             this.runners.set(sid, runner)
+          } else if (msg.cwd && msg.cwd !== runner.cwd) {
+            // Correct a stale cwd on an existing runner (e.g. created by a
+            // previous subscribe that didn't carry cwd).
+            runner.cwd = msg.cwd
           }
           runner.addClient(client)
           subscribedRunner = runner
@@ -1127,8 +1183,23 @@ export class WebServer {
           const sid = msg.sessionId || randomUUID()
           let runner = this.runners.get(sid)
           if (!runner) {
-            runner = new SessionRunner(this, sid, msg.cwd || process.cwd(), msg.model)
+            // Prefer the client-supplied cwd; only fall back to process.cwd()
+            // if the client didn't send one.  Logging here makes it obvious
+            // when the frontend forgot to send cwd (a frequent source of
+            // "agent ran in the wrong directory" bugs).
+            const initialCwd = msg.cwd || process.cwd()
+            if (!msg.cwd) {
+              console.warn(`[web] chat for sid=${sid} missing cwd; falling back to ${initialCwd}`)
+            }
+            runner = new SessionRunner(this, sid, initialCwd, msg.model)
             this.runners.set(sid, runner)
+          } else if (msg.cwd && msg.cwd !== runner.cwd) {
+            // Update the runner's cwd so a stale runner (e.g. one created by
+            // an earlier subscribe that didn't carry cwd) is corrected before
+            // this round starts.  Without this, the agent can end up running
+            // in the server's process.cwd() even though the UI shows the
+            // correct project path.
+            runner.cwd = msg.cwd
           }
           // Auto-subscribe this client if not already
           if (subscribedRunner !== runner) {
@@ -1151,6 +1222,10 @@ export class WebServer {
           })}\n`
           console.log(logMsg.trim())
 
+          // Update the runner's model so changes in the settings dropdown
+          // take effect immediately for this and subsequent rounds.
+          if (msg.model) runner.model = msg.model
+
           // Fire-and-forget: the runner broadcasts to all subscribers
           runner.startRound(msg.message)
           return
@@ -1163,6 +1238,7 @@ export class WebServer {
 
         if (msg.type === 'get_config') {
           const profile = loadProfileFile({ cwd: process.cwd() })
+          const settings = getInitialSettings()
           send({
             type: 'config',
             profile: profile?.profile || 'openai',
@@ -1170,6 +1246,8 @@ export class WebServer {
             model: profile?.env?.OPENAI_MODEL || '',
             apiKey: profile?.env?.OPENAI_API_KEY ? '••••••••' : '',
             hasApiKey: !!profile?.env?.OPENAI_API_KEY,
+            language: settings.language || 'chinese',
+            cwd: process.cwd(),
           })
           return
         }
@@ -1238,6 +1316,12 @@ export class WebServer {
             if (env.OPENAI_MODEL) process.env.OPENAI_MODEL = env.OPENAI_MODEL
             if (env.OPENAI_API_KEY) process.env.OPENAI_API_KEY = env.OPENAI_API_KEY
 
+            // Save language setting to settings.json
+            if (msg.language !== undefined) {
+              const langValue = msg.language || undefined  // empty string → undefined to delete
+              updateSettingsForSource('userSettings', { language: langValue } as any)
+            }
+
             send({ type: 'config_saved', success: true })
 
           } catch (validateErr: any) {
@@ -1270,8 +1354,18 @@ export class WebServer {
   }
 
   start() {
-    this.httpServer.listen(this.port, this.host, () => {
-      console.log(`Portal Web UI running at http://${this.host}:${this.port}`)
+    return new Promise<void>((resolveStart, rejectStart) => {
+      this.httpServer.once('error', rejectStart)
+      this.httpServer.listen(this.port ?? 0, this.host, () => {
+        const addr = this.httpServer.address()
+        const boundPort = typeof addr === 'object' && addr ? addr.port : this.port
+        this.port = boundPort
+        const displayHost = this.host === '0.0.0.0' || this.host === '::' ? '127.0.0.1' : this.host
+        const url = `http://${displayHost}:${boundPort}`
+        // Plain log line so launchers/grep can find the URL reliably.
+        console.log(`Portal Web UI listening on ${url} (host=${this.host})`)
+        resolveStart()
+      })
     })
   }
 

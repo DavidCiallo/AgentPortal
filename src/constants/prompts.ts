@@ -189,11 +189,6 @@ function getSimpleDoingTasksSection(): string {
       : []),
   ]
 
-  const userHelpSubitems = [
-    `/help: Get help with using Portal`,
-    `To give feedback, users should ${MACRO.ISSUES_EXPLAINER}`,
-  ]
-
   const items = [
     `The user will primarily request you to perform software engineering tasks. These may include solving bugs, adding new functionality, refactoring code, explaining code, and more. When given an unclear or generic instruction, consider it in the context of these software engineering tasks and the current working directory. For example, if the user asks you to change "methodName" to snake case, do not reply with just "method_name", instead find the method in the code and modify the code.`,
     `You are highly capable and often allow users to complete ambitious tasks that would otherwise be too complex or take too long. You should defer to user judgement about whether a task is too large to attempt.`,
@@ -221,8 +216,6 @@ function getSimpleDoingTasksSection(): string {
         `If the user reports a bug, slowness, or unexpected behavior with Portal itself (as opposed to asking you to fix their own code), recommend the appropriate slash command: /issue for model-related problems (odd outputs, wrong tool choices, hallucinations, refusals), or /share to upload the full session transcript for product bugs, crashes, slowness, or general issues. Only recommend these when the user is describing a problem with Portal.`,
       ]
       : []),
-    `If the user asks for help or wants to give feedback inform them of the following:`,
-    userHelpSubitems,
   ]
 
   return [`# Doing tasks`, ...prependBullets(items)].join(`\n`)

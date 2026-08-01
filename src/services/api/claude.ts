@@ -91,10 +91,6 @@ import {
 } from '../claudeAiLimits.js'
 import { getAPIContextManagement } from '../compact/apiMicrocompact.js'
 
-/* eslint-disable @typescript-eslint/no-require-imports */
-const autoModeStateModule = feature('TRANSCRIPT_CLASSIFIER')
-  ? (require('../../utils/permissions/autoModeState.js') as typeof import('../../utils/permissions/autoModeState.js'))
-  : null
 
 import { feature } from 'bun:bundle'
 import type { ClientOptions } from '@anthropic-ai/sdk'
@@ -104,7 +100,6 @@ import {
   APIUserAbortError,
 } from '@anthropic-ai/sdk/error'
 import {
-  getAfkModeHeaderLatched,
   getCacheEditingHeaderLatched,
   getFastModeHeaderLatched,
   getLastApiCompletionTimestamp,
@@ -112,7 +107,6 @@ import {
   getPromptCache1hEligible,
   getSessionId,
   getThinkingClearLatched,
-  setAfkModeHeaderLatched,
   setFastModeHeaderLatched,
   setLastMainRequestId,
   setPromptCache1hAllowlist,
@@ -120,7 +114,6 @@ import {
   setThinkingClearLatched,
 } from 'src/bootstrap/state.js'
 import {
-  AFK_MODE_BETA_HEADER,
   CONTEXT_1M_BETA_HEADER,
   CONTEXT_MANAGEMENT_BETA_HEADER,
   EFFORT_BETA_HEADER,
@@ -1343,19 +1336,6 @@ async function* queryModel(
   // Per-call gates (isAgenticQuery, querySource===repl_main_thread) stay
   // per-call so non-agentic queries keep their own stable header set.
 
-  let afkHeaderLatched = getAfkModeHeaderLatched() === true
-  if (feature('TRANSCRIPT_CLASSIFIER')) {
-    if (
-      !afkHeaderLatched &&
-      isAgenticQuery &&
-      shouldIncludeFirstPartyOnlyBetas() &&
-      (autoModeStateModule?.isAutoModeActive() ?? false)
-    ) {
-      afkHeaderLatched = true
-      setAfkModeHeaderLatched(true)
-    }
-  }
-
   let fastModeHeaderLatched = getFastModeHeaderLatched() === true
   if (!fastModeHeaderLatched && isFastMode) {
     fastModeHeaderLatched = true
@@ -1404,7 +1384,7 @@ async function* queryModel(
       fastMode: fastModeHeaderLatched,
       globalCacheStrategy,
       betas,
-      autoModeActive: afkHeaderLatched,
+      autoModeActive: false,
       isUsingOverage: currentLimits.isUsingOverage ?? false,
       cachedMCEnabled: cacheEditingHeaderLatched,
       effortValue: effort,
@@ -1567,19 +1547,6 @@ async function* queryModel(
     }
     if (fastModeHeaderLatched && !betasParams.includes(FAST_MODE_BETA_HEADER)) {
       betasParams.push(FAST_MODE_BETA_HEADER)
-    }
-
-    // AFK mode beta: latched once auto mode is first activated. Still gated
-    // by isAgenticQuery per-call so classifiers/compaction don't get it.
-    if (feature('TRANSCRIPT_CLASSIFIER')) {
-      if (
-        afkHeaderLatched &&
-        shouldIncludeFirstPartyOnlyBetas() &&
-        isAgenticQuery &&
-        !betasParams.includes(AFK_MODE_BETA_HEADER)
-      ) {
-        betasParams.push(AFK_MODE_BETA_HEADER)
-      }
     }
 
     // Cache editing is an Anthropic-specific beta feature.
