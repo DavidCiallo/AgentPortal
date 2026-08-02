@@ -118,9 +118,6 @@ IMPORTANT: When the user asks you to create a pull request, follow these steps c
 gh pr create --title "the pr title" --body "$(cat <<'EOF'
 ## Summary
 <1-3 bullet points>
-
-## Test plan
-[Bulleted markdown checklist of TODOs for testing the pull request...]
 EOF
 )"
 </example>
@@ -332,7 +329,6 @@ export function getSimplePrompt(): string {
     `IMPORTANT: Avoid using this tool to run ${avoidCommands} commands, unless explicitly instructed or after you have verified that a dedicated tool cannot accomplish your task. Instead, use the appropriate dedicated tool as this will provide a much better experience for the user:`,
     '',
     ...prependBullets(toolPreferenceItems),
-    `While the ${BASH_TOOL_NAME} tool can do similar things, it’s better to use the built-in tools as they provide a better user experience and make it easier to review tool calls and give permission.`,
     '',
     '# Instructions',
     ...prependBullets(instructionItems),

@@ -188,9 +188,7 @@ assistant: "I'm going to use the ${AGENT_TOOL_NAME} tool to launch the statuslin
 ${effectiveAgents.map(agent => formatAgentLine(agent)).join('\n')}`
 
   // Shared core prompt used by both coordinator and non-coordinator modes
-  const shared = `Launch a new agent to handle complex, multi-step tasks autonomously.
-
-The ${AGENT_TOOL_NAME} tool launches specialized agents (subprocesses) that autonomously handle complex tasks. Each agent type has specific capabilities and tools available to it.
+  const shared = `The ${AGENT_TOOL_NAME} tool launches specialized agents (subprocesses) that autonomously handle complex, multi-step tasks. Each agent type has specific capabilities and tools available to it.
 
 ${agentListSection}
 
