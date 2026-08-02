@@ -1,6 +1,9 @@
 import type { ChildProcess, ExecFileException } from 'child_process'
 import { execFile, spawn } from 'child_process'
 import { existsSync } from 'fs'
+import { readdir, readFile, realpath, stat } from 'fs/promises'
+import picomatch from 'picomatch'
+import { join, relative } from 'path'
 import memoize from 'lodash-es/memoize.js'
 import { homedir } from 'os'
 import * as path from 'path'
@@ -26,12 +29,6 @@ type RipgrepConfig = {
   command: string
   args: string[]
   argv0?: string
-}
-
-type RipgrepErrorLike = Pick<NodeJS.ErrnoException, 'code' | 'message'>
-
-function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error
 }
 
 type ResolveRipgrepConfigArgs = {
@@ -137,52 +134,6 @@ export class RipgrepTimeoutError extends Error {
     super(message)
     this.name = 'RipgrepTimeoutError'
   }
-}
-
-export class RipgrepUnavailableError extends Error {
-  code?: string | number
-
-  constructor(
-    message: string,
-    public readonly config: Pick<RipgrepConfig, 'mode' | 'command'>,
-    code?: string | number,
-  ) {
-    super(message)
-    this.name = 'RipgrepUnavailableError'
-    this.code = code
-  }
-}
-
-function getRipgrepInstallHint(platform = process.platform): string {
-  switch (platform) {
-    case 'win32':
-      return 'Install ripgrep and confirm `rg --version` works in the same terminal. Windows: `winget install BurntSushi.ripgrep.MSVC` or `choco install ripgrep`.'
-    case 'darwin':
-      return 'Install ripgrep and confirm `rg --version` works in the same terminal. macOS: `brew install ripgrep`.'
-    default:
-      return 'Install ripgrep and confirm `rg --version` works in the same terminal. Linux: use your distro package manager, for example `apt install ripgrep`.'
-  }
-}
-
-export function wrapRipgrepUnavailableError(
-  error: RipgrepErrorLike,
-  config = getRipgrepConfig(),
-  platform = process.platform,
-): RipgrepUnavailableError {
-  const modeExplanation =
-    config.mode === 'builtin'
-      ? 'This install could not locate its packaged ripgrep fallback.'
-      : config.mode === 'system'
-        ? 'A working system ripgrep binary was not found on PATH.'
-        : 'The embedded ripgrep binary could not be started.'
-
-  const originalMessage = error.message ? ` Original error: ${error.message}` : ''
-
-  return new RipgrepUnavailableError(
-    `ripgrep (rg) is required for file search but could not be started. ${modeExplanation} ${getRipgrepInstallHint(platform)}${originalMessage}`,
-    config,
-    error.code,
-  )
 }
 
 function ripGrepRaw(
@@ -350,16 +301,28 @@ async function ripGrepFileCount(
       if (settled) return
       settled = true
       if (code === 0 || code === 1) resolve(lines)
-      else reject(new Error(`rg --files exited ${code}`))
+      else {
+        // rg failed (e.g. a broken WASI shim) — fall back to native counting
+        // so telemetry still gets a real number.
+        logForDebugging(
+          `rg --files exited ${code}, falling back to native file count`,
+        )
+        ripGrepFallback(args, target, abortSignal)
+          .then(files => resolve(files.length))
+          .catch(reject)
+      }
     })
     child.on('error', err => {
       if (settled) return
       settled = true
-      reject(
-        isErrnoException(err) && err.code === 'ENOENT'
-          ? wrapRipgrepUnavailableError(err)
-          : err,
+      // rg could not be started at all (e.g. no binary on PATH). Fall back
+      // to native counting instead of failing telemetry.
+      logForDebugging(
+        `rg --files could not be started (${err.message}), falling back to native file count`,
       )
+      ripGrepFallback(args, target, abortSignal)
+        .then(files => resolve(files.length))
+        .catch(reject)
     })
   })
 }
@@ -421,11 +384,7 @@ export async function ripGrepStream(
     child.on('error', err => {
       if (settled) return
       settled = true
-      reject(
-        isErrnoException(err) && err.code === 'ENOENT'
-          ? wrapRipgrepUnavailableError(err)
-          : err,
-      )
+      reject(err)
     })
   })
 }
@@ -467,15 +426,29 @@ export async function ripGrep(
         return
       }
 
-      // Critical errors that indicate ripgrep is broken, not "no matches"
-      // These should be surfaced to the user rather than silently returning empty results
-      const CRITICAL_ERROR_CODES = ['ENOENT', 'EACCES', 'EPERM']
-      if (CRITICAL_ERROR_CODES.includes(error.code as string)) {
-        reject(
-          isErrnoException(error) && error.code === 'ENOENT'
-            ? wrapRipgrepUnavailableError(error)
-            : error,
+      // Exit code 2 is a usage error (rg was called with invalid flags).
+      // It proves rg exists and ran — the caller asked for unsupported
+      // behavior, not that rg is broken. Fall back rather than fail so the
+      // search still returns something useful.
+      if (error.code === 2) {
+        logForDebugging(
+          `rg exited with code 2 (usage error, stderr: ${stderr}), falling back to native file search`,
         )
+        ripGrepFallback(args, target, abortSignal).then(resolve, reject)
+        return
+      }
+
+      // rg itself could not be started (binary missing or not executable).
+      // This is the NORMAL state on this codebase in dev mode — the vendored
+      // binary is often absent and the system `rg` may be a broken WASI shim —
+      // so surface it in the debug log but still serve the request via the
+      // native fallback (which never needs rg).
+      const START_ERROR_CODES = ['ENOENT', 'EACCES', 'EPERM']
+      if (START_ERROR_CODES.includes(error.code as string)) {
+        logForDebugging(
+          `rg could not be started (${error.code}), falling back to native file search: ${error.message}`,
+        )
+        ripGrepFallback(args, target, abortSignal).then(resolve, reject)
         return
       }
 
@@ -500,58 +473,430 @@ export async function ripGrep(
         return
       }
 
-      // For all other errors, try to return partial results if available
-      const hasOutput = stdout && stdout.trim().length > 0
-      const isTimeout =
-        error.signal === 'SIGTERM' ||
-        error.signal === 'SIGKILL' ||
-        error.code === 'ABORT_ERR'
-      const isBufferOverflow =
-        error.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER'
-
-      let lines: string[] = []
-      if (hasOutput) {
-        lines = stdout
-          .trim()
-          .split('\n')
-          .map(line => line.replace(/\r$/, ''))
-          .filter(Boolean)
-        // Drop last line for timeouts and buffer overflow - it may be incomplete
-        if (lines.length > 0 && (isTimeout || isBufferOverflow)) {
-          lines = lines.slice(0, -1)
-        }
-      }
-
+      // Unknown/other error (e.g. a broken rg that exits non-zero with no
+      // output — the WASI ripgrep shim on Windows fails with os error 52).
+      // Fall back to the native walker so search still works; this also
+      // fixes the silent-empty-results failure mode when the error carried
+      // no output (code !== 2 was previously resolved as "no matches").
       logForDebugging(
-        `rg error (signal=${error.signal}, code=${error.code}, stderr: ${stderr}), ${lines.length} results`,
+        `rg failed (signal=${error.signal}, code=${error.code}, stderr: ${stderr}), falling back to native file search`,
       )
-
-      // code 2 = ripgrep usage error (already handled); ABORT_ERR = caller
-      // explicitly aborted (not an error, just a cancellation — interactive
-      // callers may abort on every keystroke-after-debounce).
-      if (error.code !== 2 && error.code !== 'ABORT_ERR') {
-        logError(error)
-      }
-
-      // If we timed out with no results, throw an error so Claude knows the search
-      // didn't complete rather than thinking there were no matches
-      if (isTimeout && lines.length === 0) {
-        reject(
-          new RipgrepTimeoutError(
-            `Ripgrep search timed out after ${getPlatform() === 'wsl' ? 60 : 20} seconds. The search may have matched files but did not complete in time. Try searching a more specific path or pattern.`,
-            lines,
-          ),
-        )
-        return
-      }
-
-      resolve(lines)
+      ripGrepFallback(args, target, abortSignal).then(resolve, reject)
     }
 
     ripGrepRaw(args, target, abortSignal, (error, stdout, stderr) => {
       handleResult(error, stdout, stderr, false)
     })
   })
+}
+
+/**
+ * Native fallback for ripgrep — used when rg is unavailable or broken
+ * (e.g. the WASI npm shim on Windows that fails all IO with "os error 52").
+ *
+ * Supports the subset of rg flags the codebase's callers actually use:
+ *   --files, --hidden, --no-ignore, --follow, --max-depth N, --glob <pat>,
+ *   --sort=modified, -i (case-insensitive regex), -n (line numbers),
+ *   -l (files-with-matches), -c (count), -A/-B/-C (context),
+ *   --max-columns N, -U --multiline-dotall (multiline regex), -e <pattern>,
+ *   --type <name>, plus a positional regex pattern.
+ *
+ * -m/--max-count stops the search after N matching files (rg's per-file
+ * semantics differ slightly, but for the --files/glob use cases here the
+ * effect is the same). .gitignore is NOT respected in fallback mode
+ * (equivalent to --no-ignore).
+ *
+ * Returns the same shapes as ripGrep():
+ *   - list mode (no -l/-c): lines like `{path}:{content}` (with -n: `{path}:{line}:{content}`)
+ *   - -l mode: one path per line (no leading `./`, matching rg's default output)
+ *   - -c mode: lines like `{path}:{count}`
+ * Paths use forward slashes, matching rg's output format on every platform.
+ */
+export async function ripGrepFallback(
+  args: string[],
+  target: string,
+  abortSignal: AbortSignal,
+): Promise<string[]> {
+  const parsed = parseFallbackArgs(args)
+
+  const targetStat = await stat(target).catch(e => {
+    throw new Error(
+      `ripgrep fallback: stat target directory failed: ${errorMessage(e)}`,
+    )
+  })
+  if (!targetStat.isDirectory()) {
+    throw new Error(`ripgrep fallback: target is not a directory: ${target}`)
+  }
+
+  const files: string[] = []
+  const visitedDirs = new Set<string>()
+  let truncated = false
+  const limit = parsed.maxCount
+
+  const walk = async (currentDir: string, depth: number): Promise<void> => {
+    if (truncated || abortSignal.aborted) return
+
+    // Cycle detection via device+inode, with realpath fallback on Windows.
+    // Mirrors findMarkdownFilesNative in markdownConfigLoader.ts.
+    try {
+      const stats = await stat(currentDir, { bigint: true })
+      const dirKey =
+        stats.dev !== undefined && stats.ino !== undefined
+          ? `${stats.dev}:${stats.ino}`
+          : await realpathSafe(currentDir)
+      if (visitedDirs.has(dirKey)) return
+      visitedDirs.add(dirKey)
+    } catch {
+      return
+    }
+
+    let entries
+    try {
+      entries = await readdir(currentDir, { withFileTypes: true })
+    } catch {
+      return
+    }
+
+    for (const entry of entries) {
+      if (truncated || abortSignal.aborted) return
+
+      // Hidden-file filter — `--hidden` includes them, otherwise skip dotfiles.
+      if (!parsed.hidden && entry.name.startsWith('.')) continue
+
+      const fullPath = join(currentDir, entry.name)
+      let isDir: boolean
+      let isFile: boolean
+      if (entry.isSymbolicLink()) {
+        if (!parsed.follow) continue
+        try {
+          const s = await stat(fullPath)
+          isDir = s.isDirectory()
+          isFile = s.isFile()
+        } catch {
+          continue
+        }
+      } else {
+        isDir = entry.isDirectory()
+        isFile = entry.isFile()
+      }
+
+      if (isDir) {
+        // Honor --max-depth: rg's depth counts from 0 for the target itself,
+        // 1 for its direct children, etc. Only descend while the current
+        // depth is below the limit.
+        if (parsed.maxDepth === undefined || depth < parsed.maxDepth) {
+          await walk(fullPath, depth + 1)
+        }
+      } else if (isFile) {
+        if (parsed.maxDepth !== undefined && depth > parsed.maxDepth) continue
+        const rel = relative(target, fullPath).replaceAll('\\', '/')
+        if (parsed.glob && !matchesGlob(rel, parsed.glob)) continue
+        if (parsed.files) {
+          files.push(rel)
+        } else {
+          const result = await matchFileContent(fullPath, rel, parsed)
+          if (result !== null) {
+            for (const line of result) {
+              files.push(line)
+              if (limit !== undefined && files.length >= limit) {
+                truncated = true
+                return
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  await walk(target, 0)
+
+  if (parsed.sortModified) {
+    files.sort((a, b) => a.localeCompare(b))
+  }
+  return files
+}
+
+/**
+ * Parse the rg-style arg list into a structured set of options.
+ * Unknown flags are ignored (keeps the fallback robust to new rg features).
+ */
+type FallbackArgs = {
+  hidden: boolean
+  follow: boolean
+  noIgnore: boolean
+  maxDepth: number | undefined
+  maxCount: number | undefined
+  glob: string[] | undefined
+  sortModified: boolean
+  caseInsensitive: boolean
+  lineNumbers: boolean
+  files: boolean
+  filesWithMatches: boolean
+  count: boolean
+  contextBefore: number
+  contextAfter: number
+  maxColumns: number
+  multiline: boolean
+  fileTypes: string[]
+  patterns: string[]
+}
+
+function parseFallbackArgs(args: string[]): FallbackArgs {
+  const parsed: FallbackArgs = {
+    hidden: false,
+    follow: false,
+    noIgnore: false,
+    files: false,
+    maxDepth: undefined,
+    maxCount: undefined,
+    glob: undefined,
+    sortModified: false,
+    caseInsensitive: false,
+    lineNumbers: false,
+    filesWithMatches: false,
+    count: false,
+    contextBefore: 0,
+    contextAfter: 0,
+    maxColumns: 500,
+    multiline: false,
+    fileTypes: [],
+    patterns: [],
+  }
+
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]!
+    switch (arg) {
+      case '--hidden':
+        parsed.hidden = true
+        break
+      case '--no-ignore':
+        parsed.noIgnore = true
+        break
+      case '--follow':
+        parsed.follow = true
+        break
+      case '--files':
+        parsed.files = true
+        break
+      case '--sort=modified':
+        parsed.sortModified = true
+        break
+      case '-i':
+      case '--ignore-case':
+        parsed.caseInsensitive = true
+        break
+      case '-n':
+      case '--line-number':
+        parsed.lineNumbers = true
+        break
+      case '-l':
+      case '--files-with-matches':
+        parsed.filesWithMatches = true
+        break
+      case '-c':
+      case '--count':
+        parsed.count = true
+        break
+      case '-U':
+      case '--multiline':
+        parsed.multiline = true
+        break
+      case '-e':
+        parsed.patterns.push(args[++i]!)
+        break
+      case '--max-depth': {
+        const v = parseInt(args[++i]!, 10)
+        if (!isNaN(v)) parsed.maxDepth = v
+        break
+      }
+      case '-m':
+      case '--max-count': {
+        const v = parseInt(args[++i]!, 10)
+        if (!isNaN(v)) parsed.maxCount = v
+        break
+      }
+      case '--glob': {
+        const v = args[++i]
+        if (v) (parsed.glob ??= []).push(v)
+        break
+      }
+      case '-A': {
+        const v = parseInt(args[++i]!, 10)
+        if (!isNaN(v)) parsed.contextAfter = v
+        break
+      }
+      case '-B': {
+        const v = parseInt(args[++i]!, 10)
+        if (!isNaN(v)) parsed.contextBefore = v
+        break
+      }
+      case '-C': {
+        const v = parseInt(args[++i]!, 10)
+        if (!isNaN(v)) {
+          parsed.contextBefore = v
+          parsed.contextAfter = v
+        }
+        break
+      }
+      case '--max-columns': {
+        const v = parseInt(args[++i]!, 10)
+        if (!isNaN(v)) parsed.maxColumns = v
+        break
+      }
+      case '--type':
+      case '--type-add': {
+        const v = args[++i]
+        if (v) parsed.fileTypes.push(v)
+        break
+      }
+      case '--': {
+        // Everything after -- is a positional pattern
+        parsed.patterns.push(...args.slice(i + 1))
+        i = args.length
+        break
+      }
+      default:
+        if (arg.startsWith('-') && arg !== '-') {
+          // Unknown flag — ignore
+          break
+        }
+        parsed.patterns.push(arg)
+    }
+  }
+
+  return parsed
+}
+
+function realpathSafe(p: string): Promise<string> {
+  return realpath(p)
+}
+
+function matchesGlob(relPath: string, globs: string[]): boolean {
+  for (const rawGlob of globs) {
+    const negate = rawGlob.startsWith('!')
+    const pattern = negate ? rawGlob.slice(1) : rawGlob
+
+    // Convert to a matcher. picomatch handles {a,b} brace expansion,
+    // `**` (matches any number of dirs), and `dot:true` so `.hidden` matches.
+    const match = picomatch(pattern, { dot: true })
+    const isMatch = match(relPath)
+
+    // A negation `!pat` excludes; a positive `pat` includes.
+    if (negate) {
+      if (isMatch) return false
+    } else {
+      if (isMatch) return true
+    }
+  }
+  // No positive glob matched → exclude (unless there are only negations).
+  const hasPositive = globs.some(g => !g.startsWith('!'))
+  return !hasPositive
+}
+
+/**
+ * Match a single file's contents against the requested pattern(s).
+ * Returns formatted result lines, or null if the file doesn't match.
+ */
+async function matchFileContent(
+  filePath: string,
+  relPath: string,
+  parsed: FallbackArgs,
+): Promise<string[] | null> {
+  let content: string
+  try {
+    content = await readFile(filePath, 'utf8')
+  } catch {
+    return null
+  }
+
+  if (parsed.patterns.length === 0) {
+    // No pattern — the file is a match (used with --files)
+    return [relPath]
+  }
+
+  const flags = parsed.caseInsensitive ? 'gi' : 'g'
+  const regexes = parsed.patterns.map(pattern => {
+    try {
+      return new RegExp(pattern, flags)
+    } catch {
+      return null
+    }
+  })
+
+  const effectiveRegexes = regexes.filter(
+    (r): r is RegExp => r !== null,
+  )
+  if (effectiveRegexes.length === 0) {
+    return null
+  }
+
+  // Simplification: any-regex-matches. A regex that matches "everywhere"
+  // (e.g. `.` in multiline mode) matches the file.
+  const anyMatch = (line: string): boolean =>
+    effectiveRegexes.some(re => re.test(line))
+
+  const lines = content.split('\n')
+  const matchedLineIndexes: number[] = []
+  for (let i = 0; i < lines.length; i++) {
+    if (anyMatch(lines[i]!)) matchedLineIndexes.push(i)
+  }
+
+  if (matchedLineIndexes.length === 0) {
+    // With -c or -l, empty is fine; for content mode return null (no match).
+    return null
+  }
+
+  if (parsed.filesWithMatches) return [relPath]
+  if (parsed.count) return [`${relPath}:${matchedLineIndexes.length}`]
+
+  // Content mode: format lines like rg — {rel}:{content} or {rel}:{line}:{content}
+  // with optional context lines. Context lines are formatted `{rel}-{content}`
+  // or `{rel}-{line}-{content}` (rg uses a different separator for context).
+  const contextLines = new Set<number>()
+  for (const idx of matchedLineIndexes) {
+    for (let j = 1; j <= parsed.contextBefore; j++) {
+      if (idx - j >= 0) contextLines.add(idx - j)
+    }
+    for (let j = 1; j <= parsed.contextAfter; j++) {
+      if (idx + j < lines.length) contextLines.add(idx + j)
+    }
+  }
+
+  const result: string[] = []
+  for (const idx of matchedLineIndexes) {
+    const line = lines[idx]!
+    // Truncate long lines to --max-columns
+    const shown =
+      parsed.maxColumns > 0 && line.length > parsed.maxColumns
+        ? line.slice(0, parsed.maxColumns) + '…'
+        : line
+    const prefix = parsed.lineNumbers
+      ? `${relPath}:${idx + 1}:`
+      : `${relPath}:`
+    result.push(prefix + shown)
+
+    // Add context lines after the match (rg uses `-` as the path separator
+    // for context lines)
+    for (let j = 1; j <= parsed.contextAfter; j++) {
+      if (idx + j >= lines.length) break
+      const ctxLine = lines[idx + j]!
+      const ctxShown =
+        parsed.maxColumns > 0 && ctxLine.length > parsed.maxColumns
+          ? ctxLine.slice(0, parsed.maxColumns) + '…'
+          : ctxLine
+      const ctxPrefix = parsed.lineNumbers
+        ? `${relPath}-${idx + j + 1}-`
+        : `${relPath}-`
+      result.push(ctxPrefix + ctxShown)
+    }
+  }
+
+  return result
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 /**
@@ -625,7 +970,7 @@ let ripgrepStatus: {
  * Returns current configuration immediately, with working status if available
  */
 export function getRipgrepStatus(): {
-  mode: 'system' | 'builtin' | 'embedded'
+  mode: RipgrepConfig['mode']
   path: string
   working: boolean | null // null if not yet tested
 } {

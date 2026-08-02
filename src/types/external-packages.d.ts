@@ -25,3 +25,22 @@ declare module '@anthropic-ai/mcpb' {
 declare module '@ant/claude-for-chrome-mcp' {
   export function connect(): any
 }
+
+declare module 'picomatch' {
+  type PicomatchOptions = {
+    dot?: boolean
+    nocase?: boolean
+    matchBase?: boolean
+    noglobstar?: boolean
+  }
+  type Matcher = (input: string) => boolean
+  type Picomatch = ((glob: string | string[], options?: PicomatchOptions) => Matcher) & {
+    isMatch: (
+      input: string,
+      patterns: string | string[],
+      options?: PicomatchOptions,
+    ) => boolean
+  }
+  const picomatch: Picomatch
+  export = picomatch
+}
