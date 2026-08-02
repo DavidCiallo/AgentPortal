@@ -17,12 +17,10 @@ import { FILE_EDIT_TOOL_NAME } from '../tools/FileEditTool/constants.js'
 import { TODO_WRITE_TOOL_NAME } from '../tools/TodoWriteTool/constants.js'
 import { TASK_CREATE_TOOL_NAME } from '../tools/TaskCreateTool/constants.js'
 import type { Tools } from '../Tool.js'
-// Command type removed (was used for skillToolCommands)
 import { BASH_TOOL_NAME } from '../tools/BashTool/toolName.js'
 import {
   getCanonicalName,
 } from '../utils/model/model.js'
-// SkillTool removed — skill guidance disabled
 import { getOutputStyleConfig } from './outputStyles.js'
 import type {
   MCPServerConnection,
@@ -267,7 +265,6 @@ function getUsingYourToolsSection(enabledTools: Set<string>): string {
         `To search for files use ${GLOB_TOOL_NAME} instead of find or ls`,
         `To search the content of files, use ${GREP_TOOL_NAME} instead of grep or rg`,
       ]),
-    `Reserve using the ${BASH_TOOL_NAME} exclusively for system commands and terminal operations that require shell execution. If you are unsure and there is a relevant dedicated tool, default to using the dedicated tool and only fallback on using the ${BASH_TOOL_NAME} tool for these if it is absolutely necessary.`,
   ]
 
   const items = [
