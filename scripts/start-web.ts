@@ -62,7 +62,7 @@ async function main() {
   applySafeConfigEnvironmentVariables()
 
   const { buildStartupEnvFromProfile, applyProfileEnvToProcessEnv } = await import('../src/utils/providerProfile.js')
-  const { getProviderValidationError, validateProviderEnvOrExit } = await import('../src/utils/providerValidation.js')
+  const { getProviderValidationError } = await import('../src/utils/providerValidation.js')
   const startupEnv = await buildStartupEnvFromProfile({ processEnv: process.env })
   if (startupEnv !== process.env) {
     const startupProfileError = await getProviderValidationError(startupEnv)
@@ -72,8 +72,16 @@ async function main() {
       applyProfileEnvToProcessEnv(process.env, startupEnv)
     }
   }
-  await validateProviderEnvOrExit()
-  console.log('Provider environment validated successfully.')
+
+  // A missing/placeholder API key must not prevent the UI from starting:
+  // the user can still configure the provider in Settings or via the saved
+  // profile. Only actual chat requests will fail until a key is set.
+  const providerError = await getProviderValidationError(process.env)
+  if (providerError) {
+    console.warn(`Warning: ${providerError}`)
+  } else {
+    console.log('Provider environment validated successfully.')
+  }
 
   const host = opts.host || '0.0.0.0'
   const server = new WebServer({ port: opts.port, host, webRoot: opts.webRoot })

@@ -43,14 +43,26 @@ function loadConfig(config) {
 
 async function refreshModels() {
   const baseUrl = document.getElementById('baseUrlInput').value
-  if (baseUrl) {
-    await fetchModelsAndPopulateSelect(document.getElementById('modelSelect').value, baseUrl)
-  } else {
-    await fetchModelsAndPopulateSelect(document.getElementById('modelSelect').value)
-  }
+  const apiKey = document.getElementById('apiKeyInput').value
+  // The masked placeholder means "keep the saved key" — omit it so the
+  // server falls back to the profile's key.
+  const apiKeyOverride = apiKey && apiKey !== '••••••••' ? apiKey : undefined
+  await fetchModelsAndPopulateSelect(document.getElementById('modelSelect').value, baseUrl, apiKeyOverride)
 }
 
-async function fetchModelsAndPopulateSelect(currentModelValue, baseUrlOverride) {
+// Auto-refresh the model list when the Base URL changes so the user sees
+// the new provider's models immediately after editing the field.
+let baseUrlAutoRefreshTimer = null
+function onBaseUrlInput() {
+  clearTimeout(baseUrlAutoRefreshTimer)
+  baseUrlAutoRefreshTimer = setTimeout(() => {
+    const baseUrl = document.getElementById('baseUrlInput').value.trim()
+    if (!/^https?:\/\/.+/.test(baseUrl)) return
+    refreshModels()
+  }, 800)
+}
+
+async function fetchModelsAndPopulateSelect(currentModelValue, baseUrlOverride, apiKeyOverride) {
   const modelSelect = document.getElementById('modelSelect')
   // Show loading state
   modelSelect.innerHTML = '<option value="">Loading models...</option>'
@@ -58,9 +70,11 @@ async function fetchModelsAndPopulateSelect(currentModelValue, baseUrlOverride) 
 
   try {
     let url = '/api/models'
-    if (baseUrlOverride) {
-      url += '?' + new URLSearchParams({ baseUrl: baseUrlOverride })
-    }
+    const params = new URLSearchParams()
+    if (baseUrlOverride) params.set('baseUrl', baseUrlOverride)
+    if (apiKeyOverride) params.set('apiKey', apiKeyOverride)
+    const qs = params.toString()
+    if (qs) url += '?' + qs
     const response = await fetch(url)
     const data = await response.json()
 

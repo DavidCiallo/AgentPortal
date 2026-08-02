@@ -170,7 +170,7 @@ export async function listOllamaModels(
   }
 }
 
-function getModelListUrls(baseUrl: string): string[] {
+export function getModelListUrls(baseUrl?: string): string[] {
   const trimmed = getOpenAICompatibleModelsBaseUrl(baseUrl)
   const primary = trimmed.endsWith('/v1')
     ? `${trimmed}/models`
