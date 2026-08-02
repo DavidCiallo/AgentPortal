@@ -1,15 +1,15 @@
 /**
  * Build a standalone Windows executable for the Portal web UI.
  *
- * Output: dist/exe/portal.exe   (self-contained, ~90 MB, no Bun runtime required)
- *         dist/exe/web/...      (static assets copied next to the binary)
+ * Output: dist/exe/portal.exe   (self-contained, ~90 MB, no Bun runtime required;
+ *                                web/ static assets are embedded into the binary)
  *
  * Run with:  bun run scripts/build-exe.ts
  * Optionally pass a target triple:  bun run scripts/build-exe.ts -- --target=bun-windows-x64
  */
 
 import { spawnSync } from 'node:child_process'
-import { cpSync, mkdirSync, rmSync, existsSync } from 'node:fs'
+import { mkdirSync, rmSync, existsSync, cpSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -44,6 +44,11 @@ const args = [
   // Excluding them keeps the binary self-contained for the default web UI
   // without forcing every optional dependency to be installed at build time.
   '--external', '@anthropic-ai/mcpb',
+  // The web/ static assets are embedded automatically via the
+  // `with { type: 'file' }` imports in src/web/server.ts, so the exe is
+  // fully self-contained — no web/ folder is needed next to it at runtime.
+  // Embed the project favicon instead of the default Bun icon.
+  `--windows-icon=${join(root, 'web', 'favicon.ico')}`,
 ]
 if (target) args.push('--target', target)
 
@@ -54,14 +59,17 @@ if (result.status !== 0) {
   process.exit(result.status ?? 1)
 }
 
-// Copy web/ next to the binary so resolveWebRoot() can find it at runtime.
-const webSrc = join(root, 'web')
-const webDst = join(outDir, 'web')
-if (!existsSync(webSrc)) {
-  console.error('[build-exe] WARNING: web/ directory not found at', webSrc)
+// Ship the saved provider profile next to the binary. start-web.ts loads
+// .portal-profile.json from the process cwd, so without this the exe would
+// fail provider validation when run from its own directory in a shell that
+// lacks the OPENAI_* env vars (e.g. cmd.exe).
+const profileName = '.portal-profile.json'
+const profileSrc = join(root, profileName)
+if (existsSync(profileSrc)) {
+  console.log('[build-exe] Copying .portal-profile.json →', outDir)
+  cpSync(profileSrc, join(outDir, profileName))
 } else {
-  console.log('[build-exe] Copying web/ →', webDst)
-  cpSync(webSrc, webDst, { recursive: true })
+  console.log('[build-exe] NOTE: no .portal-profile.json at repo root; exe will rely on shell env for provider config.')
 }
 
 console.log('')

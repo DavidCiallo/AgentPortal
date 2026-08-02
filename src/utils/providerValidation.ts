@@ -8,8 +8,9 @@ function getOpenAIMissingKeyMessage(): string {
   const profilePath = resolve(process.cwd(), PROFILE_FILE_NAME)
 
   return [
-    'OPENAI_API_KEY is required when CLAUDE_CODE_USE_OPENAI=1 and OPENAI_BASE_URL is not local.',
-    `To recover, run /provider and switch provider, or set CLAUDE_CODE_USE_OPENAI=0 in your shell environment.`,
+    'OPENAI_API_KEY is required when OPENAI_BASE_URL is not local.',
+    `Set OPENAI_API_KEY (and OPENAI_BASE_URL for a non-default provider), or point`,
+    `OPENAI_BASE_URL at a local endpoint (e.g. Ollama) which needs no key.`,
     `Saved startup settings can come from ${globalConfigPath} or ${profilePath}.`,
   ].join('\n')
 }
@@ -33,12 +34,3 @@ export async function getProviderValidationError(
   return null
 }
 
-export async function validateProviderEnvOrExit(
-  env: NodeJS.ProcessEnv = process.env,
-): Promise<void> {
-  const error = await getProviderValidationError(env)
-  if (error) {
-    console.error(error)
-    process.exit(1)
-  }
-}

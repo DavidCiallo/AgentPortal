@@ -1,10 +1,46 @@
 import { createServer } from 'node:http'
 import { readFile, readdir, mkdir, stat, unlink, appendFile } from 'node:fs/promises'
-import { join, extname, resolve, win32, dirname } from 'node:path'
+import { join, extname, resolve, win32 } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
 import { createReadStream, readFileSync, existsSync } from 'node:fs'
 import { createInterface } from 'node:readline'
+
+// Web/ static assets embedded into the compiled executable. With
+// `with { type: 'file' }` each import resolves to a path string: the real
+// file during development, and a $bunfs virtual path inside the binary
+// after `bun build --compile`. The binary's virtual filesystem is not
+// browsable via Bun.file()/import.meta.dir, so the paths are captured here.
+import indexHtml from '../../web/index.html' with { type: 'file' }
+import styleCss from '../../web/style.css' with { type: 'file' }
+import faviconIco from '../../web/favicon.ico' with { type: 'file' }
+import jsEvents from '../../web/js/events.js' with { type: 'file' }
+import jsMarkdown from '../../web/js/markdown.js' with { type: 'file' }
+import jsProject from '../../web/js/project.js' with { type: 'file' }
+import jsSessions from '../../web/js/sessions.js' with { type: 'file' }
+import jsSettings from '../../web/js/settings.js' with { type: 'file' }
+import jsSidebar from '../../web/js/sidebar.js' with { type: 'file' }
+import jsState from '../../web/js/state.js' with { type: 'file' }
+import jsTools from '../../web/js/tools.js' with { type: 'file' }
+import jsUtils from '../../web/js/utils.js' with { type: 'file' }
+import jsWebsocket from '../../web/js/websocket.js' with { type: 'file' }
+
+// URL-relative path → embedded path. Keep in sync with web/index.html.
+const EMBEDDED_ASSETS: Record<string, string> = {
+  'index.html': indexHtml,
+  'style.css': styleCss,
+  'favicon.ico': faviconIco,
+  'js/events.js': jsEvents,
+  'js/markdown.js': jsMarkdown,
+  'js/project.js': jsProject,
+  'js/sessions.js': jsSessions,
+  'js/settings.js': jsSettings,
+  'js/sidebar.js': jsSidebar,
+  'js/state.js': jsState,
+  'js/tools.js': jsTools,
+  'js/utils.js': jsUtils,
+  'js/websocket.js': jsWebsocket,
+}
 
 // @ts-expect-error - ws types not bundled
 import { WebSocketServer, WebSocket } from 'ws'
@@ -34,7 +70,7 @@ import {
   extractJsonStringField,
   sanitizePath,
 } from '../utils/sessionStoragePortable.js'
-import { listOpenAICompatibleModels } from '../utils/providerDiscovery.js'
+import { listOpenAICompatibleModels, getModelListUrls } from '../utils/providerDiscovery.js'
 import { getInitialSettings, updateSettingsForSource } from '../utils/settings/settings.js'
 
 /**
@@ -154,6 +190,24 @@ const MIME_TYPES: Record<string, string> = {
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
+}
+
+/**
+ * Read a static asset embedded into the compiled executable. The `web/`
+ * assets are embedded via `with { type: 'file' }` imports above; in the
+ * binary their paths point into the $bunfs virtual filesystem. Returns null
+ * when the file is missing, letting callers fall back to the filesystem
+ * webRoot (dev mode / explicit --web-root override).
+ */
+async function readEmbeddedAsset(relPath: string): Promise<Buffer | null> {
+  const assetPath = EMBEDDED_ASSETS[relPath]
+  if (!assetPath) return null
+  try {
+    return Buffer.from(await Bun.file(assetPath).arrayBuffer())
+  } catch {
+    // Not an embedded build — fall through to the filesystem fallback.
+  }
+  return null
 }
 
 interface SessionData {
@@ -517,25 +571,15 @@ class SessionRunner {
 }
 
 /**
- * Resolve the web/ static assets directory.
- *
- * Priority:
- *   1. explicit `webRoot` option
- *   2. `PORTAL_WEB_ROOT` env var
- *   3. `web/` next to the running executable (compiled-binary case)
- *   4. `web/` in the current working directory
- *   5. source-tree default `../../web` relative to this file (dev mode)
+ * Resolve the filesystem web/ static assets directory. Only used as a
+ * fallback in dev mode (or an explicit --web-root override) — in the
+ * compiled binary the assets are embedded and served first.
  */
 function resolveWebRoot(explicit?: string): string {
   if (explicit) return resolve(explicit)
   if (process.env.PORTAL_WEB_ROOT) return resolve(process.env.PORTAL_WEB_ROOT)
 
   const candidates: string[] = []
-  // Compiled binary: Bun sets process.execPath / process.argv[0] to the exe.
-  try {
-    const exeDir = dirname(process.execPath)
-    candidates.push(join(exeDir, 'web'))
-  } catch { /* ignore */ }
   candidates.push(join(process.cwd(), 'web'))
   if (import.meta.dirname) {
     candidates.push(join(import.meta.dirname, '../../web'))
@@ -554,6 +598,7 @@ export class WebServer {
   private sessions: Map<string, SessionData> = new Map()
   private runners: Map<string, SessionRunner> = new Map()
   private webRoot: string
+  private webRootExplicit: boolean
   private port: number | undefined
   private host: string
 
@@ -561,6 +606,7 @@ export class WebServer {
     this.port = options.port
     this.host = options.host ?? '0.0.0.0'
     this.webRoot = resolveWebRoot(options.webRoot)
+    this.webRootExplicit = !!options.webRoot
 
     this.httpServer = createServer(this.handleHttpRequest.bind(this))
     this.wss = new WebSocketServer({ server: this.httpServer })
@@ -599,7 +645,8 @@ export class WebServer {
     }
     if (url.pathname === '/api/models') {
       const baseUrl = url.searchParams.get('baseUrl') || undefined
-      return this.handleListModels(res, baseUrl)
+      const apiKey = url.searchParams.get('apiKey') || undefined
+      return this.handleListModels(res, baseUrl, apiKey)
     }
     if (url.pathname === '/api/session' && req.method === 'DELETE') {
       const project = url.searchParams.get('project') || ''
@@ -607,13 +654,23 @@ export class WebServer {
       return this.handleDeleteSession(res, project, session)
     }
 
-    // Static files
+    // Static files: embedded assets first (compiled binary), then the
+    // filesystem webRoot (dev mode / explicit --web-root override).
     let filePath = url.pathname === '/' ? '/index.html' : url.pathname
-    filePath = join(this.webRoot, filePath)
+    const rel = filePath.replace(/^\/+/, '')
+    const ext = extname(filePath)
+
+    if (!this.webRootExplicit && !rel.includes('..')) {
+      const embedded = await readEmbeddedAsset(rel)
+      if (embedded) {
+        res.writeHead(200, { 'Content-Type': MIME_TYPES[ext] || 'text/plain' })
+        res.end(embedded)
+        return
+      }
+    }
 
     try {
-      const content = await readFile(filePath)
-      const ext = extname(filePath)
+      const content = await readFile(join(this.webRoot, filePath))
       res.writeHead(200, { 'Content-Type': MIME_TYPES[ext] || 'text/plain' })
       res.end(content)
     } catch (err: any) {
@@ -1062,11 +1119,11 @@ export class WebServer {
     }
   }
 
-  private async handleListModels(res: any, baseUrlOverride?: string) {
+  private async handleListModels(res: any, baseUrlOverride?: string, apiKeyOverride?: string) {
     try {
       const profile = loadProfileFile({ cwd: process.cwd() })
       const baseUrl = baseUrlOverride || profile?.env?.OPENAI_BASE_URL || process.env.OPENAI_BASE_URL
-      const apiKey = profile?.env?.OPENAI_API_KEY || process.env.OPENAI_API_KEY
+      const apiKey = apiKeyOverride || profile?.env?.OPENAI_API_KEY || process.env.OPENAI_API_KEY
 
       const models = await listOpenAICompatibleModels({ baseUrl, apiKey })
 
@@ -1213,15 +1270,6 @@ export class WebServer {
             return
           }
 
-          const logMsg = `[${new Date().toISOString()}] [web] chat request: ${JSON.stringify({
-            sessionId: sid,
-            clientModel: msg.model,
-            baseUrl: process.env.OPENAI_BASE_URL,
-            hasApiKey: !!process.env.OPENAI_API_KEY,
-            modelEnv: process.env.OPENAI_MODEL,
-          })}\n`
-          console.log(logMsg.trim())
-
           // Update the runner's model so changes in the settings dropdown
           // take effect immediately for this and subsequent rounds.
           if (msg.model) runner.model = msg.model
@@ -1271,8 +1319,12 @@ export class WebServer {
           send({ type: 'config_validating' })
 
           try {
+            // Try the same candidate URLs as /api/models (listOpenAICompatibleModels)
+            // so validation accepts exactly the configs that can actually list
+            // models. The naive "{baseUrl}/models" construction rejects valid
+            // providers that only serve /v1/models (OpenAI, Ollama, etc.).
             const baseUrl = env.OPENAI_BASE_URL || 'https://api.openai.com/v1'
-            const validateUrl = baseUrl.endsWith('/') ? baseUrl + 'models' : baseUrl + '/models'
+            const validateUrls = getModelListUrls(baseUrl)
 
             const headers: Record<string, string> = {
               'Content-Type': 'application/json',
@@ -1284,28 +1336,46 @@ export class WebServer {
             const controller = new AbortController()
             const timeout = setTimeout(() => controller.abort(), 10000)
 
-            const response = await fetch(validateUrl, {
-              method: 'GET',
-              headers,
-              signal: controller.signal,
-            })
+            let lastError = 'Unable to reach the API. Check your Base URL.'
+            let validated = false
+            for (const validateUrl of validateUrls) {
+              if (controller.signal.aborted) break
+
+              let response: Response | undefined
+              try {
+                response = await fetch(validateUrl, {
+                  method: 'GET',
+                  headers,
+                  signal: controller.signal,
+                })
+              } catch (fetchErr: any) {
+                if (fetchErr.name === 'AbortError') {
+                  lastError = 'Connection timeout. Check your Base URL.'
+                  break
+                }
+                lastError = `Connection failed: ${fetchErr.message}`
+                continue
+              }
+
+              if (!response.ok) {
+                const errorText = await response.text().catch(() => 'Unknown error')
+                lastError = `API returned ${response.status}: ${errorText}`
+                continue
+              }
+
+              const data = await response.json().catch(() => null)
+              if (!data || (!data.data && !Array.isArray(data))) {
+                lastError = 'Invalid response from API. Check your Base URL.'
+                continue
+              }
+
+              validated = true
+              break
+            }
             clearTimeout(timeout)
 
-            if (!response.ok) {
-              const errorText = await response.text().catch(() => 'Unknown error')
-              send({
-                type: 'config_error',
-                message: `API returned ${response.status}: ${errorText}`,
-              })
-              return
-            }
-
-            const data = await response.json().catch(() => null)
-            if (!data || (!data.data && !Array.isArray(data))) {
-              send({
-                type: 'config_error',
-                message: 'Invalid response from API. Check your Base URL.',
-              })
+            if (!validated) {
+              send({ type: 'config_error', message: lastError })
               return
             }
 
