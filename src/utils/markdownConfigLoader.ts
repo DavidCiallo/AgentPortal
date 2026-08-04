@@ -6,7 +6,7 @@ import { homedir } from 'os'
 import { dirname, join, resolve, sep } from 'path'
 import { getProjectRoot } from '../bootstrap/state.js'
 import { logForDebugging } from './debug.js'
-import { getClaudeConfigHomeDir, isEnvTruthy } from './envUtils.js'
+import { getClaudeConfigHomeDir } from './envUtils.js'
 import { isFsInaccessible } from './errors.js'
 import { normalizePathForComparison } from './file.js'
 import type { FrontmatterData } from './frontmatterParser.js'
@@ -535,22 +535,17 @@ async function loadMarkdownFiles(dir: string): Promise<
     content: string
   }[]
 > {
-  // File search strategy:
-  // - Default: ripgrep (faster, battle-tested)
-  // - Fallback: native Node.js (when CLAUDE_CODE_USE_NATIVE_FILE_SEARCH is set)
-  //
-  // Why both? Ripgrep has poor startup performance in native builds.
-  const useNative = isEnvTruthy(process.env.CLAUDE_CODE_USE_NATIVE_FILE_SEARCH)
+  // File search strategy: native walker (ripgrep-free). The old env flag
+  // CLAUDE_CODE_USE_NATIVE_FILE_SEARCH is accepted but both branches now
+  // use the native implementation.
   const signal = AbortSignal.timeout(3000)
   let files: string[]
   try {
-    files = useNative
-      ? await findMarkdownFilesNative(dir, signal)
-      : await ripGrep(
-          ['--files', '--hidden', '--follow', '--no-ignore', '--glob', '*.md'],
-          dir,
-          signal,
-        )
+    files = await ripGrep(
+      ['--files', '--hidden', '--follow', '--no-ignore', '--glob', '*.md'],
+      dir,
+      signal,
+    )
   } catch (e: unknown) {
     // Handle missing/inaccessible dir directly instead of pre-checking
     // existence (TOCTOU). findMarkdownFilesNative already catches internally;

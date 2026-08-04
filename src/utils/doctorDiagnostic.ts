@@ -32,7 +32,6 @@ import {
   getPackageManager,
 } from './nativeInstaller/packageManagers.js'
 import { getPlatform } from './platform.js'
-import { getRipgrepStatus } from './ripgrep.js'
 import { SandboxManager } from './sandbox/sandbox-adapter.js'
 import { getManagedFilePath } from './settings/managedPath.js'
 import { CUSTOMIZATION_SURFACES } from './settings/types.js'
@@ -74,11 +73,6 @@ export type DiagnosticInfo = {
   warnings: Array<{ issue: string; fix: string }>
   recommendation?: string
   packageManager?: string
-  ripgrepStatus: {
-    working: boolean
-    mode: 'system' | 'builtin' | 'embedded'
-    systemPath: string | null
-  }
 }
 
 function getNormalizedPaths(): [invokedPath: string, execPath: string] {
@@ -607,17 +601,6 @@ export async function getDoctorDiagnostic(): Promise<DiagnosticInfo> {
     }
   }
 
-  // Get ripgrep status and configuration
-  const ripgrepStatusRaw = getRipgrepStatus()
-
-  // Provide simple ripgrep status info
-  const ripgrepStatus = {
-    working: ripgrepStatusRaw.working ?? true, // Assume working if not yet tested
-    mode: ripgrepStatusRaw.mode,
-    systemPath:
-      ripgrepStatusRaw.mode === 'system' ? ripgrepStatusRaw.path : null,
-  }
-
   // Get package manager info if running from package manager
   const packageManager =
     installationType === 'package-manager'
@@ -640,7 +623,6 @@ export async function getDoctorDiagnostic(): Promise<DiagnosticInfo> {
     multipleInstallations,
     warnings,
     packageManager,
-    ripgrepStatus,
   }
 
   return diagnostic

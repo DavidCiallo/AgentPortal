@@ -54,9 +54,9 @@ import { FILE_EDIT_TOOL_NAME } from 'src/tools/FileEditTool/constants.js'
 import { FILE_READ_TOOL_NAME } from 'src/tools/FileReadTool/prompt.js'
 import { WEB_FETCH_TOOL_NAME } from 'src/tools/WebFetchTool/prompt.js'
 import { errorMessage } from '../errors.js'
+import { findExecutable } from '../findExecutable.js'
 import { getClaudeTempDir } from '../permissions/filesystem.js'
 import type { PermissionRuleValue } from '../permissions/PermissionRule.js'
-import { ripgrepCommand } from '../ripgrep.js'
 
 // Local copies to avoid circular dependency
 // (permissions.ts imports SandboxManager, bashPermissions.ts imports permissions.ts)
@@ -347,13 +347,13 @@ export function convertToSandboxRuntimeConfig(
       }
     }
   }
-  // Ripgrep config for sandbox. User settings take priority; otherwise pass our rg.
-  // In embedded mode (argv0='rg' dispatch), sandbox-runtime spawns with argv0 set.
-  const { rgPath, rgArgs, argv0 } = ripgrepCommand()
+  // Ripgrep config for sandbox. The app no longer bundles ripgrep, so the
+  // default is the sandbox-runtime's own `rg` lookup (command name 'rg').
+  // User settings still take priority.
+  const { cmd: systemRg } = findExecutable('rg', [])
   const ripgrepConfig = settings.sandbox?.ripgrep ?? {
-    command: rgPath,
-    args: rgArgs,
-    argv0,
+    command: systemRg,
+    args: [],
   }
 
   return {
@@ -449,10 +449,12 @@ async function detectWorktreeMainRepoPath(cwd: string): Promise<string | null> {
  * Returns { errors, warnings } - errors mean sandbox cannot run
  */
 const checkDependencies = memoize((): SandboxDependencyCheck => {
-  const { rgPath, rgArgs } = ripgrepCommand()
+  // The sandbox-runtime's own `rg` lookup is used; the app does not bundle
+  // ripgrep anymore.
+  const { cmd: systemRg } = findExecutable('rg', [])
   return BaseSandboxManager.checkDependencies({
-    command: rgPath,
-    args: rgArgs,
+    command: systemRg,
+    args: [],
   })
 })
 

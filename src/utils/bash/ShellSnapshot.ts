@@ -12,10 +12,10 @@ import {
 } from '../embeddedTools.js'
 import { getClaudeConfigHomeDir } from '../envUtils.js'
 import { pathExists } from '../file.js'
+import { findExecutable } from '../findExecutable.js'
 import { getFsImplementation } from '../fsOperations.js'
 import { logError } from '../log.js'
 import { getPlatform } from '../platform.js'
-import { ripgrepCommand } from '../ripgrep.js'
 import { subprocessEnv } from '../subprocessEnv.js'
 import { quote } from './shellQuote.js'
 
@@ -58,36 +58,29 @@ function createArgv0ShellFunction(
 }
 
 /**
- * Creates ripgrep shell integration (alias or function)
- * @returns Object with type and the shell snippet to use
+ * Creates a ripgrep shell integration, only when a system `rg` binary exists.
+ *
+ * The app no longer bundles or embeds ripgrep (it spawns the app binary in
+ * "embedded" argv0 mode, which is not supported by this build). If the user
+ * has a real `rg` on PATH, alias `rg` to it explicitly so Claude's shell can
+ * use it; otherwise there is nothing to wire up and the integration is
+ * skipped entirely.
+ *
+ * @returns An alias snippet, or null when no system rg is available.
  */
 export function createRipgrepShellIntegration(): {
-  type: 'alias' | 'function'
+  type: 'alias'
   snippet: string
-} {
-  const rgCommand = ripgrepCommand()
-
-  // For embedded ripgrep (bun-internal), we need a shell function that sets argv0
-  if (rgCommand.argv0) {
-    return {
-      type: 'function',
-      snippet: createArgv0ShellFunction(
-        'rg',
-        rgCommand.argv0,
-        rgCommand.rgPath,
-      ),
-    }
+} | null {
+  const { cmd } = findExecutable('rg', [])
+  // findExecutable falls back to the input name when not found, so only
+  // treat it as present when the returned cmd differs from the raw name.
+  if (cmd === 'rg') {
+    return null
   }
 
-  // For regular ripgrep, use a simple alias target
-  const quotedPath = quote([rgCommand.rgPath])
-  const quotedArgs = rgCommand.rgArgs.map(arg => quote([arg]))
-  const aliasTarget =
-    rgCommand.rgArgs.length > 0
-      ? `${quotedPath} ${quotedArgs.join(' ')}`
-      : quotedPath
-
-  return { type: 'alias', snippet: aliasTarget }
+  const quotedPath = quote([cmd])
+  return { type: 'alias', snippet: quotedPath }
 }
 
 /**
@@ -284,34 +277,19 @@ async function getClaudeCodeSnapshotContent(): Promise<string> {
 
   let content = ''
 
-  // Check if rg is available, if not create an alias/function to bundled ripgrep
-  // We use a subshell to unalias rg before checking, so that user aliases like
-  // `alias rg='rg --smart-case'` don't shadow the real binary check. The subshell
-  // ensures we don't modify the user's aliases in the parent shell.
-  content += `
+  // Wire up a system `rg` alias if one exists. The subshell unalias + check
+  // mirrors the old behavior: if the user has a real rg on PATH, alias it
+  // explicitly; if not, skip the whole block.
+  if (rgIntegration !== null) {
+    const escapedSnippet = rgIntegration.snippet.replace(/'/g, "'\\''")
+    content += `
       # Check for rg availability
       echo "# Check for rg availability" >> "$SNAPSHOT_FILE"
       echo "if ! (unalias rg 2>/dev/null; command -v rg) >/dev/null 2>&1; then" >> "$SNAPSHOT_FILE"
-  `
-
-  if (rgIntegration.type === 'function') {
-    // For embedded ripgrep, write the function definition using heredoc
-    content += `
-      cat >> "$SNAPSHOT_FILE" << 'RIPGREP_FUNC_END'
-  ${rgIntegration.snippet}
-RIPGREP_FUNC_END
-    `
-  } else {
-    // For regular ripgrep, write a simple alias
-    const escapedSnippet = rgIntegration.snippet.replace(/'/g, "'\\''")
-    content += `
       echo '  alias rg='"'${escapedSnippet}'" >> "$SNAPSHOT_FILE"
+      echo "fi" >> "$SNAPSHOT_FILE"
     `
   }
-
-  content += `
-      echo "fi" >> "$SNAPSHOT_FILE"
-  `
 
   // For ant-native builds, shadow find/grep with bfs/ugrep embedded in the bun
   // binary. Unlike rg (which only activates if system rg is absent), we always

@@ -425,10 +425,8 @@ export const GrepTool = buildTool({
     }
 
     // WSL has severe performance penalty for file reads (3-5x slower on WSL2)
-    // The timeout is handled by ripgrep itself via execFile timeout option
-    // We don't use AbortController for timeout to avoid interrupting the agent loop
-    // If ripgrep times out, it throws RipgrepTimeoutError which propagates up
-    // so Claude knows the search didn't complete (rather than thinking there were no matches)
+    // The native search walker is bounded by the abort controller signal, so
+    // a long search can be cancelled without interrupting the agent loop.
     const results = await ripGrep(args, absolutePath, abortController.signal)
 
     if (output_mode === 'content') {

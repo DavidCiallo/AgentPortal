@@ -138,7 +138,10 @@ export const SandboxSettingsSchema = lazySchema(() =>
           args: z.array(z.string()).optional(),
         })
         .optional()
-        .describe('Custom ripgrep configuration for bundled ripgrep support'),
+        .describe(
+          'Custom ripgrep configuration for the sandbox. The app no longer bundles ripgrep; ' +
+            'if unset, the sandbox uses its own `rg` lookup.',
+        ),
     })
     .passthrough(),
 )

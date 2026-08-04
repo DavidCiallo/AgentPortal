@@ -1439,6 +1439,16 @@ export class WebServer {
     })
   }
 
+  /** Actual bound port (resolved after start()). */
+  get boundPort(): number {
+    return this.port ?? 0
+  }
+
+  /** Local URL for this machine's browser (resolved after start()). */
+  get localUrl(): string {
+    return `http://127.0.0.1:${this.boundPort}`
+  }
+
   /** In-memory message cache accessor (used by SessionRunner) */
   getSessionMessages(sessionId: string): any[] | null {
     const s = this.sessions.get(sessionId)
