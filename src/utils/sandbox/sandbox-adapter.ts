@@ -54,7 +54,6 @@ import { FILE_EDIT_TOOL_NAME } from 'src/tools/FileEditTool/constants.js'
 import { FILE_READ_TOOL_NAME } from 'src/tools/FileReadTool/prompt.js'
 import { WEB_FETCH_TOOL_NAME } from 'src/tools/WebFetchTool/prompt.js'
 import { errorMessage } from '../errors.js'
-import { findExecutable } from '../findExecutable.js'
 import { getClaudeTempDir } from '../permissions/filesystem.js'
 import type { PermissionRuleValue } from '../permissions/PermissionRule.js'
 
@@ -167,7 +166,7 @@ function shouldAllowManagedReadPathsOnly(): boolean {
  * Convert Claude Code settings format to SandboxRuntimeConfig format
  * (Function exported for testing)
  *
- * @param settings Merged settings (used for sandbox config like network, ripgrep, etc.)
+ * @param settings Merged settings (used for sandbox config like network, filesystem, etc.)
  */
 export function convertToSandboxRuntimeConfig(
   settings: SettingsJson,
@@ -347,14 +346,6 @@ export function convertToSandboxRuntimeConfig(
       }
     }
   }
-  // Ripgrep config for sandbox. The app no longer bundles ripgrep, so the
-  // default is the sandbox-runtime's own `rg` lookup (command name 'rg').
-  // User settings still take priority.
-  const { cmd: systemRg } = findExecutable('rg', [])
-  const ripgrepConfig = settings.sandbox?.ripgrep ?? {
-    command: systemRg,
-    args: [],
-  }
 
   return {
     network: {
@@ -376,7 +367,6 @@ export function convertToSandboxRuntimeConfig(
     enableWeakerNestedSandbox: settings.sandbox?.enableWeakerNestedSandbox,
     enableWeakerNetworkIsolation:
       settings.sandbox?.enableWeakerNetworkIsolation,
-    ripgrep: ripgrepConfig,
   }
 }
 
@@ -449,13 +439,8 @@ async function detectWorktreeMainRepoPath(cwd: string): Promise<string | null> {
  * Returns { errors, warnings } - errors mean sandbox cannot run
  */
 const checkDependencies = memoize((): SandboxDependencyCheck => {
-  // The sandbox-runtime's own `rg` lookup is used; the app does not bundle
-  // ripgrep anymore.
-  const { cmd: systemRg } = findExecutable('rg', [])
-  return BaseSandboxManager.checkDependencies({
-    command: systemRg,
-    args: [],
-  })
+  // No overrides: sandbox-runtime checks its own defaults.
+  return BaseSandboxManager.checkDependencies()
 })
 
 function getSandboxEnabledSetting(): boolean {

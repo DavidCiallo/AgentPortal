@@ -44,7 +44,7 @@ import {
   persistFileSnapshotIfRemote,
 } from './plans.js'
 import { getPlatform } from './platform.js'
-import { countFilesRoundedRg } from './ripgrep.js'
+import { countFilesRounded } from './nativeSearch.js'
 import { jsonStringify } from './slowOperations.js'
 import type { SystemPrompt } from './systemPromptType.js'
 import { getToolSchemaCache } from './toolSchemaCache.js'
@@ -447,14 +447,14 @@ export async function logContextMetrics(
     ])
   // Calculate total context size
 
-  // Get file count using ripgrep (rounded to nearest power of 10 for privacy)
+  // Get file count using native file walker (rounded to nearest power of 10 for privacy)
   const currentDir = getCwd()
   const ignorePatternsByRoot = getFileReadIgnorePatterns(toolPermissionContext)
   const normalizedIgnorePatterns = normalizePatternsToPath(
     ignorePatternsByRoot,
     currentDir,
   )
-  await countFilesRoundedRg(
+  await countFilesRounded(
     currentDir,
     AbortSignal.timeout(1000),
     normalizedIgnorePatterns,

@@ -9,7 +9,7 @@
  */
 
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, rmSync, existsSync, cpSync } from 'node:fs'
+import { mkdirSync, rmSync, existsSync, cpSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -72,8 +72,25 @@ if (existsSync(profileSrc)) {
   console.log('[build-exe] NOTE: no .portal-profile.json at repo root; exe will rely on shell env for provider config.')
 }
 
+// Generate convenience launchers next to the binary. Both cd to their own
+// directory so .portal-profile.json (and any relative paths) resolve no
+// matter where the .bat is double-clicked from. start.bat only runs the
+// server; start_web.bat also opens the browser (--open).
+for (const { name, args, note } of [
+  { name: 'start.bat', args: '', note: 'start the server without opening the browser' },
+  { name: 'start_web.bat', args: '--open', note: 'start the server and open the browser' },
+] as const) {
+  writeFileSync(
+    join(outDir, name),
+    `@echo off\r\ncd /d "%~dp0"\r\n${exeName}${args ? ' ' + args : ''} %*\r\n`,
+  )
+  console.log(`[build-exe] Generated ${name} (${note})`)
+}
+
 console.log('')
 console.log('[build-exe] Done.')
-console.log('  Binary:', exePath)
-console.log('  Run:    ', `${exePath} --port 3212`)
-console.log('          ', `${exePath}              (random free port)`)
+console.log('  Binary: ', exePath)
+console.log('  Launcher:', join(outDir, 'start.bat'), '(server only)')
+console.log('  Launcher:', join(outDir, 'start_web.bat'), '(server + browser)')
+console.log('  Run:     ', `${exePath} --port 3212`)
+console.log('           ', `${exePath}              (random free port)`)

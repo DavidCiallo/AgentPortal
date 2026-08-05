@@ -7,7 +7,7 @@ import {
 } from './permissions/filesystem.js'
 import { getPlatform } from './platform.js'
 import { getGlobExclusionsForPluginCache } from './plugins/orphanedPluginFilter.js'
-import { ripGrep } from './ripgrep.js'
+import { nativeSearch } from './nativeSearch.js'
 
 /**
  * Extracts the static base directory from a glob pattern.
@@ -74,7 +74,7 @@ export async function glob(
   let searchPattern = filePattern
 
   // Handle absolute paths by extracting the base directory and converting to relative pattern
-  // ripgrep's --glob flag only works with relative patterns
+  // The native walker's --glob flag only works with relative patterns
   if (isAbsolute(filePattern)) {
     const { baseDir, relativePattern } = extractGlobBaseDirectory(filePattern)
     if (baseDir) {
@@ -88,7 +88,7 @@ export async function glob(
     searchDir,
   )
 
-  // Use ripgrep for better memory performance
+  // Use the native walker for better memory performance
   // --files: list files instead of searching content
   // --glob: filter by pattern
   // --sort=modified: sort by modification time (oldest first)
@@ -116,9 +116,9 @@ export async function glob(
     args.push('--glob', exclusion)
   }
 
-  const allPaths = await ripGrep(args, searchDir, abortSignal)
+  const allPaths = await nativeSearch(args, searchDir, abortSignal)
 
-  // ripgrep returns relative paths, convert to absolute
+  // The native walker returns relative paths, convert to absolute
   const absolutePaths = allPaths.map(p =>
     isAbsolute(p) ? p : join(searchDir, p),
   )

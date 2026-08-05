@@ -9,7 +9,7 @@
  *
  * However, EXTERNAL executables invoked from PowerShell DO set $LASTEXITCODE,
  * and many use non-zero codes to convey information rather than failure:
- *   - grep.exe / rg.exe (Git for Windows, scoop, etc.): 1 = no match
+ *   - grep.exe (Git for Windows, scoop, etc.): 1 = no match
  *   - findstr.exe (Windows native): 1 = no match
  *   - robocopy.exe (Windows native): 0-7 = success, 8+ = error (notorious!)
  *
@@ -36,7 +36,7 @@ const DEFAULT_SEMANTIC: CommandSemantic = (exitCode, _stdout, _stderr) => ({
 })
 
 /**
- * grep / ripgrep: 0 = matches found, 1 = no matches, 2+ = error
+ * grep: 0 = matches found, 1 = no matches, 2+ = error
  */
 const GREP_SEMANTIC: CommandSemantic = (exitCode, _stdout, _stderr) => ({
   isError: exitCode >= 2,
@@ -60,9 +60,8 @@ const GREP_SEMANTIC: CommandSemantic = (exitCode, _stdout, _stderr) => ({
  *   - 'select-string', 'compare-object', 'test-path': Native cmdlets exit 0.
  */
 const COMMAND_SEMANTICS: Map<string, CommandSemantic> = new Map([
-  // External grep/ripgrep (Git for Windows, scoop, choco)
+  // External grep (Git for Windows, scoop, choco)
   ['grep', GREP_SEMANTIC],
-  ['rg', GREP_SEMANTIC],
 
   // findstr.exe: Windows native text search
   // 0 = match found, 1 = no match, 2 = error
@@ -104,7 +103,7 @@ function extractBaseCommand(segment: string): string {
   const firstToken = stripped.split(/\s+/)[0] || ''
   // Strip surrounding quotes if command was invoked as & "grep.exe"
   const unquoted = firstToken.replace(/^["']|["']$/g, '')
-  // Strip path: C:\bin\grep.exe → grep.exe, .\rg.exe → rg.exe
+  // Strip path: C:\bin\grep.exe → grep.exe
   const basename = unquoted.split(/[\\/]/).pop() || unquoted
   // Strip .exe suffix (Windows is case-insensitive)
   return basename.toLowerCase().replace(/\.exe$/, '')

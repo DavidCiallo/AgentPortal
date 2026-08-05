@@ -11,12 +11,11 @@ import { countCharInString } from './stringUtils.js'
  * Native file search.
  *
  * This module is the single file-search implementation used by the Grep, Glob,
- * and file-index paths. There is intentionally no ripgrep integration:
- * spawning `rg` (or re-spawning the app binary in "embedded" argv0 mode) is
- * not reliable in bundled builds, so searches walk the filesystem directly
- * with Node's `fs` APIs and `picomatch` for glob matching.
+ * and file-index paths. Searches walk the filesystem directly with Node's `fs`
+ * APIs and `picomatch` for glob matching — there is no external search binary
+ * dependency.
  *
- * Supported rg-style flags (the subset the codebase's callers actually use):
+ * Supported ripgrep-style flags (the subset the codebase's callers actually use):
  *   --files, --hidden, --no-ignore, --follow, --max-depth N, --glob <pat>,
  *   --sort=modified, -i (case-insensitive), -n (line numbers),
  *   -l (files-with-matches), -c (count), -A/-B/-C (context),
@@ -24,7 +23,7 @@ import { countCharInString } from './stringUtils.js'
  *   plus a positional regex pattern.
  *
  * -m/--max-count stops the search after N matching files. .gitignore is NOT
- * respected (equivalent to rg's --no-ignore). `--type <name>` is parsed but
+ * respected (equivalent to ripgrep's --no-ignore). `--type <name>` is parsed but
  * not applied (see the docs above `matchFileContent`).
  *
  * Output shapes match ripgrep's:
@@ -34,7 +33,7 @@ import { countCharInString } from './stringUtils.js'
  * Paths use forward slashes.
  */
 
-function ripGrepRaw(
+function nativeSearchRaw(
   args: string[],
   target: string,
   abortSignal: AbortSignal,
@@ -45,7 +44,7 @@ function ripGrepRaw(
   ) => void,
   _singleThread = false,
 ): { kill: () => void } {
-  ripGrepFallback(args, target, abortSignal)
+  nativeSearchWalk(args, target, abortSignal)
     .then(stdout => callback(null, stdout.join('\n'), ''))
     .catch((err: unknown) => {
       const e = new Error(
@@ -64,14 +63,14 @@ function ripGrepRaw(
 /**
  * Stream file paths from the native walker, flushing complete lines per chunk.
  *
- * Unlike `ripGrep()` (which buffers everything), this flushes results as the
+ * Unlike `nativeSearch()` (which buffers everything), this flushes results as the
  * walker finds them — first results paint before the tree walk finishes.
  * Partial trailing lines are carried across chunks.
  *
  * Callers that want to stop early (e.g. after N matches) should abort the
  * signal — the walker checks it between files.
  */
-export async function ripGrepStream(
+export async function nativeSearchStream(
   args: string[],
   target: string,
   abortSignal: AbortSignal,
@@ -79,25 +78,22 @@ export async function ripGrepStream(
 ): Promise<void> {
   // Stream mode is not exercised by any current caller; fall back to the
   // buffered walker and flush full lines only.
-  const stdout = await ripGrep(args, target, abortSignal)
+  const stdout = await nativeSearch(args, target, abortSignal)
   const stripCR = (l: string) => (l.endsWith('\r') ? l.slice(0, -1) : l)
   if (stdout.length) onLines(stdout.map(stripCR))
 }
 
 /**
- * Search using the native walker. Resolves with rg-compatible output lines.
+ * Search using the native walker. Resolves with ripgrep-compatible output lines.
  * Aborting the signal stops the walk; an abort surfaces as an AbortError
  * rejection from the walker.
- *
- * (Formerly this wrapped ripgrep; the rg "exit code 1 = no matches"
- * convention is now handled natively by the walker returning []).
  */
-export async function ripGrep(
+export async function nativeSearch(
   args: string[],
   target: string,
   abortSignal: AbortSignal,
 ): Promise<string[]> {
-  return ripGrepFallback(args, target, abortSignal)
+  return nativeSearchWalk(args, target, abortSignal)
 }
 
 /**
@@ -109,7 +105,7 @@ export async function ripGrep(
  * @param ignorePatterns Optional additional patterns to ignore
  * @returns Approximate file count rounded to the nearest power of 10
  */
-export const countFilesRoundedRg = memoize(
+export const countFilesRounded = memoize(
   async (
     dirPath: string,
     abortSignal: AbortSignal,
@@ -127,7 +123,7 @@ export const countFilesRoundedRg = memoize(
         args.push('--glob', `!${pattern}`)
       })
 
-      const count = await ripGrepFileCount(args, dirPath, abortSignal)
+      const count = await nativeSearchFileCount(args, dirPath, abortSignal)
 
       // Round to nearest power of 10 for privacy
       if (count === 0) return 0
@@ -148,14 +144,14 @@ export const countFilesRoundedRg = memoize(
 
 /**
  * Count lines from the native walker without materializing the full output.
- * The only caller is telemetry (countFilesRoundedRg), which swallows errors.
+ * The only caller is telemetry (countFilesRounded), which swallows errors.
  */
-async function ripGrepFileCount(
+async function nativeSearchFileCount(
   args: string[],
   target: string,
   abortSignal: AbortSignal,
 ): Promise<number> {
-  const files = await ripGrepFallback(args, target, abortSignal)
+  const files = await nativeSearchWalk(args, target, abortSignal)
   return countCharInString(files.join('\n'), '\n') + (files.length > 0 ? 1 : 0)
 }
 
@@ -309,9 +305,9 @@ function parseFallbackArgs(args: string[]): FallbackArgs {
 /**
  * Native fallback for file search — the primary (and only) search path.
  *
- * Supports the flag subset above and returns rg-compatible output.
+ * Supports the flag subset above and returns ripgrep-compatible output.
  */
-export async function ripGrepFallback(
+export async function nativeSearchWalk(
   args: string[],
   target: string,
   abortSignal: AbortSignal,

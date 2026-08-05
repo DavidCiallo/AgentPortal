@@ -12,7 +12,7 @@ export function getDescription(): string {
   - Filter files with glob parameter (e.g., "*.js", "**/*.tsx") or type parameter (e.g., "js", "py", "rust")
   - Output modes: "content" shows matching lines, "files_with_matches" shows only file paths (default), "count" shows match counts
   - Use ${AGENT_TOOL_NAME} tool for open-ended searches requiring multiple rounds
-  - Pattern syntax: Uses ripgrep-compatible regex (not grep) - literal braces need escaping (use \`interface\\{\\}\` to find \`interface{}\` in Go code)
+  - Pattern syntax: Uses full regex (not grep) - literal braces need escaping (use \`interface\\{\\}\` to find \`interface{}\` in Go code)
   - Multiline matching: By default patterns match within single lines only. For cross-line patterns like \`struct \\{[\\s\\S]*?field\`, use \`multiline: true\`
 `
 }

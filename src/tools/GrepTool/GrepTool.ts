@@ -18,7 +18,7 @@ import {
 import type { PermissionDecision } from '../../utils/permissions/PermissionResult.js'
 import { matchWildcardPattern } from '../../utils/permissions/shellRuleMatching.js'
 import { getGlobExclusionsForPluginCache } from '../../utils/plugins/orphanedPluginFilter.js'
-import { ripGrep } from '../../utils/ripgrep.js'
+import { nativeSearch } from '../../utils/nativeSearch.js'
 import { semanticBoolean } from '../../utils/semanticBoolean.js'
 import { semanticNumber } from '../../utils/semanticNumber.js'
 import { plural } from '../../utils/stringUtils.js'
@@ -154,7 +154,7 @@ type Output = z.infer<OutputSchema>
 
 export const GrepTool = buildTool({
   name: GREP_TOOL_NAME,
-  searchHint: 'search file contents with regex (ripgrep)',
+  searchHint: 'search file contents with regex',
   // 20K chars - tool result persistence threshold
   maxResultSizeChars: 20_000,
   strict: true,
@@ -367,7 +367,7 @@ export const GrepTool = buildTool({
     }
 
     // If pattern starts with dash, use -e flag to specify it as a pattern
-    // This prevents ripgrep from interpreting it as a command-line option
+    // This prevents it from being interpreted as a command-line option
     if (pattern.startsWith('-')) {
       args.push('-e', pattern)
     } else {
@@ -406,11 +406,9 @@ export const GrepTool = buildTool({
       getCwd(),
     )
     for (const ignorePattern of ignorePatterns) {
-      // Note: ripgrep only applies gitignore patterns relative to the working directory
-      // So for non-absolute paths, we need to prefix them with '**'
-      // See: https://github.com/BurntSushi/ripgrep/discussions/2156#discussioncomment-2316335
-      //
-      // We also need to negate the pattern with `!` to exclude it
+      // Note: the search only applies gitignore patterns relative to the
+      // working directory, so for non-absolute paths we need to prefix them
+      // with '**'. We also negate the pattern with `!` to exclude it.
       const rgIgnorePattern = ignorePattern.startsWith('/')
         ? `!${ignorePattern}`
         : `!**/${ignorePattern}`
@@ -427,7 +425,7 @@ export const GrepTool = buildTool({
     // WSL has severe performance penalty for file reads (3-5x slower on WSL2)
     // The native search walker is bounded by the abort controller signal, so
     // a long search can be cancelled without interrupting the agent loop.
-    const results = await ripGrep(args, absolutePath, abortController.signal)
+    const results = await nativeSearch(args, absolutePath, abortController.signal)
 
     if (output_mode === 'content') {
       // For content mode, results are the actual content lines
@@ -465,7 +463,7 @@ export const GrepTool = buildTool({
     }
 
     if (output_mode === 'count') {
-      // For count mode, pass through raw ripgrep output (filename:count format)
+      // For count mode, pass through raw search output (filename:count format)
       // Apply head_limit first to avoid relativizing entries that will be discarded.
       const { items: limitedResults, appliedLimit } = applyHeadLimit(
         results,
@@ -513,8 +511,8 @@ export const GrepTool = buildTool({
     }
 
     // For files_with_matches mode (default)
-    // Use allSettled so a single ENOENT (file deleted between ripgrep's scan
-    // and this stat) does not reject the whole batch. Failed stats sort as mtime 0.
+    // Use allSettled so a single ENOENT (file deleted between the scan and
+    // this stat) does not reject the whole batch. Failed stats sort as mtime 0.
     const stats = await Promise.allSettled(
       results.map(_ => getFsImplementation().stat(_)),
     )

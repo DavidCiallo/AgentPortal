@@ -54,7 +54,6 @@ export type PathCommand =
   | 'base64'
   | 'nl'
   | 'grep'
-  | 'rg'
   | 'sed'
   | 'git'
   | 'jq'
@@ -138,7 +137,7 @@ function filterOutFlags(args: string[]): string[] {
   return result
 }
 
-// Helper: Parse grep/rg style commands (pattern then paths)
+// Helper: Parse grep-style commands (pattern then paths)
 function parsePatternCommand(
   args: string[],
   flagsWithArgs: Set<string>,
@@ -340,34 +339,6 @@ export const PATH_EXTRACTORS: Record<
     return paths
   },
 
-  // rg: pattern then paths, defaults to current dir
-  rg: args => {
-    const flags = new Set([
-      '-e',
-      '--regexp',
-      '-f',
-      '--file',
-      '-t',
-      '--type',
-      '-T',
-      '--type-not',
-      '-g',
-      '--glob',
-      '-m',
-      '--max-count',
-      '--max-depth',
-      '-r',
-      '--replace',
-      '-A',
-      '--after-context',
-      '-B',
-      '--before-context',
-      '-C',
-      '--context',
-    ])
-    return parsePatternCommand(args, flags, ['.'])
-  },
-
   // sed: processes files in-place or reads from stdin
   sed: args => {
     const paths: string[] = []
@@ -540,7 +511,6 @@ const ACTION_VERBS: Record<PathCommand, string> = {
   base64: 'encode/decode files from',
   nl: 'number lines in files from',
   grep: 'search for patterns in files from',
-  rg: 'search for patterns in files from',
   sed: 'edit files in',
   git: 'access files with git from',
   jq: 'process JSON from files in',
@@ -579,7 +549,6 @@ export const COMMAND_OPERATION_TYPE: Record<PathCommand, FileOperationType> = {
   base64: 'read',
   nl: 'read',
   grep: 'read',
-  rg: 'read',
   sed: 'write',
   git: 'read',
   jq: 'read',

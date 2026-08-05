@@ -1,5 +1,5 @@
 /**
- * Provides ripgrep glob exclusion patterns for orphaned plugin versions.
+ * Provides glob exclusion patterns for orphaned plugin versions.
  *
  * When plugin versions are updated, old versions are marked with a
  * `.orphaned_at` file but kept on disk for 7 days (since concurrent
@@ -7,16 +7,16 @@
  * could return files from orphaned versions, causing Claude to use
  * outdated plugin code.
  *
- * We find `.orphaned_at` markers via a single ripgrep call and generate
- * `--glob '!<dir>/**'` patterns for their parent directories. The cache
- * is warmed in main.tsx AFTER cleanupOrphanedPluginVersionsInBackground
+ * We find `.orphaned_at` markers via a single native search call and
+ * generate `--glob '!<dir>/**'` patterns for their parent directories. The
+ * cache is warmed in main.tsx AFTER cleanupOrphanedPluginVersionsInBackground
  * settles disk state. Once populated, the exclusion list is frozen for
  * the session unless /reload-plugins is called; subsequent disk mutations
  * (autoupdate, concurrent sessions) don't affect it.
  */
 
 import { dirname, isAbsolute, join, normalize, relative, sep } from 'path'
-import { ripGrep } from '../ripgrep.js'
+import { nativeSearch } from '../nativeSearch.js'
 import { getPluginsDirectory } from './pluginDirectories.js'
 
 // Inlined from cacheUtils.ts to avoid a circular dep through commands.js.
@@ -26,7 +26,7 @@ const ORPHANED_AT_FILENAME = '.orphaned_at'
 let cachedExclusions: string[] | null = null
 
 /**
- * Get ripgrep glob exclusion patterns for orphaned plugin versions.
+ * Get glob exclusion patterns for orphaned plugin versions.
  *
  * @param searchPath - When provided, exclusions are only returned if the
  *   search overlaps the plugin cache directory (avoids unnecessary --glob
@@ -55,7 +55,7 @@ export async function getGlobExclusionsForPluginCache(
     // cache/<marketplace>/<plugin>/<version>/.orphaned_at — don't recurse
     // into plugin contents (node_modules, etc.). Never-aborts signal: no
     // caller signal to thread.
-    const markers = await ripGrep(
+    const markers = await nativeSearch(
       [
         '--files',
         '--hidden',
@@ -70,18 +70,18 @@ export async function getGlobExclusionsForPluginCache(
     )
 
     cachedExclusions = markers.map(markerPath => {
-      // ripgrep may return absolute or relative — normalize to relative.
+      // The native walker may return absolute or relative — normalize to relative.
       const versionDir = dirname(markerPath)
       const rel = isAbsolute(versionDir)
         ? relative(cachePath, versionDir)
         : versionDir
-      // ripgrep glob patterns always use forward slashes, even on Windows
+      // Glob patterns always use forward slashes, even on Windows
       const posixRelative = rel.replace(/\\/g, '/')
       return `!**/${posixRelative}/**`
     })
     return cachedExclusions
   } catch {
-    // Best-effort — don't break core search tools if ripgrep fails here
+    // Best-effort — don't break core search tools if native search fails here
     cachedExclusions = []
     return cachedExclusions
   }

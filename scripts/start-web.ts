@@ -19,7 +19,7 @@ interface CliOptions {
 }
 
 function parseArgs(argv: string[]): CliOptions {
-  const opts: CliOptions = { open: true }
+  const opts: CliOptions = { open: false }
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
     if (arg === '--port' || arg === '-p') {
@@ -42,8 +42,8 @@ Options:
   --port <number>     Port to listen on (default: random free port)
   --host <addr>       Host/interface to bind (default: 0.0.0.0)
   --web-root <path>   Path to the web/ static assets directory
-  --open              Open the browser automatically after start (default)
-  --no-open           Do not open the browser after start
+  --open              Open the browser after start
+  --no-open           Do not open the browser after start (default)
   --help              Show this help
 `)
       process.exit(0)
@@ -55,7 +55,6 @@ Options:
     if (Number.isFinite(v) && v > 0 && v < 65536) opts.port = v
   }
   if (!opts.host && process.env.WEB_HOST) opts.host = process.env.WEB_HOST
-  if (opts.open && process.env.WEB_OPEN === '0') opts.open = false
   return opts
 }
 

@@ -1041,7 +1041,7 @@ export class QueryEngine {
         // the result type isn't assistant-with-text/thinking or user-with-
         // tool_result, and stop_reason isn't end_turn, that's why this fired.
         // errors[] is turn-scoped via the watermark; previously it dumped the
-        // entire process's logError buffer (ripgrep timeouts, ENOENT, etc).
+        // entire process's logError buffer (search timeouts, ENOENT, etc).
         errors: (() => {
           const all = getInMemoryErrors()
           const start = errorLogWatermark

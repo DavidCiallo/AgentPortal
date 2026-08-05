@@ -17,7 +17,6 @@ import {
   type FlagArgType,
   GIT_READ_ONLY_COMMANDS,
   PYRIGHT_READ_ONLY_COMMANDS,
-  RIPGREP_READ_ONLY_COMMANDS,
   validateFlags,
 } from '../../utils/shell/readOnlyCommandValidation.js'
 import type { BashTool } from './BashTool.js'
@@ -555,7 +554,6 @@ const COMMAND_ALLOWLIST: Record<string, CommandConfig> = {
       '--version': 'none',
     },
   },
-  ...RIPGREP_READ_ONLY_COMMANDS,
   // Checksum commands - these only read files and compute/verify hashes
   // All flags are safe as they only affect output format or verification behavior
   sha256sum: {
@@ -1271,11 +1269,7 @@ export function isCommandSafeViaFlagParsing(command: string): boolean {
   //       (starts with `$`) falls through as positional at ~:1730. Bash runs
   //       `git diff --output=/tmp/pwned`. ARBITRARY FILE WRITE, zero perms.
   //
-  //   (2) `$VAR`-prefix → RCE via `rg --pre`:
-  //       `rg . "$Z--pre=bash" FILE` → executes `bash FILE`. rg's config has
-  //       no regex and no callback. SINGLE-STEP ARBITRARY CODE EXECUTION.
-  //
-  //   (3) `$VAR`-infix defeats additionalCommandIsDangerousCallback regex:
+  //   (2) `$VAR`-infix defeats additionalCommandIsDangerousCallback regex:
   //       `ps ax"$Z"e` → token `ax$Ze`. The ps callback regex
   //       `/^[a-zA-Z]*e[a-zA-Z]*$/` fails on `$` → "not dangerous". Bash runs
   //       `ps axe` → env vars for all processes. A fix limited to `$`-PREFIXED
@@ -1322,12 +1316,8 @@ export function isCommandSafeViaFlagParsing(command: string): boolean {
   if (!commandConfig.regex && /`/.test(command)) {
     return false
   }
-  // Block newlines and carriage returns in grep/rg patterns as they can be used for injection
-  if (
-    !commandConfig.regex &&
-    (tokens[0] === 'rg' || tokens[0] === 'grep') &&
-    /[\n\r]/.test(command)
-  ) {
+  // Block newlines and carriage returns in grep patterns as they can be used for injection
+  if (!commandConfig.regex && tokens[0] === 'grep' && /[\n\r]/.test(command)) {
     return false
   }
   if (

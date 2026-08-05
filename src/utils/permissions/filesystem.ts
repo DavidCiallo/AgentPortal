@@ -61,7 +61,6 @@ export const DANGEROUS_FILES = [
   '.zshrc',
   '.zprofile',
   '.profile',
-  '.ripgreprc',
   '.mcp.json',
   '.portal.json',
 ] as const

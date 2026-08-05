@@ -907,7 +907,7 @@ function handleRedirection(
       }
       // 2>!filename (no space) - shell-quote parses as 2 > "!filename".
       // In Zsh, 2>! is force clobber and the remainder undergoes expansion,
-      // e.g., 2>!=rg expands to 2>! /usr/bin/rg, 2>!~root/.bashrc expands to
+      // e.g., 2>!=/usr/bin/somecmd expands to 2>! /usr/bin/somecmd, 2>!~root/.bashrc expands to
       // 2>! /var/root/.bashrc. We must strip the ! and check for dangerous
       // expansion in the remainder. Mirrors the non-FD handler below.
       // Exclude history expansion patterns (!!, !-n, !?, !digit).
@@ -985,7 +985,7 @@ function handleRedirection(
     ) {
       // SECURITY: Check for dangerous expansion in the portion after !
       // In Zsh, >! is force clobber and the remainder undergoes expansion
-      // e.g., >!=rg expands to >! /usr/bin/rg, >!~root/.bashrc expands to >! /root/.bashrc
+      // e.g., >!=/usr/bin/somecmd expands to >! /usr/bin/somecmd, >!~root/.bashrc expands to >! /root/.bashrc
       const afterBang = next.substring(1)
       if (hasDangerousExpansion(afterBang)) {
         return { skip: 0, dangerous: true }
