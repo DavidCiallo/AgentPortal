@@ -5,8 +5,7 @@ import { isEnvTruthy } from './envUtils.js'
  *
  * When true:
  * - `find` and `grep` in Claude's Bash shell are shadowed by shell functions
- *   that invoke the bun binary with argv0='bfs' / argv0='ugrep' (same trick
- *   as embedded ripgrep)
+ *   that invoke the bun binary with argv0='bfs' / argv0='ugrep'
  * - The dedicated Glob/Grep tools are removed from the tool registry
  * - Prompt guidance steering Claude away from find/grep is omitted
  *

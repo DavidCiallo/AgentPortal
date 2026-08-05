@@ -15,7 +15,6 @@ import { pathExists } from '../file.js'
 import { getFsImplementation } from '../fsOperations.js'
 import { logError } from '../log.js'
 import { getPlatform } from '../platform.js'
-import { ripgrepCommand } from '../ripgrep.js'
 import { subprocessEnv } from '../subprocessEnv.js'
 import { quote } from './shellQuote.js'
 
@@ -25,7 +24,7 @@ const SNAPSHOT_CREATION_TIMEOUT = 10000 // 10 seconds
 /**
  * Creates a shell function that invokes `binaryPath` with a specific argv[0].
  * This uses the bun-internal ARGV0 dispatch trick: the bun binary checks its
- * argv[0] and runs the embedded tool (rg, bfs, ugrep) that matches.
+ * argv[0] and runs the embedded tool (bfs, ugrep) that matches.
  *
  * @param prependArgs - Arguments to inject before the user's args (e.g.,
  *   default flags). Injected literally; each element must be a valid shell
@@ -58,39 +57,6 @@ function createArgv0ShellFunction(
 }
 
 /**
- * Creates ripgrep shell integration (alias or function)
- * @returns Object with type and the shell snippet to use
- */
-export function createRipgrepShellIntegration(): {
-  type: 'alias' | 'function'
-  snippet: string
-} {
-  const rgCommand = ripgrepCommand()
-
-  // For embedded ripgrep (bun-internal), we need a shell function that sets argv0
-  if (rgCommand.argv0) {
-    return {
-      type: 'function',
-      snippet: createArgv0ShellFunction(
-        'rg',
-        rgCommand.argv0,
-        rgCommand.rgPath,
-      ),
-    }
-  }
-
-  // For regular ripgrep, use a simple alias target
-  const quotedPath = quote([rgCommand.rgPath])
-  const quotedArgs = rgCommand.rgArgs.map(arg => quote([arg]))
-  const aliasTarget =
-    rgCommand.rgArgs.length > 0
-      ? `${quotedPath} ${quotedArgs.join(' ')}`
-      : quotedPath
-
-  return { type: 'alias', snippet: aliasTarget }
-}
-
-/**
  * VCS directories to exclude from grep searches. Matches the list in
  * GrepTool (see GrepTool.ts: VCS_DIRECTORIES_TO_EXCLUDE).
  */
@@ -105,9 +71,9 @@ const VCS_DIRECTORIES_TO_EXCLUDE = [
 
 /**
  * Creates shell integration for `find` and `grep`, backed by bfs and ugrep
- * embedded in the bun binary (ant-native only). Unlike the rg integration,
- * this always shadows the system find/grep since bfs/ugrep are drop-in
- * replacements and we want consistent fast behavior.
+ * embedded in the bun binary (ant-native only). These always shadow the
+ * system find/grep since bfs/ugrep are drop-in replacements and we want
+ * consistent fast behavior.
  *
  * These wrappers replace the GlobTool/GrepTool dedicated tools (which are
  * removed from the tool registry when embedded search tools are available),
@@ -118,7 +84,7 @@ const VCS_DIRECTORIES_TO_EXCLUDE = [
  *   -regex, but GNU find defaults to emacs-flavor (which supports `\|`
  *   alternation). Without this, `find . -regex '.*\.\(js\|ts\)'` silently
  *   returns zero results. A later user-supplied -regextype still overrides.
- * - No gitignore filtering: GlobTool passes `--no-ignore` to rg. bfs has no
+ * - No gitignore filtering: GlobTool passes `--no-ignore`. bfs has no
  *   gitignore support anyway, so this matches by default.
  * - Hidden files included: both GlobTool (`--hidden`) and bfs's default.
  *
@@ -132,18 +98,18 @@ const VCS_DIRECTORIES_TO_EXCLUDE = [
  *   alternation. ugrep defaults to ERE where `|` is alternation and `\|` is a
  *   literal pipe. Without -G, `grep "foo\|bar"` silently returns zero results.
  *   User-supplied `-E`, `-F`, or `-P` later in argv overrides this.
- * - `--ignore-files`: respect .gitignore (GrepTool uses rg's default, which
- *   respects gitignore). Override with `grep --no-ignore-files`.
- * - `--hidden`: include hidden files (GrepTool passes `--hidden` to rg).
+ * - `--ignore-files`: respect .gitignore (GrepTool's default respects
+ *   gitignore). Override with `grep --no-ignore-files`.
+ * - `--hidden`: include hidden files (GrepTool honors `--hidden`).
  *   Override with `grep --no-hidden`.
- * - `--exclude-dir` for VCS dirs: GrepTool passes `--glob '!.git'` etc. to rg.
- * - `-I`: skip binary files. rg's recursion silently skips binary matches
+ * - `--exclude-dir` for VCS dirs: GrepTool supports `--glob '!.git'` etc.
+ * - `-I`: skip binary files. GrepTool's walker silently skips binary matches
  *   by default (different from direct-file-arg behavior); ugrep doesn't, so
  *   we inject -I to match. Override with `grep -a`.
  *
  * Not replicated from GrepTool:
  * - `--max-columns 500`: ugrep's `--width` hard-truncates output which could
- *   break pipelines; rg's version replaces the line with a placeholder.
+ *   break pipelines; GrepTool's version replaces the line with a placeholder.
  * - Read deny rules / plugin cache exclusions: require toolPermissionContext
  *   which isn't available at shell-snapshot creation time.
  *
@@ -159,8 +125,7 @@ export function createFindGrepShellIntegration(): string | null {
     // `alias grep=ggrep` (common on macOS with Homebrew GNU tools). The
     // snapshot sources user aliases before these function definitions, and
     // bash expands aliases before function lookup — so a renaming alias
-    // would silently bypass the embedded bfs/ugrep dispatch. Clear them first
-    // (same fix the rg integration uses).
+    // would silently bypass the embedded bfs/ugrep dispatch. Clear them first.
     'unalias find 2>/dev/null || true',
     'unalias grep 2>/dev/null || true',
     createArgv0ShellFunction('find', 'bfs', binaryPath, [
@@ -280,43 +245,11 @@ async function getClaudeCodeSnapshotContent(): Promise<string> {
     // Fall back to process.env.PATH if we can't get Cygwin PATH
   }
 
-  const rgIntegration = createRipgrepShellIntegration()
-
   let content = ''
 
-  // Check if rg is available, if not create an alias/function to bundled ripgrep
-  // We use a subshell to unalias rg before checking, so that user aliases like
-  // `alias rg='rg --smart-case'` don't shadow the real binary check. The subshell
-  // ensures we don't modify the user's aliases in the parent shell.
-  content += `
-      # Check for rg availability
-      echo "# Check for rg availability" >> "$SNAPSHOT_FILE"
-      echo "if ! (unalias rg 2>/dev/null; command -v rg) >/dev/null 2>&1; then" >> "$SNAPSHOT_FILE"
-  `
-
-  if (rgIntegration.type === 'function') {
-    // For embedded ripgrep, write the function definition using heredoc
-    content += `
-      cat >> "$SNAPSHOT_FILE" << 'RIPGREP_FUNC_END'
-  ${rgIntegration.snippet}
-RIPGREP_FUNC_END
-    `
-  } else {
-    // For regular ripgrep, write a simple alias
-    const escapedSnippet = rgIntegration.snippet.replace(/'/g, "'\\''")
-    content += `
-      echo '  alias rg='"'${escapedSnippet}'" >> "$SNAPSHOT_FILE"
-    `
-  }
-
-  content += `
-      echo "fi" >> "$SNAPSHOT_FILE"
-  `
-
   // For ant-native builds, shadow find/grep with bfs/ugrep embedded in the bun
-  // binary. Unlike rg (which only activates if system rg is absent), we always
-  // shadow find/grep since bfs/ugrep are drop-in replacements and we want
-  // consistent fast behavior in Claude's shell.
+  // binary. We always shadow find/grep since bfs/ugrep are drop-in
+  // replacements and we want consistent fast behavior in Claude's shell.
   const findGrepIntegration = createFindGrepShellIntegration()
   if (findGrepIntegration !== null) {
     content += `

@@ -132,13 +132,6 @@ export const SandboxSettingsSchema = lazySchema(() =>
             '**Reduces security** — opens a potential data exfiltration vector through the trustd service. Default: false',
         ),
       excludedCommands: z.array(z.string()).optional(),
-      ripgrep: z
-        .object({
-          command: z.string(),
-          args: z.array(z.string()).optional(),
-        })
-        .optional()
-        .describe('Custom ripgrep configuration for bundled ripgrep support'),
     })
     .passthrough(),
 )

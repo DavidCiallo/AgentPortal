@@ -56,7 +56,6 @@ import { WEB_FETCH_TOOL_NAME } from 'src/tools/WebFetchTool/prompt.js'
 import { errorMessage } from '../errors.js'
 import { getClaudeTempDir } from '../permissions/filesystem.js'
 import type { PermissionRuleValue } from '../permissions/PermissionRule.js'
-import { ripgrepCommand } from '../ripgrep.js'
 
 // Local copies to avoid circular dependency
 // (permissions.ts imports SandboxManager, bashPermissions.ts imports permissions.ts)
@@ -167,7 +166,7 @@ function shouldAllowManagedReadPathsOnly(): boolean {
  * Convert Claude Code settings format to SandboxRuntimeConfig format
  * (Function exported for testing)
  *
- * @param settings Merged settings (used for sandbox config like network, ripgrep, etc.)
+ * @param settings Merged settings (used for sandbox config like network, filesystem, etc.)
  */
 export function convertToSandboxRuntimeConfig(
   settings: SettingsJson,
@@ -347,14 +346,6 @@ export function convertToSandboxRuntimeConfig(
       }
     }
   }
-  // Ripgrep config for sandbox. User settings take priority; otherwise pass our rg.
-  // In embedded mode (argv0='rg' dispatch), sandbox-runtime spawns with argv0 set.
-  const { rgPath, rgArgs, argv0 } = ripgrepCommand()
-  const ripgrepConfig = settings.sandbox?.ripgrep ?? {
-    command: rgPath,
-    args: rgArgs,
-    argv0,
-  }
 
   return {
     network: {
@@ -376,7 +367,6 @@ export function convertToSandboxRuntimeConfig(
     enableWeakerNestedSandbox: settings.sandbox?.enableWeakerNestedSandbox,
     enableWeakerNetworkIsolation:
       settings.sandbox?.enableWeakerNetworkIsolation,
-    ripgrep: ripgrepConfig,
   }
 }
 
@@ -449,11 +439,8 @@ async function detectWorktreeMainRepoPath(cwd: string): Promise<string | null> {
  * Returns { errors, warnings } - errors mean sandbox cannot run
  */
 const checkDependencies = memoize((): SandboxDependencyCheck => {
-  const { rgPath, rgArgs } = ripgrepCommand()
-  return BaseSandboxManager.checkDependencies({
-    command: rgPath,
-    args: rgArgs,
-  })
+  // No overrides: sandbox-runtime checks its own defaults.
+  return BaseSandboxManager.checkDependencies()
 })
 
 function getSandboxEnabledSetting(): boolean {

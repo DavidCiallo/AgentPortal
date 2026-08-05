@@ -1064,7 +1064,7 @@ export async function lockCurrentVersion(): Promise<void> {
       return
     }
     // We fallback to previous behavior where we don't acquire a lock on a running version
-    // This ~mostly works but using native binaries like ripgrep will fail
+    // This ~mostly works but using native binaries will fail
     logForDebugging(
       `NON-FATAL: Failed to lock current version during execution ${errorMessage(error)}`,
       { level: 'info' },

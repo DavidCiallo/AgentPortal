@@ -95,7 +95,7 @@ function isMemorySearch(toolInput: unknown): boolean {
   if (input.glob && isAutoManagedMemoryPattern(input.glob)) {
     return true
   }
-  // For shell commands (bash grep/rg, PowerShell Select-String, etc.),
+  // For shell commands (bash grep, PowerShell Select-String, etc.),
   // check if the command targets memory paths
   if (input.command && isShellCommandTargetingMemory(input.command)) {
     return true

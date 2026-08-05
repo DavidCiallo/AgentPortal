@@ -51,7 +51,7 @@ const PROGRESS_THRESHOLD_MS = 2000; // Show progress after 2 seconds
 const ASSISTANT_BLOCKING_BUDGET_MS = 15_000;
 
 // Search commands for collapsible display (grep, find, etc.)
-const BASH_SEARCH_COMMANDS = new Set(['find', 'grep', 'rg', 'ag', 'ack', 'locate', 'which', 'whereis']);
+const BASH_SEARCH_COMMANDS = new Set(['find', 'grep', 'ag', 'ack', 'locate', 'which', 'whereis']);
 
 // Read/view commands for collapsible display (cat, head, etc.)
 const BASH_READ_COMMANDS = new Set(['cat', 'head', 'tail', 'less', 'more',

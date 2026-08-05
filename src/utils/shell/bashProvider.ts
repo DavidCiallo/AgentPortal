@@ -142,9 +142,9 @@ export async function createBashShellProvider(
 
       // Special handling for pipes: move stdin redirect after first command
       // This ensures the redirect applies to the first command, not to eval itself.
-      // Without this, `eval 'rg foo | wc -l' \< /dev/null` becomes
-      // `rg foo | wc -l < /dev/null` — wc reads /dev/null and outputs 0, and
-      // rg (with no path arg) waits on the open spawn stdin pipe forever.
+      // Without this, `eval 'ls foo | wc -l' \< /dev/null` becomes
+      // `ls foo | wc -l < /dev/null` — wc reads /dev/null and outputs 0, and
+      // ls (with no path arg) waits on the open spawn stdin pipe forever.
       // Applies to sandbox mode too: sandbox wraps the assembled commandString,
       // not the raw command (since PR #9189).
       if (normalizedCommand.includes('|') && addStdinRedirect) {

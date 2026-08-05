@@ -38,15 +38,6 @@ const COMMAND_SEMANTICS: Map<string, CommandSemantic> = new Map([
     }),
   ],
 
-  // ripgrep has same semantics as grep
-  [
-    'rg',
-    (exitCode, _stdout, _stderr) => ({
-      isError: exitCode >= 2,
-      message: exitCode === 1 ? 'No matches found' : undefined,
-    }),
-  ],
-
   // find: 0=success, 1=partial success (some dirs inaccessible), 2+=error
   [
     'find',

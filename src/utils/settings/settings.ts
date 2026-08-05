@@ -578,7 +578,6 @@ export function getManagedSettingsKeysForLogging(
       'autoAllowBashIfSandboxed',
       'enableWeakerNestedSandbox',
       'enableWeakerNetworkIsolation',
-      'ripgrep',
     ]),
     // For hooks, we use z.record with enum keys, so we validate separately
     hooks: new Set([

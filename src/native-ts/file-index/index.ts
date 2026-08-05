@@ -52,7 +52,8 @@ export class FileIndex {
 
   /**
    * Load paths from an array of strings.
-   * This is the main way to populate the index — ripgrep collects files, we just search them.
+   * This is the main way to populate the index — the file walker collects
+   * files, we just search them.
    * Automatically deduplicates paths.
    */
   loadFromFileList(fileList: string[]): void {

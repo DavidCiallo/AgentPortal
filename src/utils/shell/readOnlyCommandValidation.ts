@@ -1410,94 +1410,6 @@ export const DOCKER_READ_ONLY_COMMANDS: Record<string, ExternalCommandConfig> =
   }
 
 // ---------------------------------------------------------------------------
-// RIPGREP_READ_ONLY_COMMANDS — rg (ripgrep) read-only search
-// ---------------------------------------------------------------------------
-
-export const RIPGREP_READ_ONLY_COMMANDS: Record<string, ExternalCommandConfig> =
-  {
-    rg: {
-      safeFlags: {
-        // Pattern flags
-        '-e': 'string', // Pattern to search for
-        '--regexp': 'string',
-        '-f': 'string', // Read patterns from file
-
-        // Common search options
-        '-i': 'none', // Case insensitive
-        '--ignore-case': 'none',
-        '-S': 'none', // Smart case
-        '--smart-case': 'none',
-        '-F': 'none', // Fixed strings
-        '--fixed-strings': 'none',
-        '-w': 'none', // Word regexp
-        '--word-regexp': 'none',
-        '-v': 'none', // Invert match
-        '--invert-match': 'none',
-
-        // Output options
-        '-c': 'none', // Count matches
-        '--count': 'none',
-        '-l': 'none', // Files with matches
-        '--files-with-matches': 'none',
-        '--files-without-match': 'none',
-        '-n': 'none', // Line number
-        '--line-number': 'none',
-        '-o': 'none', // Only matching
-        '--only-matching': 'none',
-        '-A': 'number', // After context
-        '--after-context': 'number',
-        '-B': 'number', // Before context
-        '--before-context': 'number',
-        '-C': 'number', // Context
-        '--context': 'number',
-        '-H': 'none', // With filename
-        '-h': 'none', // No filename
-        '--heading': 'none',
-        '--no-heading': 'none',
-        '-q': 'none', // Quiet
-        '--quiet': 'none',
-        '--column': 'none',
-
-        // File filtering
-        '-g': 'string', // Glob
-        '--glob': 'string',
-        '-t': 'string', // Type
-        '--type': 'string',
-        '-T': 'string', // Type not
-        '--type-not': 'string',
-        '--type-list': 'none',
-        '--hidden': 'none',
-        '--no-ignore': 'none',
-        '-u': 'none', // Unrestricted
-
-        // Common options
-        '-m': 'number', // Max count per file
-        '--max-count': 'number',
-        '-d': 'number', // Max depth
-        '--max-depth': 'number',
-        '-a': 'none', // Text (search binary files)
-        '--text': 'none',
-        '-z': 'none', // Search zip
-        '-L': 'none', // Follow symlinks
-        '--follow': 'none',
-
-        // Display options
-        '--color': 'string',
-        '--json': 'none',
-        '--stats': 'none',
-
-        // Help and version
-        '--help': 'none',
-        '--version': 'none',
-        '--debug': 'none',
-
-        // Special argument separator
-        '--': 'none',
-      },
-    },
-  }
-
-// ---------------------------------------------------------------------------
 // PYRIGHT_READ_ONLY_COMMANDS — pyright static type checker
 // ---------------------------------------------------------------------------
 
@@ -1676,7 +1588,7 @@ export function validateFlagArgument(
  * @param tokens - Pre-tokenized args (from bash shell-quote or PowerShell AST)
  * @param startIndex - Where to start validating (after command tokens)
  * @param config - The safe flags config
- * @param options.commandName - For command-specific handling (git numeric shorthand, grep/rg attached numeric)
+ * @param options.commandName - For command-specific handling (git numeric shorthand, grep attached numeric)
  * @param options.rawCommand - For additionalCommandIsDangerousCallback
  * @param options.xargsTargetCommands - If provided, enables xargs-style target command detection
  * @returns true if all flags are valid, false otherwise
@@ -1768,9 +1680,9 @@ export function validateFlags(
         }
 
         // Handle flags with directly attached numeric arguments (e.g., -A20, -B10)
-        // Only apply this special handling to grep and rg commands
+        // Only apply this special handling to the grep command
         if (
-          (options?.commandName === 'grep' || options?.commandName === 'rg') &&
+          options?.commandName === 'grep' &&
           flag.startsWith('-') &&
           !flag.startsWith('--') &&
           flag.length > 2

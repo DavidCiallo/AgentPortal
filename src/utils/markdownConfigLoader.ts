@@ -6,14 +6,14 @@ import { homedir } from 'os'
 import { dirname, join, resolve, sep } from 'path'
 import { getProjectRoot } from '../bootstrap/state.js'
 import { logForDebugging } from './debug.js'
-import { getClaudeConfigHomeDir, isEnvTruthy } from './envUtils.js'
+import { getClaudeConfigHomeDir } from './envUtils.js'
 import { isFsInaccessible } from './errors.js'
 import { normalizePathForComparison } from './file.js'
 import type { FrontmatterData } from './frontmatterParser.js'
 import { parseFrontmatter } from './frontmatterParser.js'
 import { findCanonicalGitRoot, findGitRoot } from './git.js'
 import { parseToolListFromCLI } from './permissions/permissionSetup.js'
-import { ripGrep } from './ripgrep.js'
+import { nativeSearch } from './nativeSearch.js'
 import {
   isSettingSourceEnabled,
   type SettingSource,
@@ -248,11 +248,12 @@ export function getProjectDirsUpToHome(
 
     const claudeSubdir = join(current, '.portal', subdir)
     // Filter to existing dirs. This is a perf filter (avoids spawning
-    // ripgrep on non-existent dirs downstream) and the worktree fallback
-    // in loadMarkdownFilesForSubdir relies on it. statSync + explicit error
-    // handling instead of existsSync — re-throws unexpected errors rather
-    // than silently swallowing them. Downstream loadMarkdownFiles handles
-    // the TOCTOU window (dir disappearing before read) gracefully.
+    // the native search on non-existent dirs downstream) and the worktree
+    // fallback in loadMarkdownFilesForSubdir relies on it. statSync +
+    // explicit error handling instead of existsSync — re-throws unexpected
+    // errors rather than silently swallowing them. Downstream
+    // loadMarkdownFiles handles the TOCTOU window (dir disappearing before
+    // read) gracefully.
     try {
       statSync(claudeSubdir)
       dirs.push(claudeSubdir)
@@ -417,17 +418,19 @@ export const loadMarkdownFilesForSubdir = memoize(
 /**
  * Native implementation to find markdown files using Node.js fs APIs
  *
- * This implementation exists alongside ripgrep for the following reasons:
- * 1. Ripgrep has poor startup performance in native builds (noticeable on app startup)
- * 2. Provides a fallback when ripgrep is unavailable
+ * This implementation exists alongside the native walker for the following
+ * reasons:
+ * 1. The walker has poor startup performance in native builds (noticeable on app startup)
+ * 2. Provides a fallback when the walker is unavailable
  * 3. Can be explicitly enabled via CLAUDE_CODE_USE_NATIVE_FILE_SEARCH env var
  *
  * Symlink handling:
- * - Follows symlinks (equivalent to ripgrep's --follow flag)
- * - Uses device+inode tracking to detect cycles (same as ripgrep's same_file library)
+ * - Follows symlinks (equivalent to the walker's --follow flag)
+ * - Uses device+inode tracking to detect cycles (same as the walker's
+ *   same_file library)
  * - Falls back to realpath on systems without inode support
  *
- * Does not respect .gitignore (matches ripgrep with --no-ignore flag)
+ * Does not respect .gitignore (matches the walker with --no-ignore flag)
  *
  * @param dir Directory to search
  * @param signal AbortSignal for timeout
@@ -535,26 +538,21 @@ async function loadMarkdownFiles(dir: string): Promise<
     content: string
   }[]
 > {
-  // File search strategy:
-  // - Default: ripgrep (faster, battle-tested)
-  // - Fallback: native Node.js (when CLAUDE_CODE_USE_NATIVE_FILE_SEARCH is set)
-  //
-  // Why both? Ripgrep has poor startup performance in native builds.
-  const useNative = isEnvTruthy(process.env.CLAUDE_CODE_USE_NATIVE_FILE_SEARCH)
+  // File search strategy: native walker. The old env flag
+  // CLAUDE_CODE_USE_NATIVE_FILE_SEARCH is accepted but both branches now
+  // use the native implementation.
   const signal = AbortSignal.timeout(3000)
   let files: string[]
   try {
-    files = useNative
-      ? await findMarkdownFilesNative(dir, signal)
-      : await ripGrep(
-          ['--files', '--hidden', '--follow', '--no-ignore', '--glob', '*.md'],
-          dir,
-          signal,
-        )
+    files = await nativeSearch(
+      ['--files', '--hidden', '--follow', '--no-ignore', '--glob', '*.md'],
+      dir,
+      signal,
+    )
   } catch (e: unknown) {
     // Handle missing/inaccessible dir directly instead of pre-checking
     // existence (TOCTOU). findMarkdownFilesNative already catches internally;
-    // ripGrep rejects on inaccessible target paths.
+    // nativeSearch rejects on inaccessible target paths.
     if (isFsInaccessible(e)) return []
     throw e
   }
