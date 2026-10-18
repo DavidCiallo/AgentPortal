@@ -127,6 +127,11 @@
           </select>
           <div class="hint">Response language for the AI</div>
         </div>
+        <div class="form-group">
+          <label for="telegramTokenInput">Telegram Bot Token</label>
+          <input type="password" id="telegramTokenInput" placeholder="123456:ABC-DEF..." autocomplete="off">
+          <div class="hint">Talk to the agent from Telegram. Leave empty to disable.</div>
+        </div>
         <div class="modal-actions">
           <button class="btn-cancel" onclick="closeSettings()">Cancel</button>
           <button class="btn-save" onclick="saveSettings()">Save</button>

@@ -72,6 +72,7 @@ import {
 } from '../utils/sessionStoragePortable.js'
 import { listOpenAICompatibleModels, getModelListUrls } from '../utils/providerDiscovery.js'
 import { getInitialSettings, updateSettingsForSource } from '../utils/settings/settings.js'
+import { TelegramBridge } from './telegram.js'
 import { getContextWindowForModel } from '../utils/context.js'
 
 /**
@@ -506,9 +507,10 @@ class SessionRunner {
             }
             const u = (delta as any).usage
             if (u) {
+              const prevOutput: number = turnUsage ? turnUsage.output : 0
               turnUsage = {
                 input: u.input_tokens ?? 0,
-                output: (turnUsage?.output ?? 0) + (u.output_tokens ?? 0),
+                output: prevOutput + (u.output_tokens ?? 0),
                 cacheCreation: u.cache_creation_input_tokens ?? 0,
                 cacheRead: u.cache_read_input_tokens ?? 0,
               }
@@ -589,7 +591,7 @@ class SessionRunner {
         // Some OpenAI-compatible endpoints omit it entirely, and showing
         // 0/256k (0%) would read as "context is empty" rather than "unknown".
         if (turnUsage && turnUsage.input + turnUsage.output + turnUsage.cacheRead > 0) {
-          Object.assign(doneMsg, { metrics: buildMetrics(turnUsage, turnApiMs, resolvedModel) })
+          Object.assign(doneMsg, { metrics: buildMetrics(turnUsage, turnApiMs, resolvedModel ?? '') })
         }
         this.broadcast(doneMsg)
       }
@@ -671,6 +673,7 @@ export class WebServer {
   private webRootExplicit: boolean
   private port: number | undefined
   private host: string
+  private telegram: TelegramBridge | null = null
 
   constructor(options: { port?: number; host?: string; webRoot?: string } = {}) {
     this.port = options.port
@@ -784,32 +787,26 @@ export class WebServer {
     }
   }
 
+  private async collectSessions(project?: string): Promise<SessionInfo[]> {
+    const projectsDir = getProjectsDir()
+
+    if (project) {
+      return this.getProjectSessions(join(projectsDir, project), 50)
+    }
+
+    const dirents = await readdir(projectsDir, { withFileTypes: true })
+    const all: SessionInfo[] = []
+    for (const d of dirents) {
+      if (!d.isDirectory()) continue
+      all.push(...(await this.getProjectSessions(join(projectsDir, d.name), 10)))
+    }
+    all.sort((a, b) => b.lastModified - a.lastModified)
+    return all.slice(0, 50)
+  }
+
   private async handleListSessions(res: any, project?: string) {
     try {
-      let sessions: SessionInfo[]
-
-      if (project) {
-        const projectsDir = getProjectsDir()
-        const projectPath = join(projectsDir, project)
-        sessions = await this.getProjectSessions(projectPath, 50)
-      } else {
-        // List sessions from all projects
-        const projectsDir = getProjectsDir()
-        const dirents = await readdir(projectsDir, { withFileTypes: true })
-        const allSessions: SessionInfo[] = []
-
-        for (const d of dirents) {
-          if (!d.isDirectory()) continue
-          const projectPath = join(projectsDir, d.name)
-          const projectSessions = await this.getProjectSessions(projectPath, 10)
-          allSessions.push(...projectSessions)
-        }
-
-        // Sort by last modified and limit
-        allSessions.sort((a, b) => b.lastModified - a.lastModified)
-        sessions = allSessions.slice(0, 50)
-      }
-
+      const sessions = await this.collectSessions(project)
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify(sessions))
     } catch (err: any) {
@@ -1365,6 +1362,8 @@ export class WebServer {
             apiKey: profile?.env?.OPENAI_API_KEY ? '••••••••' : '',
             hasApiKey: !!profile?.env?.OPENAI_API_KEY,
             language: settings.language || 'chinese',
+            hasTelegramToken: !!(settings as any).telegramBotToken,
+            telegramRunning: this.telegram?.isRunning ?? false,
             cwd: process.cwd(),
           })
           return
@@ -1462,6 +1461,15 @@ export class WebServer {
               updateSettingsForSource('userSettings', { language: langValue } as any)
             }
 
+            if (msg.telegramToken !== undefined) {
+              // The mask means "keep the saved token"; undefined means untouched.
+              if (msg.telegramToken !== '••••••••') {
+                const tgValue = msg.telegramToken.trim() || undefined
+                updateSettingsForSource('userSettings', { telegramBotToken: tgValue } as any)
+                void this.restartTelegram(tgValue)
+              }
+            }
+
             send({ type: 'config_saved', success: true })
 
           } catch (validateErr: any) {
@@ -1504,9 +1512,54 @@ export class WebServer {
         const url = `http://${displayHost}:${boundPort}`
         // Plain log line so launchers/grep can find the URL reliably.
         console.log(`Portal Web UI listening on ${url} (host=${this.host})`)
+        void this.restartTelegram((getInitialSettings() as any).telegramBotToken)
         resolveStart()
       })
     })
+  }
+
+  /** Start the bridge with `token`, or stop it when there is none. */
+  async restartTelegram(token: string | undefined): Promise<void> {
+    this.telegram?.stop()
+    this.telegram = null
+    if (!token) return
+
+    const bridge = new TelegramBridge({
+      token,
+      cwd: getOriginalCwd(),
+      getRunner: sid => this.runners.get(sid),
+      createRunner: sid => {
+        const runner = new SessionRunner(this, sid, getOriginalCwd())
+        this.runners.set(sid, runner)
+        return runner
+      },
+      createRunnerIn: (sid, cwd) => {
+        const existing = this.runners.get(sid)
+        if (existing) {
+          existing.cwd = cwd
+          return existing
+        }
+        const runner = new SessionRunner(this, sid, cwd)
+        this.runners.set(sid, runner)
+        return runner
+      },
+      attachClient: (sessionId, client) => {
+        this.runners.get(sessionId)?.addClient(client)
+      },
+      detachClient: (sessionId, client) => {
+        this.runners.get(sessionId)?.removeClient(client)
+      },
+      listSessions: async () => {
+        const sessions = await this.collectSessions()
+        return sessions.map(s => ({
+          sessionId: s.sessionId,
+          title: s.customTitle || s.summary || s.firstPrompt || '(untitled)',
+          lastModified: s.lastModified,
+          cwd: s.cwd,
+        }))
+      },
+    })
+    if (await bridge.start()) this.telegram = bridge
   }
 
   /** Actual bound port (resolved after start()). */

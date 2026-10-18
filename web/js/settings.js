@@ -29,6 +29,9 @@ function loadConfig(config) {
   document.getElementById('baseUrlInput').value = config.baseUrl || ''
   document.getElementById('apiKeyInput').value = config.hasApiKey ? '••••••••' : ''
   document.getElementById('apiKeyInput').placeholder = config.hasApiKey ? '••••••••' : 'sk-...'
+  const tgInput = document.getElementById('telegramTokenInput')
+  tgInput.value = config.hasTelegramToken ? '••••••••' : ''
+  tgInput.placeholder = config.hasTelegramToken ? '••••••••' : '123456:ABC-DEF...'
   document.getElementById('languageSelect').value = config.language || 'chinese'
   currentModel = config.model || ''
 
@@ -133,6 +136,7 @@ function saveSettings() {
     model: document.getElementById('modelSelect').value,
     apiKey: document.getElementById('apiKeyInput').value,
     language: document.getElementById('languageSelect').value || undefined,
+    telegramToken: document.getElementById('telegramTokenInput').value,
   }
   ws.send(JSON.stringify(config))
 }
