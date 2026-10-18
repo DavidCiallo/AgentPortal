@@ -710,12 +710,34 @@ body {
   50% { opacity: 1; }
 }
 
+/* Turn metrics — centered under the input box */
+.metrics {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: var(--surface);
+  padding: 8px 20px 12px;
+  font-size: 12px;
+  color: var(--text-subtle);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.metrics[hidden] { display: none; }
+.metric-warn { color: var(--warning); }
+.metric-sep { color: var(--border); }
+
 /* Input area */
 .input-area {
   background: var(--surface);
   padding: 0 20px 16px;
   display: flex;
   gap: 10px;
+}
+/* The metrics line sits flush under the input and supplies the bottom
+   padding itself, so the input drops its own when the line is visible. */
+.bottom-panel:has(.metrics:not([hidden])) .input-area {
+  padding-bottom: 0;
 }
 
 .input-area textarea {

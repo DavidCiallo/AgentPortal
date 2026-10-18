@@ -72,6 +72,36 @@ import {
 } from '../utils/sessionStoragePortable.js'
 import { listOpenAICompatibleModels, getModelListUrls } from '../utils/providerDiscovery.js'
 import { getInitialSettings, updateSettingsForSource } from '../utils/settings/settings.js'
+import { getContextWindowForModel } from '../utils/context.js'
+
+/**
+ * Turn metrics for the web bottom bar. contextUsed/contextWindow drive the
+ * percentage; cacheRate is cache_read / (cache_read + cache_creation + input)
+ * over the latest API call; tps is total output tokens per API second.
+ */
+function buildMetrics(
+  usage: { input: number; output: number; cacheCreation: number; cacheRead: number },
+  apiMs: number,
+  model: string,
+): {
+  contextUsed: number
+  contextWindow: number
+  contextPercent: number
+  cacheRate: number | null
+  tps: number | null
+} {
+  const contextUsed = usage.input + usage.cacheCreation + usage.cacheRead
+  const contextWindow = getContextWindowForModel(model)
+  const cacheableTotal = usage.cacheRead + usage.cacheCreation + usage.input
+
+  return {
+    contextUsed,
+    contextWindow,
+    contextPercent: contextWindow > 0 ? (contextUsed / contextWindow) * 100 : 0,
+    cacheRate: cacheableTotal > 0 ? usage.cacheRead / cacheableTotal : null,
+    tps: apiMs > 0 ? (usage.output / apiMs) * 1000 : null,
+  }
+}
 
 /**
  * Format tool use input into human-readable display text (matching CLI output style)
@@ -408,6 +438,14 @@ class SessionRunner {
       let currentToolUse: { id: string; name: string; inputJson: string } | null = null
       let lastDataTime = Date.now()
       let thinkingTokenEstimate = 0
+      let turnUsage: {
+        input: number
+        output: number
+        cacheCreation: number
+        cacheRead: number
+      } | null = null
+      let turnApiMs = 0
+      let apiCallStartedAt = 0
       const generator = this.engine.submitMessage(userMessage)
 
       const keepaliveTimer = setInterval(() => {
@@ -454,6 +492,27 @@ class SessionRunner {
             } else if (delta.delta.type === 'input_json_delta' && currentToolUse) {
               currentToolUse.inputJson += delta.delta.partial_json
             }
+          } else if (delta.type === 'message_start') {
+            apiCallStartedAt = Date.now()
+          } else if (delta.type === 'message_delta') {
+            // Authoritative per-call usage arrives here, not on the assembled
+            // assistant message: the OpenAI shim only ever sets it on
+            // message_delta. Values are cumulative for this one API call, so
+            // input/cache describe the current context while output adds up
+            // across the calls in a multi-tool turn.
+            if (apiCallStartedAt > 0) {
+              turnApiMs += Date.now() - apiCallStartedAt
+              apiCallStartedAt = 0
+            }
+            const u = (delta as any).usage
+            if (u) {
+              turnUsage = {
+                input: u.input_tokens ?? 0,
+                output: (turnUsage?.output ?? 0) + (u.output_tokens ?? 0),
+                cacheCreation: u.cache_creation_input_tokens ?? 0,
+                cacheRead: u.cache_read_input_tokens ?? 0,
+              }
+            }
           } else if (delta.type === 'content_block_stop') {
             if (isThinking) {
               isThinking = false
@@ -495,6 +554,10 @@ class SessionRunner {
               }
             }
           }
+        } else if (event.type === 'assistant') {
+          // Usage is captured from message_delta above — the assembled message
+          // carries whatever message_start provided, which the shim leaves at
+          // zero. Nothing to read here.
         } else if (event.type === 'result') {
           if (event.subtype === 'success') {
             if (event.is_error) {
@@ -521,7 +584,14 @@ class SessionRunner {
         const rawMessages = [...this.engine.getMessages()]
         this.messages = rawMessages.slice(-60)
         this.server.setSessionMessages(this.sessionId, this.messages)
-        this.broadcast({ type: 'done', fullText, sessionId: this.sessionId })
+        const doneMsg: any = { type: 'done', fullText, sessionId: this.sessionId }
+        // Only surface the bar when the provider actually reported usage.
+        // Some OpenAI-compatible endpoints omit it entirely, and showing
+        // 0/256k (0%) would read as "context is empty" rather than "unknown".
+        if (turnUsage && turnUsage.input + turnUsage.output + turnUsage.cacheRead > 0) {
+          Object.assign(doneMsg, { metrics: buildMetrics(turnUsage, turnApiMs, resolvedModel) })
+        }
+        this.broadcast(doneMsg)
       }
       } catch (err: any) {
         console.error('[web] runner error:', err.message, err.stack)

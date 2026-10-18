@@ -488,11 +488,7 @@ async function processUserInputBase(
     return addImageMetadataMessage(slashResult, imageMetadataTexts)
   }
 
-  // For slash commands, attachments will be extracted within getMessagesForSlashCommand
-  const shouldExtractAttachments =
-    !skipAttachments &&
-    inputString !== null &&
-    (mode !== 'prompt' || effectiveSkipSlash || !inputString.startsWith('/'))
+  const shouldExtractAttachments = !skipAttachments && inputString !== null
 
   queryCheckpoint('query_attachment_loading_start')
   const attachmentMessages = shouldExtractAttachments
@@ -522,28 +518,6 @@ async function processUserInputBase(
       ),
       imageMetadataTexts,
     )
-  }
-
-  // Slash commands
-  // Skip for remote bridge messages — input from CCR clients is plain text
-  if (
-    inputString !== null &&
-    !effectiveSkipSlash &&
-    inputString.startsWith('/')
-  ) {
-    const { processSlashCommand } = await import('./processSlashCommand.js')
-    const slashResult = await processSlashCommand(
-      inputString,
-      precedingInputBlocks,
-      imageContentBlocks,
-      attachmentMessages,
-      context,
-      setToolJSX,
-      uuid,
-      isAlreadyProcessing,
-      canUseTool,
-    )
-    return addImageMetadataMessage(slashResult, imageMetadataTexts)
   }
 
   // Regular user prompt

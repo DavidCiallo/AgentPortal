@@ -298,9 +298,11 @@ function autoRestoreLastSession() {
     // Don't restore if already in a session
     if (sessionId) return
 
-    // Don't restore if chat is not empty (has more than just welcome message)
-    const existingMessages = chatContainer.querySelectorAll('.message')
-    if (existingMessages.length > 1) return
+    // Don't restore if the chat already holds real conversation. The welcome
+    // message ships with index.html, so it must not count — otherwise every
+    // round makes the guard bail and a refresh loses the whole session.
+    const realMessages = chatContainer.querySelectorAll('.message:not(#welcomeMessage)')
+    if (realMessages.length > 0) return
 
     sessionId = savedSessionId
     // Prefer the real cwd; fall back to a best-effort reverse of the sanitized
@@ -333,10 +335,7 @@ function autoRestoreLastSession() {
       .then(data => {
         if (data.messages && data.messages.length > 0) {
           // Remove welcome message before restoring
-          const welcome = chatContainer.querySelector('.message.assistant:only-child')
-          if (welcome && welcome.textContent.includes('Welcome to Portal')) {
-            welcome.remove()
-          }
+          document.getElementById('welcomeMessage')?.remove()
           renderSessionMessages(data.messages)
           messageOffset = data.messages.length
           totalMessages = data.total

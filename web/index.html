@@ -146,7 +146,7 @@
     </div>
 
     <div class="chat-container" id="chatContainer">
-      <div class="message assistant">Welcome to Portal! I can help you with coding tasks, file operations, and more. What would you like to work on?</div>
+      <div class="message assistant" id="welcomeMessage">Welcome to Portal! I can help you with coding tasks, file operations, and more. What would you like to work on?</div>
     </div>
 
     <!-- Fixed bottom panel: toolbar + input -->
@@ -169,6 +169,14 @@
           rows="1"
         ></textarea>
         <button class="send-btn" id="sendBtn" disabled>Send</button>
+      </div>
+
+      <div class="metrics" id="metrics" hidden>
+        <span class="metric" id="metricContext" title="Context window usage"></span>
+        <span class="metric-sep">·</span>
+        <span class="metric" id="metricCache" title="Prompt cache hit rate"></span>
+        <span class="metric-sep">·</span>
+        <span class="metric" id="metricTps" title="Output tokens per second"></span>
       </div>
     </div>
   </div>

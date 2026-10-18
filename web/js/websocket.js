@@ -167,6 +167,9 @@ function handleMessage(msg) {
       messageInput.focus()
 
       hideAgentStatus()
+
+      if (msg.metrics) renderMetrics(msg.metrics)
+      else document.getElementById('metrics')?.setAttribute('hidden', '')
       break
 
     case 'cancelled':
@@ -266,4 +269,26 @@ function handleMessage(msg) {
   } catch (e) {
     console.error('[handleMessage] Error:', e, msg)
   }
+}
+
+function formatCompactTokens(n) {
+  if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k'
+  return String(Math.round(n))
+}
+
+function renderMetrics(m) {
+  const container = document.getElementById('metrics')
+  if (!container) return
+  container.hidden = false
+
+  const pct = Math.round(m.contextPercent)
+  const ctxEl = document.getElementById('metricContext')
+  ctxEl.textContent = `${formatCompactTokens(m.contextUsed)}/${formatCompactTokens(m.contextWindow)} (${pct}%)`
+  ctxEl.classList.toggle('metric-warn', pct >= 80)
+
+  const cacheEl = document.getElementById('metricCache')
+  cacheEl.textContent = m.cacheRate === null ? 'cache —' : `cache ${Math.round(m.cacheRate * 100)}%`
+
+  const tpsEl = document.getElementById('metricTps')
+  tpsEl.textContent = m.tps === null ? 'tps —' : `${m.tps.toFixed(1)} tok/s`
 }
